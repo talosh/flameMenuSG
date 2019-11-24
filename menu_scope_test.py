@@ -31,7 +31,6 @@ class menuAction(object):
         return menu
     
     def scope_reel(self, selection):
-        pprint (selection)
         import flame
         for item in selection:
             if isinstance(item, flame.PyReel):
