@@ -5,7 +5,7 @@ import time
 
 from pprint import pprint
 
-menu_group_name = 'MenuSG'
+menu_group_name = 'Menu(SG)'
 prefs_location = '/var/tmp'
 
 class flameAppFramework(object):
