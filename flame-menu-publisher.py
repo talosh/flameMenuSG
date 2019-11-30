@@ -1,19 +1,26 @@
 import os
 import sys
 import inspect
+import re
 
 import sgtk
+from sgtk.platform.qt import QtGui
 
 from pprint import pprint
+from pprint import pformat
 
+#################
+# CONFIGURATION #
+#################
+
+builtin_publisher = False
 menu_group_name = 'Menu(SG)'
 bunlde_location = '/var/tmp'
-storage_root = '/Volumes/projects'
-types_to_include = [
-            'Image Sequence',
-            'Flame Render'
-        ]
-
+storage_root = '/Volumes/projects/'
+templates = {
+        'flame_shot_comp': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{flame.frame}.exr',
+        'flame_shot_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch'
+}
 
 class flameAppFramework(object):
     def __init__(self):
@@ -171,6 +178,7 @@ class menuPublisher(flameShotgunApp):
         self.prefs['current_page'] = 0
         self.prefs['menu_max_items_per_page'] = 128
         self.selected_clips = []
+        self.mbox = QtGui.QMessageBox()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -180,6 +188,8 @@ class menuPublisher(flameShotgunApp):
                     self.update_loader_list(entity)
                 elif entity.get('caller') == 'flip_assigned_for_entity':
                     self.flip_assigned_for_entity(entity)
+                elif entity.get('caller') == 'publish':
+                    self.publish(entity, args[0])
             self.rescan()
         return method
 
@@ -210,6 +220,7 @@ class menuPublisher(flameShotgunApp):
                 task_filters,
                 ['entity']
             )
+            entity = {}
             for task in tasks:
                 entity = task.get('entity')
                 if entity:
@@ -266,6 +277,13 @@ class menuPublisher(flameShotgunApp):
         user_only = not self.prefs['show_all']
         filter_out = ['Project', 'Sequence']
         found_entities = self.get_entities(user_only, filter_out)
+
+        if len(found_entities) == 0:
+            menu_item = {}
+            menu_item['name'] = ' '*4 + 'No assigned tasks found'
+            menu_item['execute'] = self.rescan
+            menu_item['isEnabled'] = False
+            menu['actions'].append(menu_item)
 
         menu_ctrls_len = len(menu)
         menu_lenght = menu_ctrls_len
@@ -351,7 +369,8 @@ class menuPublisher(flameShotgunApp):
             [
                 'content',
                 'step.Step.code',
-                'task_assignees'
+                'task_assignees',
+                'project.Project.id'
             ]
         )
 
@@ -415,6 +434,13 @@ class menuPublisher(flameShotgunApp):
                 tasks_by_step[step_name] = []
             tasks_by_step[step_name].append(task)
         
+        if len(tasks_by_step.values()) == 0:
+            menu_item = {}
+            menu_item['name'] = ' '*4 + 'No assigned tasks found'
+            menu_item['execute'] = self.rescan
+            menu_item['isEnabled'] = False
+            menu['actions'].append(menu_item)            
+
         for step_name in tasks_by_step.keys():
             if len(tasks_by_step[step_name]) != 1:
                 menu_item = {}
@@ -448,10 +474,109 @@ class menuPublisher(flameShotgunApp):
                 
                 menu_item = {}
                 menu_item['name'] = ' '*12 + 'publish to task "' + task_name + '"'
-                menu_item['execute'] = self.publish
+                publish_entity = {}
+                publish_entity['caller'] = 'publish'
+                publish_entity['task'] = task
+                self.dynamic_menu_data[str(id(publish_entity))] = publish_entity
+                menu_item['execute'] = getattr(self, str(id(publish_entity)))
                 menu['actions'].append(menu_item)
                 
         return menu
+
+    def publish(self, entity, selection):
+
+        if not builtin_publisher:
+            message = ''
+            message += 'Built-in publisher is not yet implemented. '
+            message += 'You can connect it to your current working publising backend. '
+            message += 'If you want to try anyway set builtin_publisher to True '
+            message += 'in the beginning of the flame-menu-publisher.py file. '
+            message += 'Use it on your own risk. '
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        if not os.path.isdir(storage_root):
+            message = 'folder "'
+            message += storage_root
+            message += '" does not exist. Please set correct project root manually in python file'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        sg = self.sg_user.create_sg_connection()
+        project_id = entity['task']['project.Project.id']
+        proj = sg.find_one(
+            'Project',
+            [['id', 'is', project_id]],
+            [
+                'name',
+                'tank_name'
+            ]
+        )
+
+        project_folder_name = proj.get('tank_name')
+        if not project_folder_name:
+            project_folder_name = proj.get('name')
+        
+        project_root = os.path.join(storage_root, project_folder_name)
+        if not os.path.isdir(project_root):
+            message = 'project folder "'
+            message += project_root
+            message += '" does not exist. '
+            message += 'Please create project folder to publish.'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        
+        
+        # we need to bootstrap toolkit here but
+        # let's do a quick and dirty manual assignments
+        # for now
+        # multiple selections are left for later
+        if len(selection) > 1:
+            message = 'More than one clip selected. '
+            message += 'Multiple selection publish is not yet implemented. '
+            message += 'Please select one clip at time.'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        # basic name/version detection from clip name
+        flame_project_name = self.flame.project.current_project.name
+        batch_group_name = self.flame.batch.name.get_value()
+
+        clip_name = selection[0].name.get_value()
+        clip_version_number = -1
+        if clip_name.startswith(batch_group_name):
+            clip_name = clip_name[len(batch_group_name):]
+
+        if clip_name[-1].isdigit():
+            match = re.split('(\d+)', clip_name)
+            try:
+                clip_version_number = int(match[-2])
+            except:
+                pass
+
+            v_len = len(match[-2])
+            clip_name = clip_name[: -v_len ]
+        
+        if any([clip_name.startswith('_'), clip_name.startswith(' '), clip_name.startswith('.')]):
+            clip_name = clip_name[1:]
+        if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
+            clip_name = clip_name[:-1]
+
+        # pprint (templates)
+        # pprint (entity)
+        # pprint (selection)
+        # pprint (proj)
+
+        message = 'Built-in publishing backend is in progress. '
+        message += 'Have another look at github in a couple of days. '
+        message += "If you wish to help with coding you're very welcome! "
+        self.mbox.setText(message)
+        self.mbox.exec_()
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
@@ -467,19 +592,6 @@ class menuPublisher(flameShotgunApp):
         else:
             add_list.append(entity)
         self.prefs[batch_name + '_batch_loader_add'] = add_list
-
-    def load_into_batch(self, entity):
-        path_cache = entity.get('path_cache')
-        if not path_cache:
-            return
-        
-        storage_root = self.get_storage_root(entity.get('path_cache_storage'))
-        path = os.path.join(storage_root, path_cache)
-        flame_path = self.build_flame_friendly_path(path)
-        if not flame_path:
-            return
-
-        self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
     def get_entities(self, user_only = True, filter_out=[]):
         sg = self.sg_user.create_sg_connection()
@@ -522,7 +634,6 @@ class menuPublisher(flameShotgunApp):
         return found_entities
 
     def build_flame_friendly_path(self, path):
-        import re
         import glob
         import fnmatch
 
