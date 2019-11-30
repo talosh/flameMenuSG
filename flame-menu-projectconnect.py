@@ -266,9 +266,9 @@ def app_initialized(project_name):
 def get_main_menu_custom_ui_actions():
     s = time.time()
     menu = app.build_menu()
-    print ('menu: %s' % (time.time() - s))
+    # print ('menu: %s' % (time.time() - s))
     app.refresh()
-    print ('refresh: %s' % (time.time() - s))
+    # print ('refresh: %s' % (time.time() - s))
     # app.rescan_flame_hooks()
-    print ('rescan: %s' % (time.time() - s))
+    # print ('rescan: %s' % (time.time() - s))
     return menu

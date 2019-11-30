@@ -164,12 +164,13 @@ class flameShotgunApp(flameApp):
         # should get it from project pipeline configuration
         return storage_root    
 
-class menuBatchLoader(flameShotgunApp):
+class menuPublisher(flameShotgunApp):
     def __init__(self, framework):
         flameShotgunApp.__init__(self, framework)
         self.prefs['show_all'] = False
         self.prefs['current_page'] = 0
         self.prefs['menu_max_items_per_page'] = 128
+        self.selected_clips = []
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -177,11 +178,20 @@ class menuBatchLoader(flameShotgunApp):
             if entity:
                 if entity.get('caller') == 'build_addremove_menu':
                     self.update_loader_list(entity)
-                elif entity.get('caller') == 'build_batch_loader_menu':
-                    self.load_into_batch(entity)
+                elif entity.get('caller') == 'flip_assigned_for_entity':
+                    self.flip_assigned_for_entity(entity)
             self.rescan()
         return method
-    
+
+    def scope_clip(self, selection):
+        selected_clips = []
+        visibility = False
+        for item in selection:
+            if isinstance(item, (self.flame.PyClip)):
+                selected_clips.append(item)
+                visibility = True
+        return visibility
+
     def build_menu(self):
         if not self.sg_user:
             return None
@@ -210,12 +220,17 @@ class menuBatchLoader(flameShotgunApp):
             add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
 
         menus = []
-        menus.append(self.build_addremove_menu())
+        add_remove_menu = self.build_addremove_menu()
+        for action in add_remove_menu['actions']:
+            action['isVisible'] = self.scope_clip
+        menus.append(add_remove_menu)
 
         for entity in add_menu_list:
-            batch_loader_menu = self.build_batch_loader_menu(entity)
-            if batch_loader_menu:
-                menus.append(batch_loader_menu)
+            publish_menu = self.build_publish_menu(entity)
+            if publish_menu:
+                for action in publish_menu['actions']:
+                    action['isVisible'] = self.scope_clip
+                menus.append(publish_menu)
 
         return menus
 
@@ -244,7 +259,7 @@ class menuBatchLoader(flameShotgunApp):
         if self.prefs['show_all']:            
             menu_item['name'] = '~ Show Assigned Only'
         else:
-            menu_item['name'] = '~ Show All Avaliable'
+            menu_item['name'] = '~ Show All'
         menu_item['execute'] = self.flip_assigned
         menu['actions'].append(menu_item)
 
@@ -320,22 +335,32 @@ class menuBatchLoader(flameShotgunApp):
 
         return menu
 
-    def build_batch_loader_menu(self, entity):
+    def build_publish_menu(self, entity):
         sg = self.sg_user.create_sg_connection()
+
         entity_type = entity.get('type')
         entity_id = entity.get('id')
-        publishes = sg.find(
-            'PublishedFile',
+        if entity_id not in self.prefs.keys():
+            self.prefs[entity_id] = {}
+            self.prefs[entity_id]['show_all'] = False
+        prefs = self.prefs.get(entity_id)
+        
+        tasks = sg.find(
+            'Task',
             [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
             [
-                'path_cache',
-                'path_cache_storage',
-                'name',
-                'version_number',
-                'published_file_type',
-                'version.Version.code',
-                'task.Task.step.Step.code',
-                'task.Task.step.Step.short_name'
+                'content',
+                'step.Step.code',
+                'task_assignees'
+            ]
+        )
+
+        versions = sg.find(
+            'Version',
+            [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
+            [
+                'code',
+                'sg_task.Task.id'
             ]
         )
         
@@ -345,8 +370,13 @@ class menuBatchLoader(flameShotgunApp):
                     ['code']
         )
 
+        human_user = sg.find_one('HumanUser', 
+                [['login', 'is', self.sg_user.login]],
+                []
+                )
+
         menu = {}
-        menu['name'] = found_entity.get('code') + ':'
+        menu['name'] = 'Publish ' + found_entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
@@ -354,52 +384,73 @@ class menuBatchLoader(flameShotgunApp):
         menu_item['execute'] = self.rescan
         menu['actions'].append(menu_item)
 
-        step_names = set()
-        for publish in publishes:
-            # step_name = publish.get('task.Task.step.Step.short_name')
-            step_name = publish.get('task.Task.step.Step.code')
+        menu_item = {}
+        if prefs['show_all']:            
+            menu_item['name'] = '~ Show Assigned Only'
+        else:
+            menu_item['name'] = '~ Show All Tasks'
+        
+        show_all_entity = {}
+        show_all_entity['caller'] = 'flip_assigned_for_entity'
+        show_all_entity['id'] = entity_id
+        self.dynamic_menu_data[str(id(show_all_entity))] = show_all_entity
+        menu_item['execute'] = getattr(self, str(id(show_all_entity)))
+        menu['actions'].append(menu_item)
+
+        tasks_by_step = {}
+        for task in tasks:
+            task_assignees = task.get('task_assignees')
+            user_ids = []
+            if task_assignees:
+                for user in task_assignees:
+                    user_ids.append(user.get('id'))
+            if not prefs['show_all']:
+                if human_user.get('id') not in user_ids:
+                    continue
+
+            step_name = task.get('step.Step.code')
             if not step_name:
                 step_name = ''
-            step_names.add(step_name)
+            if step_name not in tasks_by_step.keys():
+                tasks_by_step[step_name] = []
+            tasks_by_step[step_name].append(task)
+        
+        for step_name in tasks_by_step.keys():
+            if len(tasks_by_step[step_name]) != 1:
+                menu_item = {}
+                menu_item['name'] = '- [ ' + step_name + ' ]'
+                menu_item['execute'] = self.rescan
+                menu['actions'].append(menu_item)
+            elif tasks_by_step[step_name][0].get('content') != step_name:
+                menu_item = {}
+                menu_item['name'] = '- [ ' + step_name + ' ]'
+                menu_item['execute'] = self.rescan
+                menu['actions'].append(menu_item)
 
-        for step_name in step_names:
-            menu_item = {}
-            menu_item['name'] = '- [ ' + step_name + ' ]'
-            menu_item['execute'] = self.rescan
-            menu['actions'].append(menu_item)
-            
-            published_file_type_name = ''
-            for publish in publishes:
-                step = publish.get('task.Task.step.Step.code')
-                if not step:
-                    step = ''
-                if step == step_name:
-                    published_file_type = publish.get('published_file_type')
-                    if published_file_type:
-                        published_file_type_name = published_file_type.get('name')
-                    else:
-                        published_file_type_name = None
+            for task in tasks_by_step[step_name]:                
+                task_name = task.get('content')
+                menu_item = {}
+                if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
+                    menu_item['name'] = '- [ ' + task_name + ' ]'
+                else:
+                    menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
+                menu_item['execute'] = self.rescan
+                menu['actions'].append(menu_item)
 
-                    if published_file_type_name in types_to_include:
-                        name = publish.get('name')
-                        if not name:
-                            name = ''
-                        name_elements = name.split(' ')
-                        if name_elements[-1] == 'render':
-                            name_elements[-1] = ''
-                        else:
-                            name_elements[-1] = ' (' + name_elements[-1] + ')'
-
-                        display_name = publish.get('version.Version.code')
-                        if not display_name:
-                            display_name = name_elements[0]
+                task_id = task.get('id')
+                for version in versions:
+                    if task_id == version.get('sg_task.Task.id'):
                         menu_item = {}
-                        menu_item['name'] = ' '*4 + display_name + name_elements[-1]
-                        publish['caller'] = inspect.currentframe().f_code.co_name
-                        self.dynamic_menu_data[str(id(publish))] = publish
-                        menu_item['execute'] = getattr(self, str(id(publish)))
+                        menu_item['name'] = ' '*8 + '* ' + version.get('code')
+                        menu_item['execute'] = self.rescan
+                        menu_item['isEnabled'] = False
                         menu['actions'].append(menu_item)
-
+                
+                menu_item = {}
+                menu_item['name'] = ' '*12 + 'publish to task "' + task_name + '"'
+                menu_item['execute'] = self.publish
+                menu['actions'].append(menu_item)
+                
         return menu
 
     def update_loader_list(self, entity):
@@ -533,6 +584,11 @@ class menuBatchLoader(flameShotgunApp):
         self.prefs['show_all'] = not self.prefs['show_all']
         self.rescan()
 
+    def flip_assigned_for_entity(self,entity):
+        entity_id = entity.get('id')
+        if entity_id:
+            self.prefs[entity_id]['show_all'] = not self.prefs[entity_id]['show_all']
+
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
 
@@ -556,17 +612,16 @@ class menuBatchLoader(flameShotgunApp):
             self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
 
     def rescan(self, *args, **kwargs):
-        self.refresh()
         self._framework.rescan()
 
 fw = flameAppFramework()
-app = menuBatchLoader(fw)
+app = menuPublisher(fw)
 #user = app.get_user()
     
 def app_initialized(project_name):
     import flame
     app.flame = flame
 
-def get_batch_custom_ui_actions():
+def get_media_panel_custom_ui_actions():
     app.refresh()    
     return app.build_menu()
