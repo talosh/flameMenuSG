@@ -1,6 +1,6 @@
 # flameMenuSG
 Interfaceless "menu-only" Shotgun integration for Autodesk Flame.
-The aim is to create lightweight menu-driven integration that works 
+The goal is to create lightweight menu-driven integration that works 
 out of the box for most common tasks.
 
 ### THIS PROJECT IS CURRENTLY IN ALPHA STAGE
