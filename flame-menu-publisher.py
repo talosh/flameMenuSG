@@ -13,13 +13,23 @@ from pprint import pformat
 # CONFIGURATION #
 #################
 
-builtin_publisher = True
+flame_bug_message = True
+builtin_publisher = False
 menu_group_name = 'Menu(SG)'
 bunlde_location = '/var/tmp'
 storage_root = '/Volumes/projects/'
 templates = {
-        'flame_shot_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{flame.frame}.exr',
-        'flame_shot_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch'
+        # known tokens are {Sequence},{Shot},{Step},{name},{version},{frame}
+        # {name} and {version} will be guessed from the clip name and taken from
+        # Batch itertation number as a fallback.
+        # EXAMPLE: Batch iteration number is 009.
+        # Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
+        # Would give us "mycomp" as a {name} and 009 as {version}
+        # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
+        # Publishing into asset will just replace {Shot} fied with asset name
+        'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'version_name': '{Shot}_{name}_v{version}'
 }
 
 class flameAppFramework(object):
@@ -176,7 +186,8 @@ class menuPublisher(flameShotgunApp):
         flameShotgunApp.__init__(self, framework)
         self.prefs['show_all'] = False
         self.prefs['current_page'] = 0
-        self.prefs['menu_max_items_per_page'] = 128
+        self.prefs['menu_max_items_per_page'] = 64
+        self.prefs['flame_bug_message_shown'] = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
         
@@ -185,8 +196,10 @@ class menuPublisher(flameShotgunApp):
             entity = self.dynamic_menu_data.get(name)
             if entity:
                 if entity.get('caller') == 'build_addremove_menu':
+                    self.show_bug_message()
                     self.update_loader_list(entity)
                 elif entity.get('caller') == 'flip_assigned_for_entity':
+                    self.show_bug_message()
                     self.flip_assigned_for_entity(entity)
                 elif entity.get('caller') == 'publish':
                     self.publish(entity, args[0])
@@ -495,7 +508,7 @@ class menuPublisher(flameShotgunApp):
 
         if not builtin_publisher:
             message = ''
-            message += 'Built-in publisher is not yet implemented. '
+            message += 'Built-in publisher is not yet fully implemented. '
             message += 'You can connect it to your current working publising backend. '
             message += 'If you want to try anyway set builtin_publisher to True '
             message += 'in the beginning of the flame-menu-publisher.py file. '
@@ -575,10 +588,10 @@ class menuPublisher(flameShotgunApp):
         
         # build export path
         if task_entity_type == 'Shot':
-            flame_shot_render = templates.get('flame_shot_render')
-            flame_shot_render = flame_shot_render.replace('{Shot}', task_entity_name)
-            flame_shot_render = flame_shot_render.replace('{name}', clip_name)
-            flame_shot_render = flame_shot_render.replace('{Step}', task_step)
+            flame_render = templates.get('flame_render')
+            flame_render = flame_shot_render.replace('{Shot}', task_entity_name)
+            flame_render = flame_shot_render.replace('{name}', clip_name)
+            flame_render = flame_shot_render.replace('{Step}', task_step)
             shot = sg.find_one(
                     'Shot',
                     [['id', 'is', task_entity_id]],
@@ -593,8 +606,8 @@ class menuPublisher(flameShotgunApp):
                 sequence_name = sequence.get('name')
                 if not sequence_name:
                     sequence_name = 'no_sequence'
-            flame_shot_render = flame_shot_render.replace('{Sequence}', sequence_name)
-            pprint (flame_shot_render)
+            flame_render = flame_render.replace('{Sequence}', sequence_name)
+            pprint (flame_render)
 
         if flame_shot_render.endswith('.exr'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
@@ -776,6 +789,22 @@ class menuPublisher(flameShotgunApp):
 
     def rescan(self, *args, **kwargs):
         self._framework.rescan()
+
+    def show_bug_message(self, *args, **kwargs):
+        if flame_bug_message:
+            if not self.prefs['flame_bug_message_shown']:
+                message = "WARINIG: There is a bug in Flame that messes up menu actions "
+                message += "if total number of menu items in all menus is more then 164. "
+                message += "If there's too many items displayed "
+                message += "in ALL CUSTOM MENUS it will lead to the situation when "
+                message += "you click on some menu item and it will call up something else. "
+                message += "It only affects media hub items, menus in batch or timeline are fine. "
+                message += "PS: This message will appear once per session. "
+                message += "To turn it off change flame_bug_message to False "
+                message += "at the top of python file"
+                self.mbox.setText(message)
+                self.mbox.exec_()
+        self.prefs['flame_bug_message_shown'] = True
 
 fw = flameAppFramework()
 app = menuPublisher(fw)
