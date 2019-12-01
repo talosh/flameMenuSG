@@ -3,7 +3,7 @@ Interfaceless "menu-only" Shotgun integration for Autodesk Flame.
 The aim is to create lightweight menu-driven integration that works 
 out of the box for most common tasks.
 
-THIS PROJECT IS CURRENTLY IN ALPHA STAGE
+# THIS PROJECT IS CURRENTLY IN ALPHA STAGE
 No releases has been made yet.
 Lighteight publishing backend should be brought to basic functionality and all parts
 combined in one singe file to become a first release.
