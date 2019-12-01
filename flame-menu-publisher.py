@@ -13,12 +13,12 @@ from pprint import pformat
 # CONFIGURATION #
 #################
 
-builtin_publisher = False
+builtin_publisher = True
 menu_group_name = 'Menu(SG)'
 bunlde_location = '/var/tmp'
 storage_root = '/Volumes/projects/'
 templates = {
-        'flame_shot_comp': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{flame.frame}.exr',
+        'flame_shot_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{flame.frame}.exr',
         'flame_shot_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch'
 }
 
@@ -370,7 +370,8 @@ class menuPublisher(flameShotgunApp):
                 'content',
                 'step.Step.code',
                 'task_assignees',
-                'project.Project.id'
+                'project.Project.id',
+                'entity'
             ]
         )
 
@@ -485,6 +486,13 @@ class menuPublisher(flameShotgunApp):
 
     def publish(self, entity, selection):
 
+        task = entity.get('task')
+        task_entity = task.get('entity')
+        task_entity_type = task_entity.get('type')
+        task_entity_name = task_entity.get('name')
+        task_entity_id = task_entity.get('id')
+        task_step = task.get('step.Step.code')
+
         if not builtin_publisher:
             message = ''
             message += 'Built-in publisher is not yet implemented. '
@@ -528,8 +536,6 @@ class menuPublisher(flameShotgunApp):
             self.mbox.setText(message)
             self.mbox.exec_()
             return False
-
-        
         
         # we need to bootstrap toolkit here but
         # let's do a quick and dirty manual assignments
@@ -566,6 +572,52 @@ class menuPublisher(flameShotgunApp):
             clip_name = clip_name[1:]
         if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
             clip_name = clip_name[:-1]
+        
+        # build export path
+        if task_entity_type == 'Shot':
+            flame_shot_render = templates.get('flame_shot_render')
+            flame_shot_render = flame_shot_render.replace('{Shot}', task_entity_name)
+            flame_shot_render = flame_shot_render.replace('{name}', clip_name)
+            flame_shot_render = flame_shot_render.replace('{Step}', task_step)
+            shot = sg.find_one(
+                    'Shot',
+                    [['id', 'is', task_entity_id]],
+                    [
+                    'sg_sequence',
+                    ]
+                )
+            sequence = shot.get('sg_sequence')
+            if not sequence:
+                sequence_name = 'no_sequence'
+            else:
+                sequence_name = sequence.get('name')
+                if not sequence_name:
+                    sequence_name = 'no_sequence'
+            flame_shot_render = flame_shot_render.replace('{Sequence}', sequence_name)
+            pprint (flame_shot_render)
+
+        if flame_shot_render.endswith('.exr'):
+            preset_dir = self.flame.PyExporter.get_presets_dir(
+                    self.flame.PyExporter.PresetVisibility.Autodesk,
+                    self.flame.PyExporter.PresetType.Image_Sequence
+                )
+            preset_path = os.path.join(preset_dir, 'OpenEXR', 'OpenEXR (16-bit fp PIZ).xml')
+        elif flame_shot_render.endswith('.dpx'):
+            preset_dir = self.flame.PyExporter.get_presets_dir(
+                    self.flame.PyExporter.PresetVisibility.Autodesk,
+                    self.flame.PyExporter.PresetType.Image_Sequence
+                )
+            preset_path = os.path.join(preset_dir, 'DPX', 'DPX (10-bit).xml')
+        else:
+            preset_dir = self.flame.PyExporter.get_presets_dir(
+                    self.flame.PyExporter.PresetVisibility.Autodesk,
+                    self.flame.PyExporter.PresetType.Image_Sequence
+                )
+            preset_path = os.path.join(preset_dir, 'Jpeg', 'Jpeg (8-bit).xml')
+        exporter = self.flame.PyExporter()
+        exporter.foreground = True
+        # exporter.export(clip, preset_path, export_dir)       
+
 
         # pprint (templates)
         # pprint (entity)
