@@ -13,16 +13,16 @@ from pprint import pformat
 # CONFIGURATION #
 #################
 
-flame_bug_message = True
-builtin_publisher = False
+flame_bug_message = False
+builtin_publisher = True
 menu_group_name = 'Menu(SG)'
 bunlde_location = '/var/tmp'
 storage_root = '/Volumes/projects/'
 templates = {
         # known tokens are {Sequence},{Shot},{Step},{name},{version},{frame}
         # {name} and {version} will be guessed from the clip name and taken from
-        # Batch itertation number as a fallback.
-        # EXAMPLE: Batch iteration number is 009.
+        # number of Batch itertations as a fallback.
+        # EXAMPLE: There are 9 batch iterations in batch group.
         # Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
         # Would give us "mycomp" as a {name} and 009 as {version}
         # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
@@ -382,6 +382,7 @@ class menuPublisher(flameShotgunApp):
             [
                 'content',
                 'step.Step.code',
+                'step.Step.short_name',
                 'task_assignees',
                 'project.Project.id',
                 'entity'
@@ -504,7 +505,7 @@ class menuPublisher(flameShotgunApp):
         task_entity_type = task_entity.get('type')
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
-        task_step = task.get('step.Step.code')
+        task_step = task.get('step.Step.short_name')
 
         if not builtin_publisher:
             message = ''
@@ -562,19 +563,20 @@ class menuPublisher(flameShotgunApp):
             self.mbox.exec_()
             return False
 
+        clip = selection[0]
+
         # basic name/version detection from clip name
-        flame_project_name = self.flame.project.current_project.name
         batch_group_name = self.flame.batch.name.get_value()
 
-        clip_name = selection[0].name.get_value()
-        clip_version_number = -1
+        clip_name = clip.name.get_value()
+        version_number = -1
         if clip_name.startswith(batch_group_name):
             clip_name = clip_name[len(batch_group_name):]
 
         if clip_name[-1].isdigit():
             match = re.split('(\d+)', clip_name)
             try:
-                clip_version_number = int(match[-2])
+                version_number = int(match[-2])
             except:
                 pass
 
@@ -585,37 +587,40 @@ class menuPublisher(flameShotgunApp):
             clip_name = clip_name[1:]
         if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
             clip_name = clip_name[:-1]
+        if version_number == -1:
+            version_number = len(self.flame.batch.batch_iterations)
         
         # build export path
-        if task_entity_type == 'Shot':
-            flame_render = templates.get('flame_render')
-            flame_render = flame_shot_render.replace('{Shot}', task_entity_name)
-            flame_render = flame_shot_render.replace('{name}', clip_name)
-            flame_render = flame_shot_render.replace('{Step}', task_step)
-            shot = sg.find_one(
-                    'Shot',
-                    [['id', 'is', task_entity_id]],
-                    [
-                    'sg_sequence',
-                    ]
-                )
-            sequence = shot.get('sg_sequence')
-            if not sequence:
+        export_path = templates.get('flame_render')
+        export_path = export_path.replace('{Shot}', task_entity_name)
+        export_path = export_path.replace('{name}', clip_name)
+        export_path = export_path.replace('{Step}', task_step)
+        shot = sg.find_one(
+                'Shot',
+                [['id', 'is', task_entity_id]],
+                [
+                'sg_sequence',
+                ]
+            )
+        sequence = shot.get('sg_sequence')
+        if not sequence:
+            sequence_name = 'no_sequence'
+        else:
+            sequence_name = sequence.get('name')
+            if not sequence_name:
                 sequence_name = 'no_sequence'
-            else:
-                sequence_name = sequence.get('name')
-                if not sequence_name:
-                    sequence_name = 'no_sequence'
-            flame_render = flame_render.replace('{Sequence}', sequence_name)
-            pprint (flame_render)
+        export_path = export_path.replace('{Sequence}', sequence_name)
+        export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
+        export_path = os.path.join(storage_root, project_folder_name, export_path)
+        pprint (export_path)
 
-        if flame_shot_render.endswith('.exr'):
+        if export_path.endswith('.exr'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
                     self.flame.PyExporter.PresetVisibility.Autodesk,
                     self.flame.PyExporter.PresetType.Image_Sequence
                 )
             preset_path = os.path.join(preset_dir, 'OpenEXR', 'OpenEXR (16-bit fp PIZ).xml')
-        elif flame_shot_render.endswith('.dpx'):
+        elif export_path.endswith('.dpx'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
                     self.flame.PyExporter.PresetVisibility.Autodesk,
                     self.flame.PyExporter.PresetType.Image_Sequence
@@ -627,11 +632,30 @@ class menuPublisher(flameShotgunApp):
                     self.flame.PyExporter.PresetType.Image_Sequence
                 )
             preset_path = os.path.join(preset_dir, 'Jpeg', 'Jpeg (8-bit).xml')
+
         exporter = self.flame.PyExporter()
         exporter.foreground = True
-        # exporter.export(clip, preset_path, export_dir)       
+        export_clip_name, ext = os.path.splitext(os.path.basename(export_path))
+        export_clip_name = export_clip_name.replace('{frame}', '')
+        if export_clip_name.endswith('.'):
+            export_clip_name = export_clip_name[:-1]
+        original_clip_name = clip.name.get_value()
+        clip.name.set_value(export_clip_name)
+        export_dir = os.path.dirname(export_path)
 
+        try:
+            os.makedirs(export_dir)
+        except:
+            clip.name.set_value(original_clip_name)
+            message = 'Can not create folder: ' + export_dir
+            message += 'Can not complete publishing.'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
 
+        exporter.export(clip, preset_path, export_dir)
+        clip.name.set_value(original_clip_name)
+       
         # pprint (templates)
         # pprint (entity)
         # pprint (selection)
