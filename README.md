@@ -17,5 +17,5 @@ This code makes some assumptions local to the current configuration
 I'm working with (most notably the storage roots are just hardcoded at the moment) 
 so don't expect it is going to work on yours out of the box.
 
-If you want to try it:
-#### Make sure you set storage root to your projects root
+#### Make sure you set storage root to your projects root if you want to try it.
+
