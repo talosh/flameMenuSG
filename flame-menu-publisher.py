@@ -506,6 +506,8 @@ class menuPublisher(flameShotgunApp):
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
         task_step = task.get('step.Step.short_name')
+        poster_frame = 1
+
 
         if not builtin_publisher:
             message = ''
@@ -591,10 +593,6 @@ class menuPublisher(flameShotgunApp):
             version_number = len(self.flame.batch.batch_iterations)
         
         # build export path
-        export_path = templates.get('flame_render')
-        export_path = export_path.replace('{Shot}', task_entity_name)
-        export_path = export_path.replace('{name}', clip_name)
-        export_path = export_path.replace('{Step}', task_step)
         shot = sg.find_one(
                 'Shot',
                 [['id', 'is', task_entity_id]],
@@ -609,10 +607,21 @@ class menuPublisher(flameShotgunApp):
             sequence_name = sequence.get('name')
             if not sequence_name:
                 sequence_name = 'no_sequence'
+
+        # template_data = {}
+        # template_data['Shot'] = task_entity_name
+        # template_data['name'] = clip_name
+        # template_data['Step'] = task_step
+        # template_data['Sequence'] = sequence_name
+        # template_data['version'] = '{:03d}'.format(version_number)
+        export_path = templates.get('flame_render')
+        export_path = export_path.replace('{Shot}', task_entity_name)
+        export_path = export_path.replace('{name}', clip_name)
+        export_path = export_path.replace('{Step}', task_step)
         export_path = export_path.replace('{Sequence}', sequence_name)
         export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
+        # export_path.format(**template_data)
         export_path = os.path.join(storage_root, project_folder_name, export_path)
-        pprint (export_path)
 
         if export_path.endswith('.exr'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
@@ -642,20 +651,44 @@ class menuPublisher(flameShotgunApp):
         original_clip_name = clip.name.get_value()
         clip.name.set_value(export_clip_name)
         export_dir = os.path.dirname(export_path)
-
-        try:
-            os.makedirs(export_dir)
-        except:
-            clip.name.set_value(original_clip_name)
-            message = 'Can not create folder: ' + export_dir
-            message += 'Can not complete publishing.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
+        
+        if not os.path.isdir(export_dir):
+            try:
+                os.makedirs(export_dir)
+            except:
+                clip.name.set_value(original_clip_name)
+                message = 'Can not create folder: ' + export_dir
+                message += ' Can not complete publishing.'
+                self.mbox.setText(message)
+                self.mbox.exec_()
+                return False
 
         exporter.export(clip, preset_path, export_dir)
         clip.name.set_value(original_clip_name)
-       
+
+        preset_dir = self.flame.PyExporter.get_presets_dir(
+            self.flame.PyExporter.PresetVisibility.Shotgun,
+            self.flame.PyExporter.PresetType.Movie
+        )
+        preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+        clip.name.set_value('preview')
+        export_dir = '/var/tmp'
+        exporter.export(clip, preset_path, export_dir)
+        clip.name.set_value(original_clip_name)
+
+        preset_dir = self.flame.PyExporter.get_presets_dir(
+            self.flame.PyExporter.PresetVisibility.Shotgun,
+            self.flame.PyExporter.PresetType.Image_Sequence
+        )
+        preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+        clip.name.set_value('thumbnail')
+        export_dir = '/var/tmp'
+        clip.in_mark = poster_frame
+        clip.out_mark = poster_frame + 1
+        exporter.export_between_marks = True
+        exporter.export(clip, preset_path, export_dir)
+        clip.name.set_value(original_clip_name)
+
         # pprint (templates)
         # pprint (entity)
         # pprint (selection)
