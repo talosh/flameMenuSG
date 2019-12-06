@@ -169,7 +169,7 @@ class menuBatchLoader(flameShotgunApp):
         flameShotgunApp.__init__(self, framework)
         self.prefs['show_all'] = False
         self.prefs['current_page'] = 0
-        self.prefs['menu_max_items_per_page'] = 128
+        self.prefs['menu_max_items_per_page'] = 64
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
