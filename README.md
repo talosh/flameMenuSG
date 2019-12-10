@@ -7,7 +7,6 @@ out of the box for most common tasks.
 No releases has been made yet.
 Lighteight publishing backend should be brought to basic functionality and all parts
 combined in one singe file to become a first release.
-The current plan is to complete it before Dec 13 2019.
 
 NOTE: Refreshing custom menus in flame is currently limited to "refresh pyton hooks".
 This mean it is going to reload all pythong hooks currently enabled and it may slow down
