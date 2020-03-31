@@ -34,6 +34,9 @@ templates = {
         'version_name': '{Shot}_{name}_v{version}'
 }
 
+flame_render_type = 'Flame Render'
+flame_batch_type = 'Flame Batch File'
+
 class flameAppFramework(object):
     def __init__(self):
         self._name = 'flameMenuSG'
@@ -581,11 +584,15 @@ class menuPublisher(flameShotgunApp):
             match = re.split('(\d+)', clip_name)
             try:
                 version_number = int(match[-2])
+                print ('version_padding: %s' % len(match[-2]))
             except:
                 pass
 
             v_len = len(match[-2])
             clip_name = clip_name[: -v_len ]
+        
+        if clip_name.endswith('v'):
+            clip_name = clip_name[:-1] 
         
         if any([clip_name.startswith('_'), clip_name.startswith(' '), clip_name.startswith('.')]):
             clip_name = clip_name[1:]
@@ -611,20 +618,24 @@ class menuPublisher(flameShotgunApp):
             if not sequence_name:
                 sequence_name = 'no_sequence'
 
+        # That's the way they do it on toolkit
         # template_data = {}
         # template_data['Shot'] = task_entity_name
         # template_data['name'] = clip_name
         # template_data['Step'] = task_step
         # template_data['Sequence'] = sequence_name
         # template_data['version'] = '{:03d}'.format(version_number)
+        # export_path.format(**template_data)
+
         export_path = templates.get('flame_render')
         export_path = export_path.replace('{Shot}', task_entity_name)
         export_path = export_path.replace('{name}', clip_name)
         export_path = export_path.replace('{Step}', task_step)
         export_path = export_path.replace('{Sequence}', sequence_name)
         export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
-        # export_path.format(**template_data)
         export_path = os.path.join(storage_root, project_folder_name, export_path)
+
+        pprint ('export path: %s' % export_path)
 
         if export_path.endswith('.exr'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
@@ -698,6 +709,10 @@ class menuPublisher(flameShotgunApp):
             sg_published_file_type = sg.create("TankType", {"code": "Flame Render",
                                                                             "project": proj})
 
+        # get published file type or create a published file type on the fly
+        sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
+        if not sg_published_file_type:
+            sg_published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
 
         pprint (sg_published_file_type)
         # pprint (entity)
