@@ -577,6 +577,7 @@ class menuPublisher(flameShotgunApp):
 
         clip_name = clip.name.get_value()
         version_number = -1
+        version_padding = -1
         if clip_name.startswith(batch_group_name):
             clip_name = clip_name[len(batch_group_name):]
 
@@ -584,12 +585,11 @@ class menuPublisher(flameShotgunApp):
             match = re.split('(\d+)', clip_name)
             try:
                 version_number = int(match[-2])
-                print ('version_padding: %s' % len(match[-2]))
             except:
                 pass
 
-            v_len = len(match[-2])
-            clip_name = clip_name[: -v_len ]
+            version_padding = len(match[-2])
+            clip_name = clip_name[: -version_padding]
         
         if clip_name.endswith('v'):
             clip_name = clip_name[:-1] 
@@ -600,6 +600,7 @@ class menuPublisher(flameShotgunApp):
             clip_name = clip_name[:-1]
         if version_number == -1:
             version_number = len(self.flame.batch.batch_iterations)
+            version_padding = 3
         
         # build export path
         shot = sg.find_one(
