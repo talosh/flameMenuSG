@@ -27,6 +27,8 @@ templates = {
         # Would give us "mycomp" as a {name} and 009 as {version}
         # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
         # Publishing into asset will just replace {Shot} fied with asset name
+        # 'flame_image_sequence': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
+        # 'flame_movie': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.mov',
         'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
         'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
         'version_name': '{Shot}_{name}_v{version}'
@@ -600,6 +602,7 @@ class menuPublisher(flameShotgunApp):
                 'sg_sequence',
                 ]
             )
+            
         sequence = shot.get('sg_sequence')
         if not sequence:
             sequence_name = 'no_sequence'
@@ -689,9 +692,16 @@ class menuPublisher(flameShotgunApp):
         exporter.export(clip, preset_path, export_dir)
         clip.name.set_value(original_clip_name)
 
-        # pprint (templates)
+        filters = [["code", "is", "Flame Render"]]
+        sg_published_file_type = sg.find_one('PublishedFileType', filters=filters)
+        if not sg_published_file_type:
+            sg_published_file_type = sg.create("TankType", {"code": "Flame Render",
+                                                                            "project": proj})
+
+
+        pprint (sg_published_file_type)
         # pprint (entity)
-        # pprint (selection)
+        # pprint (selection)s
         # pprint (proj)
 
         message = 'Built-in publishing backend is in progress. '

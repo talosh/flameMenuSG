@@ -408,7 +408,7 @@ class menuNewBatch(flameShotgunApp):
         if not sg_vfx_req:
             sg_vfx_req = 'no requirements specified'
 
-        dur = sg_tail_out - sg_head_in
+        dur = (sg_tail_out - sg_head_in) + 1
 
         self.flame.batch.create_batch_group (
             code, start_frame = 1, duration = dur

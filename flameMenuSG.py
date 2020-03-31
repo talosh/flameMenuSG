@@ -1,3 +1,6 @@
+from threading import Thread
+import atexit
+
 import os
 import sys
 import sgtk
@@ -26,7 +29,7 @@ class flameAppFramework(object):
                 self._flame = flame
             except:
                 self._flame = None
-
+                
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
 
@@ -159,127 +162,33 @@ class flameShotgunApp(flameApp):
         self.rescan()
 
 
-class flameMenuProjectconnect(flameShotgunApp):
-    def __getattr__(self, name):
-        def method(*args, **kwargs):
-            project = self.dynamic_menu_data.get(name)
-            if project:
-                self.link_project(project)
-        return method
-    
-    def build_menu(self):
-        if not self.flame:
-            return []
+threads = []
 
-        flame_project_name = self.flame.project.current_project.name
-        self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
+def wait_for_threads_at_exit():
+    global threads
+    if len(threads) > 0:
+        for thread in threads:
+            print("Waiting for %s" % thread.name)
+            # join() waits for the thread to finish before relinquishing
+            # control, making sure everything is done before exit.
+            thread.join()
+    threads = []
 
-        menu = {'actions': []}
+# Clean up by Python on exit
+atexit.register(wait_for_threads_at_exit)
 
-        if not self.sg_user:
-            menu['name'] = self.menu_group_name
+# The actual code to execute in a thread.
+def async_callback(param1, param2):
+    print("async_callback(%s, %s)\n" % (str(param1), str(param2)))
 
-            menu_item = {}
-            menu_item['name'] = 'Sign in to Shotgun'
-            menu_item['execute'] = self.sign_in
-            menu['actions'].append(menu_item)
-        elif self.sg_linked_project:
-            menu['name'] = self.menu_group_name
+def render_ended(moduleName, sequenceName, elapsedTimeInSeconds):
+    #Creates the separate thread
+    thread = Thread(
+        target=async_callback,
+        name="async callback",
+        args=(moduleName, sequenceName, ))
+    thread.start()
 
-            menu_item = {}
-            menu_item['name'] = 'Unlink `' + flame_project_name + '` from Shotgun project `' + self.sg_linked_project + '`'
-            menu_item['execute'] = self.unlink_project
-            menu['actions'].append(menu_item)
-            menu_item = {}
-            menu_item['name'] = 'Sign out ' + str(self.sg_user_name)
-            menu_item['execute'] = self.sign_out
-            menu['actions'].append(menu_item)
-        else:
-            menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
-
-            menu_item = {}
-            menu_item['name'] = '~ Rescan Shotgun Projects'
-            menu_item['execute'] = self.rescan
-            menu['actions'].append(menu_item)
-
-            menu_item = {}
-            menu_item['name'] = '---'
-            menu_item['execute'] = self.rescan
-            menu['actions'].append(menu_item)
-
-            projects = self.get_projects()
-            projects_by_name = {}
-            for project in projects:
-                projects_by_name[project.get('name')] = project
-
-            for project_name in sorted(projects_by_name.keys()):
-                project = projects_by_name.get(project_name)
-                self.dynamic_menu_data[str(id(project))] = project
-
-                menu_item = {}
-                menu_item['name'] = project_name
-                menu_item['execute'] = getattr(self, str(id(project)))
-                menu['actions'].append(menu_item)
-            
-            menu_item = {}
-            menu_item['name'] = '--'
-            menu_item['execute'] = self.rescan
-            menu['actions'].append(menu_item)
-
-            menu_item = {}
-            menu_item['name'] = 'Sign out ' + str(self.sg_user_name)
-            menu_item['execute'] = self.sign_out
-            menu['actions'].append(menu_item)
-
-        return menu
-
-    def unlink_project(self, *args, **kwargs):
-        self.flame.project.current_project.shotgun_project_name = ''
-        self.sg_linked_project = ''
-        self.rescan()
-
-    def link_project(self, project):
-        project_name = project.get('name')
-        if project_name:
-            self.flame.project.current_project.shotgun_project_name = project_name
-        self.sg_linked_project = project_name
-        self.rescan()
-
-    def refresh(self, *args, **kwargs):
-        self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.name + '.signout')
-        if not os.path.isfile(self._sg_signout_marker):
-            self.sg_user = self.get_user()
-            sg = self.sg_user.create_sg_connection()
-            human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
-                ['name']
-            )
-            self.sg_user_name = human_user.get('name', None)
-            if not self.sg_user_name:
-                self.sg_user_name = self.sg_user.login
-
-        if self.flame:
-            self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
-
-    def rescan_flame_hooks(self, *args, **kwargs):
-        self._framework.rescan()
-
-
-fw = flameAppFramework()
-app = flameMenuProjectconnect(fw)
-#user = app.get_user()
-    
-def app_initialized(project_name):
-    import flame
-    app.flame = flame
-    app.rescan_flame_hooks()
-
-def get_main_menu_custom_ui_actions():
-    s = time.time()
-    menu = app.build_menu()
-    # print ('menu: %s' % (time.time() - s))
-    app.refresh()
-    # print ('refresh: %s' % (time.time() - s))
-    # app.rescan_flame_hooks()
-    # print ('rescan: %s' % (time.time() - s))
-    return menu
+    # Add to threads[] the just created thread, to keep track and
+    # clean up on exit.
+    threads.append(thread)
