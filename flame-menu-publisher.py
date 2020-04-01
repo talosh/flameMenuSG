@@ -678,7 +678,13 @@ class menuPublisher(flameShotgunApp):
                 self.mbox.exec_()
                 return False
 
-        exporter.export(clip, preset_path, export_dir)
+        print ('about to export')
+        try:
+            exporter.export(clip, preset_path, export_dir)
+        except:
+            print ('exporter exception')
+            
+        print (original_clip_name)
         clip.name.set_value(original_clip_name)
 
         preset_dir = self.flame.PyExporter.get_presets_dir(
