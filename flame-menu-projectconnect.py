@@ -121,16 +121,13 @@ class flameShotgunApp(flameApp):
         q = multiprocessing.Queue()
         p = multiprocessing.Process(target=credentials_handler, args=(user, q))
         p.start()
-        p.join(1)
+        p.join(4)
 
         if p.is_alive():
             p.terminate()
             p.join()
             print ('timeout while getting credentials')
             return None
-
-        signal.signal(signal.SIGINT, default_sigint)
-        signal.signal(signal.SIGTERM, default_sigterm)
 
         credentials_expired = q.get()
 
