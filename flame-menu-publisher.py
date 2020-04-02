@@ -19,7 +19,7 @@ menu_group_name = 'Menu(SG)'
 bunlde_location = '/var/tmp'
 storage_root = '/Volumes/projects/'
 templates = {
-        # known tokens are {Sequence},{Shot},{Step},{name},{version},{frame}
+        # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
         # {name} and {version} will be guessed from the clip name and taken from
         # number of Batch itertations as a fallback.
         # EXAMPLE: There are 9 batch iterations in batch group.
@@ -210,6 +210,14 @@ class menuPublisher(flameShotgunApp):
                     self.publish(entity, args[0])
             self.rescan()
         return method
+
+    def create_uid():
+        '''
+        generates UUID for the batch setup
+        '''
+        uid = ((str(uuid.uuid1()).replace('-', '')).upper())
+        timestamp = (datetime.now()).strftime('%y%m%d%H%M')
+        return timestamp + uid[:1]
 
     def scope_clip(self, selection):
         selected_clips = []
@@ -512,6 +520,7 @@ class menuPublisher(flameShotgunApp):
         task_entity_id = task_entity.get('id')
         task_step = task.get('step.Step.short_name')
         poster_frame = 1
+        uid = self.create_uid()
 
 
         if not builtin_publisher:
@@ -634,6 +643,7 @@ class menuPublisher(flameShotgunApp):
         export_path = export_path.replace('{Step}', task_step)
         export_path = export_path.replace('{Sequence}', sequence_name)
         export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
+        export_path = export_path.replace('{version_four}', '{:04d}'.format(version_number))
         export_path = os.path.join(storage_root, project_folder_name, export_path)
 
         pprint ('export path: %s' % export_path)
@@ -678,36 +688,40 @@ class menuPublisher(flameShotgunApp):
                 self.mbox.exec_()
                 return False
 
-        print ('about to export')
         try:
             exporter.export(clip, preset_path, export_dir)
+            clip.name.set_value(original_clip_name)
         except:
-            print ('exporter exception')
-            
-        print (original_clip_name)
-        clip.name.set_value(original_clip_name)
+            clip.name.set_value(original_clip_name)
+            return None
 
         preset_dir = self.flame.PyExporter.get_presets_dir(
             self.flame.PyExporter.PresetVisibility.Shotgun,
             self.flame.PyExporter.PresetType.Movie
         )
         preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
-        clip.name.set_value('preview')
+        clip.name.set_value('preview_' + uid)
         export_dir = '/var/tmp'
-        exporter.export(clip, preset_path, export_dir)
-        clip.name.set_value(original_clip_name)
+        try:
+            exporter.export(clip, preset_path, export_dir)
+        except:
+            pass
 
         preset_dir = self.flame.PyExporter.get_presets_dir(
             self.flame.PyExporter.PresetVisibility.Shotgun,
             self.flame.PyExporter.PresetType.Image_Sequence
         )
         preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
-        clip.name.set_value('thumbnail')
+        clip.name.set_value('thumbnail_' + uid)
         export_dir = '/var/tmp'
         clip.in_mark = poster_frame
         clip.out_mark = poster_frame + 1
         exporter.export_between_marks = True
-        exporter.export(clip, preset_path, export_dir)
+        try:
+            exporter.export(clip, preset_path, export_dir)
+        except:
+            pass
+          
         clip.name.set_value(original_clip_name)
 
         filters = [["code", "is", "Flame Render"]]

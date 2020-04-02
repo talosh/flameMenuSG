@@ -2,11 +2,20 @@ import os
 import sys
 import sgtk
 import time
+import multiprocessing
+import signal
 
 from pprint import pprint
 
 menu_group_name = 'Menu(SG)'
 prefs_location = '/var/tmp'
+
+def sigterm_handler(signum, frame):
+    print ('sigterm handler')
+    sys.exit()
+signal.signal(signal.SIGINT, sigterm_handler)
+signal.signal(signal.SIGTERM, sigterm_handler)
+
 
 class flameAppFramework(object):
     def __init__(self):
@@ -99,12 +108,36 @@ class flameShotgunApp(flameApp):
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         try:
             user = authenticator.get_user()
-            if user.are_credentials_expired():
-                authenticator.clear_default_user()
-                user = authenticator.get_user()
         except sgtk.authentication.AuthenticationCancelled:
             return None
 
+        # try to see if we're actually able to connect
+        credentials_expired = False
+        
+        def credentials_handler(user, q):
+            q.put(user.are_credentials_expired())
+            return True
+        
+        q = multiprocessing.Queue()
+        p = multiprocessing.Process(target=credentials_handler, args=(user, q))
+        p.start()
+        p.join(1)
+
+        if p.is_alive():
+            p.terminate()
+            p.join()
+            print ('timeout while getting credentials')
+            return None
+
+        signal.signal(signal.SIGINT, default_sigint)
+        signal.signal(signal.SIGTERM, default_sigterm)
+
+        credentials_expired = q.get()
+
+        if credentials_expired:
+            authenticator.clear_default_user()
+            user = authenticator.get_user()
+        
         return user
 
     def clear_user(self):
@@ -275,7 +308,7 @@ def app_initialized(project_name):
     app.rescan_flame_hooks()
 
 def get_main_menu_custom_ui_actions():
-    s = time.time()
+    # s = time.time()
     menu = app.build_menu()
     # print ('menu: %s' % (time.time() - s))
     app.refresh()
