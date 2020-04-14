@@ -13,8 +13,18 @@ from pprint import pprint
 bundle_name = 'flameMenuSG'
 bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
+# flameBatchBlessing
 flame_batch_root = bundle_location
 flame_batch_folder = 'flame_batch_setups'
+# flameMenuNewbatch
+steps_to_ignore = [
+            'turnover',
+            'roto'
+    ]
+types_to_include = [
+            'Image Sequence',
+            'Flame Render'
+    ]
 
 DEBUG = True
         
@@ -65,6 +75,9 @@ class flameApp(object):
             self.flame = flame
         except:
             self.flame = None
+        self.prefs = {}
+        self.name = self.__class__.__name__
+        self._framework.prefs[self.name] = self.prefs
     
     def __getattr__(self, name):
         def method(*args, **kwargs):
