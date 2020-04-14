@@ -213,7 +213,6 @@ def batch_render_begin(info, userData, *args, **kwargs):
         current_batch_uid = create_batch_uid()
         batch_file_name = flame.batch.name + '_' + current_batch_uid + '.batch'
 
-
     # get render destinations
     render_dest = dict()
     for node in flame.batch.nodes:
