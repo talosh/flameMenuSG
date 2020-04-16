@@ -7,6 +7,7 @@ import signal
 import atexit
 import base64
 import uuid
+import inspect
 from datetime import datetime
 from pprint import pprint
 
@@ -25,6 +26,9 @@ types_to_include = [
             'Image Sequence',
             'Flame Render'
     ]
+# flameMenuBatchLoader
+storage_root = '/Volumes/projects'
+
 
 DEBUG = True
         
@@ -102,6 +106,16 @@ class flameApp(object):
     @property
     def framework(self):
         return self._framework
+
+class flameShotgunConnector(flameApp):
+    def __init__(self, framework):
+        flameApp.__init__(self, framework)
+        self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.bundle_name + '.signout')
+        self.sg_user = None
+        self.sg_user_name = None
+        self.sg_linked_project = ''
+        self.TIMEOUT = 10
+        print ('HELLO FROM SHOTGUN CONNECTOR')
 
 class flameShotgunApp(flameApp):
     def __init__(self, framework):
@@ -871,7 +885,12 @@ class flameMenuNewBatch(flameShotgunApp):
         self.refresh()
         self._framework.rescan()
 
-
+class flameMenuBatchLoader(flameShotgunApp):
+    def __init__(self, framework):
+        flameShotgunApp.__init__(self, framework)
+        self.prefs['show_all'] = False
+        self.prefs['current_page'] = 0
+        self.prefs['menu_max_items_per_page'] = 64
 
 
 print ('PYTHON\t: %s initializing' % bundle_name)
@@ -883,15 +902,21 @@ apps = []
 def app_initialized(project_name):
     print ('===== app_initialized hook')
     print ('apps lenghth = %s' % len(apps))
-    for n in range (0, len(apps)):
-        print ('n = %s' % n)
-        app = apps.pop(n)
+
+    while len(apps):
+        print ('len = %s' % len(apps))
+        app = apps.pop()
         print (type(app))
         del app
-    
+
+    if 'shotgunConnector' in locals():
+        del shotgunConnector
+    shotgunConnector = flameShotgunConnector(app_framework)
+
     apps.append(flameMenuProjectconnect(app_framework))
     apps.append(flameBatchBlessing(app_framework))
     apps.append(flameMenuNewBatch(app_framework))
+    apps.append(flameMenuBatchLoader(app_framework))
     print (apps)
 
 def get_main_menu_custom_ui_actions():
