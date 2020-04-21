@@ -2,7 +2,6 @@ import os
 import sys
 import sgtk
 import time
-import multiprocessing
 import threading
 import signal
 import atexit
