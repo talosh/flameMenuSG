@@ -166,8 +166,8 @@ class flameShotgunConnector(object):
         
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.test_loop, args=(2, )))
-        self.loops.append(threading.Thread(target=self.active_projects, args=(2, )))
+        self.loops.append(threading.Thread(target=self.test_loop, args=(5, )))
+        self.loops.append(threading.Thread(target=self.active_projects, args=(5, )))
 
         for loop in self.loops:
             loop.daemon = True
@@ -184,17 +184,28 @@ class flameShotgunConnector(object):
         for loop in self.loops:
             loop.join()
 
-    def test_loop(self, timeout):
-        while self.threads:
-            print ('hello from test loop')
-            for n in range(timeout*10):
+    def loop_timeout(self, timeout, start):
+        time_passed = int(time.time() - start)
+        if timeout <= time_passed:
+            return
+        else:
+            for n in range((timeout - time_passed) * 10):
                 if not self.threads:
-                    self.log('leaving loop thread: %s' % inspect.currentframe().f_code.co_name)
+                    self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
                     break
                 time.sleep(0.1)
+
+    def test_loop(self, timeout):
+        while self.threads:
+            start = time.time()
+            print ('hello from test loop')
+            self.loop_timeout(timeout, start)
     
     def active_projects(self, timeout):
         while self.threads:
+            start = time.time()
+            if self.user:
+                pass
             #user = None
             #try:
             #    user = authenticator.get_user()
@@ -220,11 +231,7 @@ class flameShotgunConnector(object):
             #del user
             active_projects = ('hello active projects')
             print (active_projects)
-            for n in range(timeout*10):
-                if not self.threads:
-                    self.log('leaving loop thread: %s' % inspect.currentframe().f_code.co_name)
-                    break
-                time.sleep(0.1)
+            self.loop_timeout(timeout, start)
 
     def get_user(self):        
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
@@ -1403,19 +1410,23 @@ apps = []
 
 def exit_handler(shotgunConnector):
     if DEBUG:
-        print ('[DEBUG %s] %s' % (bundle_name, '*** ATEXIT HANDLER'))
+        print ('[DEBUG %s] %s' % (bundle_name, 'exit handler'))
     shotgunConnector.terminate_loops()
 
 atexit.register(exit_handler, shotgunConnector)
 
-def get_main_menu_custom_ui_actions():
-    return []
-
-'''
 # --- FLAME HOOKS ---
 
+def project_changed(project_name):
+    print ('[%s] project_changed HOOK' % bundle_name)
+    pass
+
+def project_changed_dict(info):
+    print ('[%s] project_changed_dict HOOK' % bundle_name)
+    pass
+
 def app_initialized(project_name):
-    print ('app init hook')
+    print ('[%s] app_initialized HOOK' % bundle_name)
     while len(apps):
         app = apps.pop()
         del app
@@ -1424,6 +1435,7 @@ def app_initialized(project_name):
     # apps.append(flameMenuNewBatch(app_framework))
     # apps.append(flameMenuBatchLoader(app_framework))
 
+'''
 def get_main_menu_custom_ui_actions():
     menu = []
     flameMenuProjectconnectApp = None
