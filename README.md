@@ -5,12 +5,12 @@ out of the box for most common tasks.
 
 #### THIS PROJECT IS CURRENTLY IN ALPHA STAGE
 No releases has been made yet.
-Lighteight publishing backend should be brought to basic functionality and all parts
+Lightweight publishing backend should be brought to basic functionality and all parts
 combined in one singe file to become a first release.
 
 NOTE: Refreshing custom menus in flame is currently limited to "refresh pyton hooks".
-This mean it is going to reload all pythong hooks currently enabled and it may slow down
-your menu performance.
+That means it is going to reload all pythong hooks currently enabled in the system 
+and it may slow down your menu performance.
 
 This code makes some assumptions local to the current configuration
 I'm working with (most notably the storage roots are just hardcoded at the moment) 
