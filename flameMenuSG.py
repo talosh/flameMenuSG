@@ -9,8 +9,10 @@ import atexit
 import base64
 import uuid
 import inspect
+import pickle
 from datetime import datetime
 from pprint import pprint
+from pprint import pformat
 
 bundle_name = 'flameMenuSG'
 bundle_location = '/var/tmp'
@@ -50,15 +52,47 @@ signal.signal(signal.SIGTERM, sigterm_handler)
 
 class flameAppFramework(object):
     def __init__(self):
+        self.name = self.__class__.__name__
         self._bundle_name = bundle_name
         self._prefs = {}
         self._bundle_location = bundle_location
         self.debug = DEBUG
+        self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
         self.log('%s waking up' % self.__class__.__name__)
+        self.load_prefs()
 
     def log(self, message):
         if self.debug:
             print ('[DEBUG %s] %s' % (self._bundle_name, message))
+    
+    def __del__(self):
+        self.log('%s destructor' % self.name)
+        self.save_prefs()
+        print (self._prefs)
+
+    def load_prefs(self):
+        try:
+            prefs_file = open(self.prefs_file_location, 'r')
+            self._prefs = pickle.load(prefs_file)
+            prefs_file.close()
+            self.log('preferences loaded from %s' % self.prefs_file_location)
+            self.log(pformat(self._prefs))
+            return True
+        except:
+            self.log('unable to load preferences from %s' % self.prefs_file_location)
+            return False
+
+    def save_prefs(self):
+        try:
+            prefs_file = open(self.prefs_file_location, 'w')
+            pickle.dump(self._prefs, prefs_file)
+            prefs_file.close()
+            self.log('preferences saved to %s' % self.prefs_file_location)
+            self.log(pformat(self._prefs))
+            return True
+        except:
+            self.log('unable to save preferences to %s' % self.prefs_file_location)
+            return False
 
     @property
     def prefs(self):
@@ -118,6 +152,11 @@ class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
         self.fw = framework
+        self.prefs = self.fw.prefs.get(self.name, None)
+        if not self.prefs:
+            self.prefs = {}
+            self.prefs['user signed out'] = False
+            self.fw.prefs[self.name] = self.prefs
         # self.manager = multiprocessing.Manager()
         # self.state = self.manager.dict()
         # authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
@@ -132,7 +171,7 @@ class flameShotgunConnector(object):
         print ('*** HELLO FROM SHOTGUN CONNECTOR %s' % self.name)
 
     def __del__(self):
-        self.fw.log('flameShotgunConnector destructor')
+        self.fw.log('%s destructor' % self.name)
 
     def terminate_loops(self):
         self.threads = False
@@ -153,19 +192,7 @@ class flameShotgunConnector(object):
                 time.sleep(0.1)
     
     def active_projects(self):
-        authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
-        try:
-            user = authenticator.get_user()
-            sg = user.create_sg_connection()
-            active_projects = sg.find(
-                        'Project',
-                        [['archived', 'is', False]],
-                        ['name', 'tank_name']
-                    )
-            pprint (active_projects)
-        except:
-            pass
-
+        user = self.get_user()
         while self.threads:
             timeout = 2
             #user = None
@@ -199,6 +226,19 @@ class flameShotgunConnector(object):
                     break
                 time.sleep(0.1)
 
+    def get_user(self):        
+        authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
+        try:
+            user = authenticator.get_user()
+        except sgtk.authentication.AuthenticationCancelled:
+            self.prefs['user signed out'] = True
+            return None
+
+        if user.are_credentials_expired():
+            authenticator.clear_default_user()
+            user = authenticator.get_user()
+        
+        return user
 '''
 
 class flameShotgunApp(flameMenuApp):
