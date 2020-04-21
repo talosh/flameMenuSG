@@ -3,13 +3,16 @@ import sys
 import sgtk
 import time
 import multiprocessing
+import threading
 import signal
 import atexit
 import base64
 import uuid
 import inspect
+import pickle
 from datetime import datetime
 from pprint import pprint
+from pprint import pformat
 
 bundle_name = 'flameMenuSG'
 bundle_location = '/var/tmp'
@@ -49,10 +52,48 @@ signal.signal(signal.SIGTERM, sigterm_handler)
 
 class flameAppFramework(object):
     def __init__(self):
+        self.name = self.__class__.__name__
         self._bundle_name = bundle_name
         self._prefs = {}
         self._bundle_location = bundle_location
+        self.debug = DEBUG
+        self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
+        self.log('%s waking up' % self.__class__.__name__)
+        self.load_prefs()
+
+    def log(self, message):
+        if self.debug:
+            print ('[DEBUG %s] %s' % (self._bundle_name, message))
     
+    def __del__(self):
+        self.log('%s destructor' % self.name)
+        self.save_prefs()
+        print (self._prefs)
+
+    def load_prefs(self):
+        try:
+            prefs_file = open(self.prefs_file_location, 'r')
+            self._prefs = pickle.load(prefs_file)
+            prefs_file.close()
+            self.log('preferences loaded from %s' % self.prefs_file_location)
+            self.log(pformat(self._prefs))
+            return True
+        except:
+            self.log('unable to load preferences from %s' % self.prefs_file_location)
+            return False
+
+    def save_prefs(self):
+        try:
+            prefs_file = open(self.prefs_file_location, 'w')
+            pickle.dump(self._prefs, prefs_file)
+            prefs_file.close()
+            self.log('preferences saved to %s' % self.prefs_file_location)
+            self.log(pformat(self._prefs))
+            return True
+        except:
+            self.log('unable to save preferences to %s' % self.prefs_file_location)
+            return False
+
     @property
     def prefs(self):
         return self._prefs
@@ -68,7 +109,7 @@ class flameAppFramework(object):
     def bundle_location(self):
         return self._bundle_location
 
-class flameApp(object):
+class flameMenuApp(object):
     def __init__(self, framework):
         self._framework = framework
         self.menu_group_name = menu_group_name
@@ -107,17 +148,100 @@ class flameApp(object):
     def framework(self):
         return self._framework
 
-class flameShotgunConnector(flameApp):
+class flameShotgunConnector(object):
     def __init__(self, framework):
-        flameApp.__init__(self, framework)
-        self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.bundle_name + '.signout')
-        self.sg_user = None
-        self.sg_user_name = None
-        self.sg_linked_project = ''
-        self.TIMEOUT = 10
-        print ('HELLO FROM SHOTGUN CONNECTOR')
+        self.name = self.__class__.__name__
+        self.fw = framework
+        self.prefs = self.fw.prefs.get(self.name, None)
+        if not self.prefs:
+            self.prefs = {}
+            self.prefs['user signed out'] = False
+            self.fw.prefs[self.name] = self.prefs
+        # self.manager = multiprocessing.Manager()
+        # self.state = self.manager.dict()
+        # authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
+        self.loops = []
+        self.threads = True
+        self.loops.append(threading.Thread(target=self.test_loop, args=()))
+        self.loops.append(threading.Thread(target=self.active_projects, args=()))
 
-class flameShotgunApp(flameApp):
+        for loop in self.loops:
+            loop.daemon = True
+            loop.start()
+        print ('*** HELLO FROM SHOTGUN CONNECTOR %s' % self.name)
+
+    def __del__(self):
+        self.fw.log('%s destructor' % self.name)
+
+    def terminate_loops(self):
+        self.threads = False
+        for loop in self.loops:
+            loop.join()
+            # if loop.is_alive():
+            #    loop.terminate()
+            #    loop.join()
+
+    def test_loop(self):
+        timeout = 2
+        while self.threads:
+            print ('hello from test loop')
+            for n in range(timeout*10):
+                if not self.threads:
+                    print ('****** stopping test thread')
+                    break
+                time.sleep(0.1)
+    
+    def active_projects(self):
+        user = self.get_user()
+        while self.threads:
+            timeout = 2
+            #user = None
+            #try:
+            #    user = authenticator.get_user()
+            #except sgtk.authentication.AuthenticationCancelled:
+            #    pass
+            
+            
+            # if user:
+            #    try:
+            #        sg = user.create_sg_connection()
+            #    except:
+            #        sg = None
+            #sg = None
+            #if sg:
+            #    active_projects = sg.find(
+            #        'Project',
+            #        [['archived', 'is', False]],
+            #        ['name', 'tank_name']
+            #    )
+            #else:
+            #    active_projects = None
+            #del sg
+            #del user
+            active_projects = ('hello active projects')
+            print (active_projects)
+            for n in range(timeout*10):
+                if not self.threads:
+                    print ('****** stopping active projects thread')
+                    break
+                time.sleep(0.1)
+
+    def get_user(self):        
+        authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
+        try:
+            user = authenticator.get_user()
+        except sgtk.authentication.AuthenticationCancelled:
+            self.prefs['user signed out'] = True
+            return None
+
+        if user.are_credentials_expired():
+            authenticator.clear_default_user()
+            user = authenticator.get_user()
+        
+        return user
+'''
+
+class flameShotgunApp(flameMenuApp):
     def __init__(self, framework):
         flameApp.__init__(self, framework)
         self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.bundle_name + '.signout')
@@ -229,6 +353,10 @@ class flameShotgunApp(flameApp):
         self.rescan()
 
 class flameMenuProjectconnect(flameShotgunApp):
+    def __init__(self, framework, connector):
+        self.connector = connector
+        self.framework = framework
+        
     def __getattr__(self, name):
         def method(*args, **kwargs):
             project = self.dynamic_menu_data.get(name)
@@ -241,7 +369,7 @@ class flameMenuProjectconnect(flameShotgunApp):
             return []
 
         flame_project_name = self.flame.project.current_project.name
-        self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
+        self.connector.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
 
         menu = {'actions': []}
 
@@ -252,11 +380,11 @@ class flameMenuProjectconnect(flameShotgunApp):
             menu_item['name'] = 'Sign in to Shotgun'
             menu_item['execute'] = self.sign_in
             menu['actions'].append(menu_item)
-        elif self.sg_linked_project:
+        elif self.connector.sg_linked_project:
             menu['name'] = self.menu_group_name
 
             menu_item = {}
-            menu_item['name'] = 'Unlink `' + flame_project_name + '` from Shotgun project `' + self.sg_linked_project + '`'
+            menu_item['name'] = 'Unlink `' + flame_project_name + '` from Shotgun project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             menu_item = {}
@@ -304,35 +432,23 @@ class flameMenuProjectconnect(flameShotgunApp):
 
     def unlink_project(self, *args, **kwargs):
         self.flame.project.current_project.shotgun_project_name = ''
-        self.sg_linked_project = ''
+        self.connector.sg_linked_project = ''
         self.rescan()
 
     def link_project(self, project):
         project_name = project.get('name')
         if project_name:
             self.flame.project.current_project.shotgun_project_name = project_name
-        self.sg_linked_project = project_name
+        self.connector.sg_linked_project = project_name
         self.rescan()
 
     def refresh(self, *args, **kwargs):        
-        if not os.path.isfile(self._sg_signout_marker):
-            self.sg_user = self.get_user()
-            sg = self.sg_user.create_sg_connection()
-            human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
-                ['name']
-            )
-            self.sg_user_name = human_user.get('name', None)
-            if not self.sg_user_name:
-                self.sg_user_name = self.sg_user.login
-
-        if self.flame:
-            self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
+        self.connector.refresh()
 
     def rescan_flame_hooks(self, *args, **kwargs):
         self._framework.rescan()
 
-class flameBatchBlessing(flameApp):
+class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
         flameApp.__init__(self, framework)
         self.root_folder = self.batch_setup_root_folder()
@@ -358,34 +474,32 @@ class flameBatchBlessing(flameApp):
 
     def collect_clip_uids(self, render_dest):
         import flame
-        '''
-        collects clip uids from locations specified in render_dest dictionary
-        returns:    dictionary of lists of clip uid's at the locations specified
-                    in render_dest dictionary.
-                    clip_uids = {
-                                'Batch Reels': {
-                                    'BatchReel Name': [uid1, uid2]
-                                    }
-                                'Batch Shelf Reels': {
-                                    'Shelf Reel Name 1': [uid3, uid4]
-                                    'Shelf Reel Name 2': [uid5, uid6, uid7]
-                                    }
-                                'Libraries': {
-                                    'Library Name 3': [uid8, uid9]
-                                }
-                                'Reel Groups': {
-                                    'Reel Group Name 1': {
-                                        'Reel 1': []
-                                        'Reel 2: []
-                                    }
-                                    'Reel Group Name 2': {
-                                        'Reel 1': []
-                                        'Reel 2: []
-                                    } 
-    
-                                }
-                    }
-        '''
+        # collects clip uids from locations specified in render_dest dictionary
+        # returns:    dictionary of lists of clip uid's at the locations specified
+        #            in render_dest dictionary.
+        #            clip_uids = {
+        #                        'Batch Reels': {
+        #                            'BatchReel Name': [uid1, uid2]
+        #                            }
+        #                        'Batch Shelf Reels': {
+        #                            'Shelf Reel Name 1': [uid3, uid4]
+        #                            'Shelf Reel Name 2': [uid5, uid6, uid7]
+        #                            }
+        #                        'Libraries': {
+        #                            'Library Name 3': [uid8, uid9]
+        #                        }
+        #                        'Reel Groups': {
+        #                            'Reel Group Name 1': {
+        #                                'Reel 1': []
+        #                                'Reel 2: []
+        #                            }
+        #                            'Reel Group Name 2': {
+        #                                'Reel 1': []
+        #                                'Reel 2: []
+        #                            }
+        #
+        #                        }
+        #            }
 
         collected_uids = dict()
         for dest in render_dest.keys():
@@ -460,10 +574,9 @@ class flameBatchBlessing(flameApp):
 
     def bless_batch_renders(self, userData):
         import flame
-        '''
-        finds clips that was not in the render destionations before
-        abd blesses them by adding batch_setup_name to the comments
-        '''
+        
+        # finds clips that was not in the render destionations before
+        # and blesses them by adding batch_setup_name to the comments
 
         batch_setup_name = userData.get('batch_setup_name')
         batch_setup_file = userData.get('batch_setup_file')
@@ -531,9 +644,8 @@ class flameBatchBlessing(flameApp):
                                                     batch_setup_file = batch_setup_file)
 
     def create_batch_uid(self):
-        '''
-        generates UUID for the batch setup
-        '''
+        # generates UUID for the batch setup
+
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
         timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return timestamp + uid[:1]
@@ -1280,32 +1392,35 @@ class flameMenuBatchLoader(flameShotgunApp):
         self.refresh()
         self._framework.rescan()
 
+'''
 
 print ('PYTHON\t: %s initializing' % bundle_name)
 app_framework = flameAppFramework()
+shotgunConnector = flameShotgunConnector(app_framework)
 apps = []
 
+def exit_handler(shotgunConnector):
+    if DEBUG:
+        print ('[DEBUG %s] %s' % (bundle_name, '*** ATEXIT HANDLER'))
+    shotgunConnector.terminate_loops()
+
+atexit.register(exit_handler, shotgunConnector)
+
+def get_main_menu_custom_ui_actions():
+    return []
+
+'''
 # --- FLAME HOOKS ---
 
 def app_initialized(project_name):
-    print ('===== app_initialized hook')
-    print ('apps lenghth = %s' % len(apps))
-
+    print ('app init hook')
     while len(apps):
-        print ('len = %s' % len(apps))
         app = apps.pop()
-        print (type(app))
         del app
-
-    if 'shotgunConnector' in locals():
-        del shotgunConnector
-    shotgunConnector = flameShotgunConnector(app_framework)
-
-    apps.append(flameMenuProjectconnect(app_framework))
-    apps.append(flameBatchBlessing(app_framework))
-    apps.append(flameMenuNewBatch(app_framework))
-    apps.append(flameMenuBatchLoader(app_framework))
-    print (apps)
+    # apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
+    # apps.append(flameBatchBlessing(app_framework))
+    # apps.append(flameMenuNewBatch(app_framework))
+    # apps.append(flameMenuBatchLoader(app_framework))
 
 def get_main_menu_custom_ui_actions():
     menu = []
@@ -1394,3 +1509,5 @@ def batch_render_end(info, userData, *args, **kwargs):
         userData['batch_setup_name'] = 'Render aborted by user'
 
     flameBatchBlessingApp.bless_batch_renders(userData)
+    
+'''
