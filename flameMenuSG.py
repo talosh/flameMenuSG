@@ -2,7 +2,6 @@ import os
 import sys
 import sgtk
 import time
-import multiprocessing
 import threading
 import signal
 import atexit
@@ -58,25 +57,20 @@ class flameAppFramework(object):
         self._bundle_location = bundle_location
         self.debug = DEBUG
         self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
-        self.log('%s waking up' % self.__class__.__name__)
+        self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
 
     def log(self, message):
         if self.debug:
             print ('[DEBUG %s] %s' % (self._bundle_name, message))
     
-    def __del__(self):
-        self.log('%s destructor' % self.name)
-        self.save_prefs()
-        print (self._prefs)
-
     def load_prefs(self):
         try:
             prefs_file = open(self.prefs_file_location, 'r')
             self._prefs = pickle.load(prefs_file)
             prefs_file.close()
             self.log('preferences loaded from %s' % self.prefs_file_location)
-            self.log(pformat(self._prefs))
+            self.log('preferences contents:\n' + pformat(self._prefs))
             return True
         except:
             self.log('unable to load preferences from %s' % self.prefs_file_location)
@@ -88,7 +82,7 @@ class flameAppFramework(object):
             pickle.dump(self._prefs, prefs_file)
             prefs_file.close()
             self.log('preferences saved to %s' % self.prefs_file_location)
-            self.log(pformat(self._prefs))
+            self.log('preferences contents:\n' + pformat(self._prefs))
             return True
         except:
             self.log('unable to save preferences to %s' % self.prefs_file_location)
@@ -111,7 +105,8 @@ class flameAppFramework(object):
 
 class flameMenuApp(object):
     def __init__(self, framework):
-        self._framework = framework
+        self.name = self.__class__.__name__
+        self.framework = framework
         self.menu_group_name = menu_group_name
         self.debug = DEBUG
         self.dynamic_menu_data = {}
@@ -122,7 +117,7 @@ class flameMenuApp(object):
             self.flame = None
         self.prefs = {}
         self.name = self.__class__.__name__
-        self._framework.prefs[self.name] = self.prefs
+        self.framework.prefs[self.name] = self.prefs
     
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -130,8 +125,7 @@ class flameMenuApp(object):
         return method
 
     def log(self, message):
-        if self.debug:
-            print ('[DEBUG %s] %s' % (self._framework.bundle_name, message))
+        self.framework.log('[' + self.name + '] ' + message)
 
     def rescan(self, *args, **kwargs):
         if not self.flame:
@@ -143,104 +137,143 @@ class flameMenuApp(object):
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
-
-    @property
-    def framework(self):
-        return self._framework
+            self.log('Rescan Python Hooks')
 
 class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
-        self.fw = framework
-        self.prefs = self.fw.prefs.get(self.name, None)
+        self.framework = framework
+        self.log('waking up')
+        
+        self.prefs = self.framework.prefs.get(self.name, None)
         if not self.prefs:
             self.prefs = {}
             self.prefs['user signed out'] = False
-            self.fw.prefs[self.name] = self.prefs
-        # self.manager = multiprocessing.Manager()
-        # self.state = self.manager.dict()
-        # authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
+            self.framework.prefs[self.name] = self.prefs
+        
+        self.sg_user = None
+        self.sg_human_user = None
+        self.sg_user_name = None
+        if not self.prefs.get('user signed out', False):
+            self.log('requesting for Shotgun user')
+            self.get_user()
+        
+        self.sg_linked_project = None
+        self.state = {}
+        if not self.sg_user:
+            self.state['active projects'] = None
+        else:
+            self.update_active_projects()
+
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.test_loop, args=()))
-        self.loops.append(threading.Thread(target=self.active_projects, args=()))
+        self.loops.append(threading.Thread(target=self.test_loop, args=(5, )))
+        self.loops.append(threading.Thread(target=self.active_projects_loop, args=(5, )))
 
         for loop in self.loops:
             loop.daemon = True
             loop.start()
-        print ('*** HELLO FROM SHOTGUN CONNECTOR %s' % self.name)
 
     def __del__(self):
-        self.fw.log('%s destructor' % self.name)
+        self.log('destructor')
+
+    def log(self, message):
+        self.framework.log('[' + self.name + '] ' + message)
 
     def terminate_loops(self):
         self.threads = False
         for loop in self.loops:
             loop.join()
-            # if loop.is_alive():
-            #    loop.terminate()
-            #    loop.join()
 
-    def test_loop(self):
-        timeout = 2
+    def loop_timeout(self, timeout, start):
+        time_passed = int(time.time() - start)
+        if timeout <= time_passed:
+            return
+        else:
+            for n in range((timeout - time_passed) * 10):
+                if not self.threads:
+                    self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
+                    break
+                time.sleep(0.1)
+
+    def test_loop(self, timeout):
         while self.threads:
+            start = time.time()
             print ('hello from test loop')
-            for n in range(timeout*10):
-                if not self.threads:
-                    print ('****** stopping test thread')
-                    break
-                time.sleep(0.1)
+            self.loop_timeout(timeout, start)
     
-    def active_projects(self):
-        user = self.get_user()
+    def active_projects_loop(self, timeout):
         while self.threads:
-            timeout = 2
-            #user = None
-            #try:
-            #    user = authenticator.get_user()
-            #except sgtk.authentication.AuthenticationCancelled:
-            #    pass
-            
-            
-            # if user:
-            #    try:
-            #        sg = user.create_sg_connection()
-            #    except:
-            #        sg = None
-            #sg = None
-            #if sg:
-            #    active_projects = sg.find(
-            #        'Project',
-            #        [['archived', 'is', False]],
-            #        ['name', 'tank_name']
-            #    )
-            #else:
-            #    active_projects = None
-            #del sg
-            #del user
-            active_projects = ('hello active projects')
-            print (active_projects)
-            for n in range(timeout*10):
-                if not self.threads:
-                    print ('****** stopping active projects thread')
-                    break
-                time.sleep(0.1)
+            start = time.time()
+            if not self.sg_user:
+                self.log('no shotgun user, wanking...')
+                self.loop_timeout(timeout, start)
+            else:
+                self.update_active_projects()
+                self.log('found %s active projects' % len(self.state.get('active projects', [])))
+                self.loop_timeout(timeout, start)
 
-    def get_user(self):        
+    def update_active_projects(self):
+        if not self.sg_user:
+            return False
+        try:
+            start = time.time()
+            sg = self.sg_user.create_sg_connection()
+            self.state['active projects'] = sg.find(
+                'Project',
+                [['archived', 'is', False]],
+                ['name', 'tank_name']
+            )
+            self.log('active projects update took %s' % (time.time() - start))
+            return True
+        except:
+            return False
+
+    def update_human_user(self):
+        if not self.sg_user:
+            return False
+        try:
+            start = time.time()
+            sg = self.sg_user.create_sg_connection()
+            self.sg_human_user = sg.find_one('HumanUser', 
+                [['login', 'is', self.sg_user.login]],
+                ['name']
+            )
+            self.sg_user_name = self.sg_human_user.get('name', None)
+            if not self.sg_user_name:
+                self.sg_user_name = self.sg_user.login
+            self.log('human user update took %s' % (time.time() - start))
+            return True
+        except:
+            return False
+
+    def get_user(self, *args, **kwargs):        
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         try:
-            user = authenticator.get_user()
+            self.sg_user = authenticator.get_user()
         except sgtk.authentication.AuthenticationCancelled:
             self.prefs['user signed out'] = True
             return None
 
-        if user.are_credentials_expired():
+        if self.sg_user.are_credentials_expired():
             authenticator.clear_default_user()
-            user = authenticator.get_user()
+            self.sg_user = authenticator.get_user()
         
-        return user
-'''
+        self.prefs['user signed out'] = False
+        self.update_human_user()
+        self.update_active_projects()
 
+        return self.sg_user
+
+    def clear_user(self, *args, **kwargs):
+        authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
+        authenticator.clear_default_user()
+        self.sg_user = None
+        self.sg_human_user = None
+        self.sg_user_name = None
+        self.state['active projects'] = None
+
+'''
 class flameShotgunApp(flameMenuApp):
     def __init__(self, framework):
         flameApp.__init__(self, framework)
@@ -352,10 +385,12 @@ class flameShotgunApp(flameMenuApp):
         self.sg_user_name = None
         self.rescan()
 
-class flameMenuProjectconnect(flameShotgunApp):
+'''
+
+class flameMenuProjectconnect(flameMenuApp):
     def __init__(self, framework, connector):
+        flameMenuApp.__init__(self, framework)
         self.connector = connector
-        self.framework = framework
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -373,7 +408,7 @@ class flameMenuProjectconnect(flameShotgunApp):
 
         menu = {'actions': []}
 
-        if not self.sg_user:
+        if not self.connector.sg_user:
             menu['name'] = self.menu_group_name
 
             menu_item = {}
@@ -388,7 +423,7 @@ class flameMenuProjectconnect(flameShotgunApp):
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             menu_item = {}
-            menu_item['name'] = 'Sign out ' + str(self.sg_user_name)
+            menu_item['name'] = 'Sign out ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
         else:
@@ -424,11 +459,14 @@ class flameMenuProjectconnect(flameShotgunApp):
             menu['actions'].append(menu_item)
 
             menu_item = {}
-            menu_item['name'] = 'Sign out ' + str(self.sg_user_name)
+            menu_item['name'] = 'Sign out ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
 
         return menu
+
+    def get_projects(self, *args, **kwargs):
+        return self.connector.state['active projects']
 
     def unlink_project(self, *args, **kwargs):
         self.flame.project.current_project.shotgun_project_name = ''
@@ -443,11 +481,18 @@ class flameMenuProjectconnect(flameShotgunApp):
         self.rescan()
 
     def refresh(self, *args, **kwargs):        
-        self.connector.refresh()
+        self.connector.update_active_projects()
+        self.rescan()
 
-    def rescan_flame_hooks(self, *args, **kwargs):
-        self._framework.rescan()
+    def sign_in(self, *args, **kwargs):
+        self.connector.get_user()
+        self.rescan()
 
+    def sign_out(self, *args, **kwargs):
+        self.connector.clear_user()
+        self.rescan()
+
+'''
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
         flameApp.__init__(self, framework)
@@ -995,7 +1040,7 @@ class flameMenuNewBatch(flameShotgunApp):
 
     def rescan(self, *args, **kwargs):
         self.refresh()
-        self._framework.rescan()
+        self.framework.rescan()
 
 class flameMenuBatchLoader(flameShotgunApp):
     def __init__(self, framework):
@@ -1390,37 +1435,47 @@ class flameMenuBatchLoader(flameShotgunApp):
 
     def rescan(self, *args, **kwargs):
         self.refresh()
-        self._framework.rescan()
+        self.framework.rescan()
 
 '''
+
+def load_apps(apps, app_framework, shotgunConnector):
+    apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
+    # apps.append(flameBatchBlessing(app_framework))
+    # apps.append(flameMenuNewBatch(app_framework))
+    # apps.append(flameMenuBatchLoader(app_framework))
+    if DEBUG:
+        print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
+
 
 print ('PYTHON\t: %s initializing' % bundle_name)
 app_framework = flameAppFramework()
 shotgunConnector = flameShotgunConnector(app_framework)
 apps = []
+load_apps(apps, app_framework, shotgunConnector)
 
-def exit_handler(shotgunConnector):
+def exit_handler(apps, app_framework, shotgunConnector):
     if DEBUG:
-        print ('[DEBUG %s] %s' % (bundle_name, '*** ATEXIT HANDLER'))
-    shotgunConnector.terminate_loops()
-
-atexit.register(exit_handler, shotgunConnector)
-
-def get_main_menu_custom_ui_actions():
-    return []
-
-'''
-# --- FLAME HOOKS ---
-
-def app_initialized(project_name):
-    print ('app init hook')
+        print ('[DEBUG %s] %s' % (bundle_name, 'exit handler'))
+        print ('[DEBUG %s] unloading apps: %s' % (bundle_name, pformat(apps)))
     while len(apps):
         app = apps.pop()
         del app
-    # apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
-    # apps.append(flameBatchBlessing(app_framework))
-    # apps.append(flameMenuNewBatch(app_framework))
-    # apps.append(flameMenuBatchLoader(app_framework))
+    shotgunConnector.terminate_loops()
+    del shotgunConnector
+    app_framework.save_prefs()
+    del app_framework
+
+atexit.register(exit_handler, apps, app_framework, shotgunConnector)
+
+# --- FLAME HOOKS ---
+
+def app_initialized(project_name):
+    print ('[%s] app_initialized HOOK' % bundle_name)
+    while len(apps):
+        app = apps.pop()
+        del app
+    load_apps(apps, app_framework, shotgunConnector)
 
 def get_main_menu_custom_ui_actions():
     menu = []
@@ -1430,9 +1485,11 @@ def get_main_menu_custom_ui_actions():
             flameMenuProjectconnectApp = app
     if flameMenuProjectconnectApp:
         menu.append(flameMenuProjectconnectApp.build_menu())
-        flameMenuProjectconnectApp.refresh()
+        # flameMenuProjectconnectApp.refresh()
     return menu
-            
+
+'''
+
 def get_media_panel_custom_ui_actions():
     menu = []
     flameMenuNewBatchApp = None
