@@ -30,8 +30,6 @@ types_to_include = [
     ]
 # flameMenuBatchLoader
 storage_root = '/Volumes/projects'
-
-
 DEBUG = True
         
 # redirect termination signals to sys.exit()
@@ -492,14 +490,18 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.clear_user()
         self.rescan()
 
-'''
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
-        flameApp.__init__(self, framework)
-        self.root_folder = self.batch_setup_root_folder()
+        flameMenuApp.__init__(self, framework)
+        if self.flame:
+            self.root_folder = self.batch_setup_root_folder()
 
     def batch_setup_root_folder(self):
-        import flame
+        try:
+            import flame
+        except:
+            return False
+            
         current_project_name = flame.project.current_project.name
         flame_batch_path = os.path.join(
                                     flame_batch_root,
@@ -514,7 +516,6 @@ class flameBatchBlessing(flameMenuApp):
             except:
                 print ('PYTHON\t: %s can not create %s' % (bundle_name, flame_batch_path))
                 return False
-        
         return flame_batch_path
 
     def collect_clip_uids(self, render_dest):
@@ -695,6 +696,7 @@ class flameBatchBlessing(flameMenuApp):
         timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return timestamp + uid[:1]
 
+'''
 class flameMenuNewBatch(flameShotgunApp):
     def __init__(self, framework):
         flameShotgunApp.__init__(self, framework)
@@ -1441,12 +1443,11 @@ class flameMenuBatchLoader(flameShotgunApp):
 
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
-    # apps.append(flameBatchBlessing(app_framework))
+    apps.append(flameBatchBlessing(app_framework))
     # apps.append(flameMenuNewBatch(app_framework))
     # apps.append(flameMenuBatchLoader(app_framework))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
-
 
 print ('PYTHON\t: %s initializing' % bundle_name)
 app_framework = flameAppFramework()
@@ -1513,6 +1514,8 @@ def get_batch_custom_ui_actions():
             menu.append(menuitem)
     return menu
 
+'''
+
 def batch_render_begin(info, userData, *args, **kwargs):
     import flame
     flameBatchBlessingApp = None
@@ -1553,6 +1556,7 @@ def batch_render_end(info, userData, *args, **kwargs):
     if not flameBatchBlessingApp:
         return
 
+    flameBatchBlessingApp.batch_setup_root_folder()
     flame_batch_path = flameBatchBlessingApp.root_folder
     current_batch_uid = userData.get('current_batch_uid')
     batch_setup_name = flame.batch.name + '_' + current_batch_uid
@@ -1566,5 +1570,3 @@ def batch_render_end(info, userData, *args, **kwargs):
         userData['batch_setup_name'] = 'Render aborted by user'
 
     flameBatchBlessingApp.bless_batch_renders(userData)
-    
-'''
