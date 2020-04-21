@@ -58,7 +58,7 @@ class flameAppFramework(object):
         self._bundle_location = bundle_location
         self.debug = DEBUG
         self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
-        self.log('%s waking up' % self.__class__.__name__)
+        self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
 
     def log(self, message):
@@ -66,9 +66,8 @@ class flameAppFramework(object):
             print ('[DEBUG %s] %s' % (self._bundle_name, message))
     
     def __del__(self):
-        self.log('%s destructor' % self.name)
+        self.log('[%s] destructor' % self.name)
         self.save_prefs()
-        print (self._prefs)
 
     def load_prefs(self):
         try:
@@ -152,49 +151,50 @@ class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
         self.fw = framework
+        self.log('waking up')
+        
         self.prefs = self.fw.prefs.get(self.name, None)
         if not self.prefs:
             self.prefs = {}
             self.prefs['user signed out'] = False
             self.fw.prefs[self.name] = self.prefs
-        # self.manager = multiprocessing.Manager()
-        # self.state = self.manager.dict()
-        # authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
+        
+        self.user = None
+        if not self.prefs.get('user signed out', False):
+            self.log('requesting for Shotgun user')
+            self.get_user()
+        
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.test_loop, args=()))
-        self.loops.append(threading.Thread(target=self.active_projects, args=()))
+        self.loops.append(threading.Thread(target=self.test_loop, args=(2, )))
+        self.loops.append(threading.Thread(target=self.active_projects, args=(2, )))
 
         for loop in self.loops:
             loop.daemon = True
             loop.start()
-        print ('*** HELLO FROM SHOTGUN CONNECTOR %s' % self.name)
 
     def __del__(self):
-        self.fw.log('%s destructor' % self.name)
+        self.log('destructor')
+
+    def log(self, message):
+        self.fw.log('[' + self.name + '] ' + message)
 
     def terminate_loops(self):
         self.threads = False
         for loop in self.loops:
             loop.join()
-            # if loop.is_alive():
-            #    loop.terminate()
-            #    loop.join()
 
-    def test_loop(self):
-        timeout = 2
+    def test_loop(self, timeout):
         while self.threads:
             print ('hello from test loop')
             for n in range(timeout*10):
                 if not self.threads:
-                    print ('****** stopping test thread')
+                    self.log('leaving loop thread: %s' % inspect.currentframe().f_code.co_name)
                     break
                 time.sleep(0.1)
     
-    def active_projects(self):
-        user = self.get_user()
+    def active_projects(self, timeout):
         while self.threads:
-            timeout = 2
             #user = None
             #try:
             #    user = authenticator.get_user()
@@ -222,7 +222,7 @@ class flameShotgunConnector(object):
             print (active_projects)
             for n in range(timeout*10):
                 if not self.threads:
-                    print ('****** stopping active projects thread')
+                    self.log('leaving loop thread: %s' % inspect.currentframe().f_code.co_name)
                     break
                 time.sleep(0.1)
 
@@ -238,7 +238,9 @@ class flameShotgunConnector(object):
             authenticator.clear_default_user()
             user = authenticator.get_user()
         
+        self.user = user
         return user
+
 '''
 
 class flameShotgunApp(flameMenuApp):
