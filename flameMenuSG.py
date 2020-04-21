@@ -501,7 +501,7 @@ class flameBatchBlessing(flameMenuApp):
             import flame
         except:
             return False
-            
+
         current_project_name = flame.project.current_project.name
         flame_batch_path = os.path.join(
                                     flame_batch_root,
@@ -696,13 +696,16 @@ class flameBatchBlessing(flameMenuApp):
         timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return timestamp + uid[:1]
 
-'''
-class flameMenuNewBatch(flameShotgunApp):
-    def __init__(self, framework):
-        flameShotgunApp.__init__(self, framework)
-        self.prefs['show_all'] = False
-        self.prefs['current_page'] = 0
-        self.prefs['menu_max_items_per_page'] = 128
+class flameMenuNewBatch(flameMenuApp):
+    def __init__(self, framework, connector):
+        flameMenuApp.__init__(self, framework)
+        self.connector = connector
+
+        self.prefs = self.framework.prefs.get(self.name, None)
+        if not self.prefs:
+            self.prefs['show_all'] = False
+            self.prefs['current_page'] = 0
+            self.prefs['menu_max_items_per_page'] = 128
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -1043,6 +1046,8 @@ class flameMenuNewBatch(flameShotgunApp):
     def rescan(self, *args, **kwargs):
         self.refresh()
         self.framework.rescan()
+
+'''
 
 class flameMenuBatchLoader(flameShotgunApp):
     def __init__(self, framework):
@@ -1444,7 +1449,7 @@ class flameMenuBatchLoader(flameShotgunApp):
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
     apps.append(flameBatchBlessing(app_framework))
-    # apps.append(flameMenuNewBatch(app_framework))
+    apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     # apps.append(flameMenuBatchLoader(app_framework))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
