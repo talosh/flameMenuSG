@@ -492,10 +492,9 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.clear_user()
         self.rescan()
 
-'''
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
-        flameApp.__init__(self, framework)
+        flameMenuApp.__init__(self, framework)
         self.root_folder = self.batch_setup_root_folder()
 
     def batch_setup_root_folder(self):
@@ -695,6 +694,7 @@ class flameBatchBlessing(flameMenuApp):
         timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return timestamp + uid[:1]
 
+'''
 class flameMenuNewBatch(flameShotgunApp):
     def __init__(self, framework):
         flameShotgunApp.__init__(self, framework)
@@ -1441,7 +1441,7 @@ class flameMenuBatchLoader(flameShotgunApp):
 
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
-    # apps.append(flameBatchBlessing(app_framework))
+    apps.append(flameBatchBlessing(app_framework))
     # apps.append(flameMenuNewBatch(app_framework))
     # apps.append(flameMenuBatchLoader(app_framework))
     if DEBUG:
@@ -1513,6 +1513,8 @@ def get_batch_custom_ui_actions():
             menu.append(menuitem)
     return menu
 
+'''
+
 def batch_render_begin(info, userData, *args, **kwargs):
     import flame
     flameBatchBlessingApp = None
@@ -1566,5 +1568,3 @@ def batch_render_end(info, userData, *args, **kwargs):
         userData['batch_setup_name'] = 'Render aborted by user'
 
     flameBatchBlessingApp.bless_batch_renders(userData)
-    
-'''
