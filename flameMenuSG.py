@@ -158,6 +158,7 @@ class flameShotgunConnector(object):
         
         self.flame_project = None
         self.sg_linked_project = None
+        self.sg_linked_project_id = None
         self.sg_state = {}
         self.sg_state['active projects'] = None
         # if not self.sg_user:
@@ -169,7 +170,7 @@ class flameShotgunConnector(object):
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.state_scanner, args=(5, )))
-        self.loops.append(threading.Thread(target=self.active_projects_loop, args=(5, )))
+        self.loops.append(threading.Thread(target=self.active_projects_loop, args=(30   , )))
 
         for loop in self.loops:
             loop.daemon = True
@@ -226,6 +227,14 @@ class flameShotgunConnector(object):
                 [['archived', 'is', False]],
                 ['name', 'tank_name']
             )
+            for project in self.sg_state.get('active projects', []):
+                if project.get('name'):
+                    if project.get('name') == self.sg_linked_project:
+                        if 'id' in project.keys():
+                            self.sg_linked_project_id = project.get('id')
+                            self.sg_state['current project name'] = self.sg_linked_project
+                            self.sg_state['current project id'] = self.sg_linked_project_id
+                            self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
             self.log('active projects update took %s' % (time.time() - start))
             return True
         except:
@@ -491,18 +500,25 @@ class flameMenuProjectconnect(flameMenuApp):
         return menu
 
     def get_projects(self, *args, **kwargs):
-        return self.connector.state['active projects']
+        return self.connector.sg_state['active projects']
 
     def unlink_project(self, *args, **kwargs):
         self.flame.project.current_project.shotgun_project_name = ''
         self.connector.sg_linked_project = ''
+        self.connector.sg_linked_project_id = None
+        self.connector.sg_state['current project name'] = None
+        self.connector.sg_state['current project id'] = None
         self.rescan()
 
     def link_project(self, project):
         project_name = project.get('name')
         if project_name:
             self.flame.project.current_project.shotgun_project_name = project_name
-        self.connector.sg_linked_project = project_name
+            self.connector.sg_linked_project = project_name
+            if 'id' in project.keys():
+                self.connector.sg_linked_project_id = project.get('id')
+                self.connector.sg_state['current project name'] = self.connector.sg_linked_project
+                self.connector.sg_state['current project id'] = self.connector.sg_linked_project_id
         self.rescan()
 
     def refresh(self, *args, **kwargs):        
