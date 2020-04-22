@@ -156,16 +156,19 @@ class flameShotgunConnector(object):
             self.log('requesting for Shotgun user')
             self.get_user()
         
+        self.flame_project = None
         self.sg_linked_project = None
-        self.state = {}
-        if not self.sg_user:
-            self.state['active projects'] = None
-        else:
-            self.update_active_projects()
+        self.sg_state = {}
+        self.sg_state['active projects'] = None
+        # if not self.sg_user:
+        #    self.sg_state['active projects'] = None
+        # else:
+        #    self.update_active_projects()
+        self.sg_state_hash = hash(pformat(self.sg_state))
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.test_loop, args=(5, )))
+        self.loops.append(threading.Thread(target=self.state_scanner, args=(5, )))
         self.loops.append(threading.Thread(target=self.active_projects_loop, args=(5, )))
 
         for loop in self.loops:
@@ -194,10 +197,11 @@ class flameShotgunConnector(object):
                     break
                 time.sleep(0.1)
 
-    def test_loop(self, timeout):
+    def state_scanner(self, timeout):
         while self.threads:
             start = time.time()
-            print ('hello from test loop')
+            self.check_sg_linked_project()
+            self.check_sg_state_hash()
             self.loop_timeout(timeout, start)
     
     def active_projects_loop(self, timeout):
@@ -208,7 +212,7 @@ class flameShotgunConnector(object):
                 self.loop_timeout(timeout, start)
             else:
                 self.update_active_projects()
-                self.log('found %s active projects' % len(self.state.get('active projects', [])))
+                self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
                 self.loop_timeout(timeout, start)
 
     def update_active_projects(self):
@@ -217,7 +221,7 @@ class flameShotgunConnector(object):
         try:
             start = time.time()
             sg = self.sg_user.create_sg_connection()
-            self.state['active projects'] = sg.find(
+            self.sg_state['active projects'] = sg.find(
                 'Project',
                 [['archived', 'is', False]],
                 ['name', 'tank_name']
@@ -269,7 +273,30 @@ class flameShotgunConnector(object):
         self.sg_user = None
         self.sg_human_user = None
         self.sg_user_name = None
-        self.state['active projects'] = None
+        self.sg_state['active projects'] = None
+
+    def check_sg_linked_project(self, *args, **kwargs):
+        try:
+            import flame
+            if self.flame_project != flame.project.current_project.name:
+                self.log('updating flame project name: %s' % flame.project.current_project.name)
+                self.flame_project = flame.project.current_project.name
+            if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
+                self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
+                self.sg_linked_project = flame.project.current_project.shotgun_project_name
+        except:
+            self.log('no flame module avaliable to import')
+
+    def check_sg_state_hash(self, *args, **kwargs):
+        if self.sg_state_hash != hash(pformat(self.sg_state)):
+            self.log('updating shotgun state hash')
+            self.sg_state_hash = hash(pformat(self.sg_state))
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+                self.log('Rescan Python Hooks')
+            except:
+                self.log('no flame module to import yet')
 
 '''
 class flameShotgunApp(flameMenuApp):
@@ -501,7 +528,7 @@ class flameBatchBlessing(flameMenuApp):
             import flame
         except:
             return False
-            
+
         current_project_name = flame.project.current_project.name
         flame_batch_path = os.path.join(
                                     flame_batch_root,
@@ -696,13 +723,16 @@ class flameBatchBlessing(flameMenuApp):
         timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return timestamp + uid[:1]
 
-'''
-class flameMenuNewBatch(flameShotgunApp):
-    def __init__(self, framework):
-        flameShotgunApp.__init__(self, framework)
-        self.prefs['show_all'] = False
-        self.prefs['current_page'] = 0
-        self.prefs['menu_max_items_per_page'] = 128
+class flameMenuNewBatch(flameMenuApp):
+    def __init__(self, framework, connector):
+        flameMenuApp.__init__(self, framework)
+        self.connector = connector
+
+        self.prefs = self.framework.prefs.get(self.name, None)
+        if not self.prefs:
+            self.prefs['show_all'] = False
+            self.prefs['current_page'] = 0
+            self.prefs['menu_max_items_per_page'] = 128
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -1043,6 +1073,8 @@ class flameMenuNewBatch(flameShotgunApp):
     def rescan(self, *args, **kwargs):
         self.refresh()
         self.framework.rescan()
+
+'''
 
 class flameMenuBatchLoader(flameShotgunApp):
     def __init__(self, framework):
@@ -1444,7 +1476,7 @@ class flameMenuBatchLoader(flameShotgunApp):
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
     apps.append(flameBatchBlessing(app_framework))
-    # apps.append(flameMenuNewBatch(app_framework))
+    apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     # apps.append(flameMenuBatchLoader(app_framework))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
