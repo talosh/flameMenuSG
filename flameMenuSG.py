@@ -113,9 +113,12 @@ class flameMenuApp(object):
             self.flame = flame
         except:
             self.flame = None
-        self.prefs = {}
-        self.name = self.__class__.__name__
-        self.framework.prefs[self.name] = self.prefs
+
+        if not self.framework.prefs[self.name]:
+            self.prefs = {}
+            self.framework.prefs[self.name] = self.prefs
+        else:
+            self.prefs = self.framework.prefs[self.name]
     
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -161,6 +164,7 @@ class flameShotgunConnector(object):
         self.sg_linked_project_id = None
         self.sg_state = {}
         self.sg_state['active projects'] = None
+        self.sg_state['tasks'] = None
         # if not self.sg_user:
         #    self.sg_state['active projects'] = None
         # else:
@@ -169,12 +173,15 @@ class flameShotgunConnector(object):
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.state_scanner, args=(5, )))
+        self.loops.append(threading.Thread(target=self.state_scanner, args=(1, )))
         self.loops.append(threading.Thread(target=self.active_projects_loop, args=(30   , )))
+        self.loops.append(threading.Thread(target=self.update_tasks_loop, args=(30   , )))
 
         for loop in self.loops:
             loop.daemon = True
             loop.start()
+        
+        self.rescan_flag = False
 
     def __del__(self):
         self.log('destructor')
@@ -216,6 +223,15 @@ class flameShotgunConnector(object):
                 self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
                 self.loop_timeout(timeout, start)
 
+    def update_tasks_loop(self, timeout):
+        while self.threads:
+            start = time.time()
+            if not self.sg_user:
+                self.loop_timeout(timeout, start)
+            else:
+                self.update_tasks()
+                self.loop_timeout(timeout, start)
+
     def update_active_projects(self):
         if not self.sg_user:
             return False
@@ -236,6 +252,24 @@ class flameShotgunConnector(object):
                             self.sg_state['current project id'] = self.sg_linked_project_id
                             self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
             self.log('active projects update took %s' % (time.time() - start))
+            return True
+        except:
+            return False
+
+    def update_tasks(self):
+        if not self.sg_user:
+            return False
+        if not self.sg_linked_project_id:
+            return False
+        try:
+            start = time.time()
+            sg = self.sg_user.create_sg_connection()
+            task_filters = [['project.Project.id', 'is', self.sg_linked_project_id]]
+            self.sg_state['tasks'] = sg.find('Task',
+                task_filters,
+                ['entity', 'task_assignees']
+            )
+            self.log('tasks update took %s' % (time.time() - start))
             return True
         except:
             return False
@@ -293,19 +327,33 @@ class flameShotgunConnector(object):
             if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
                 self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
                 self.sg_linked_project = flame.project.current_project.shotgun_project_name
+                self.update_active_projects()
+                self.update_tasks()
+                self.log('updated active projects')
         except:
             self.log('no flame module avaliable to import')
 
     def check_sg_state_hash(self, *args, **kwargs):
-        if self.sg_state_hash != hash(pformat(self.sg_state)):
+        state_hash = ''
+        try:
+            state_hash = hash(pformat(self.sg_state))
+        except:
+            return
+        if self.sg_state_hash != state_hash:
             self.log('updating shotgun state hash')
-            self.sg_state_hash = hash(pformat(self.sg_state))
-            try:
-                import flame
-                flame.execute_shortcut('Rescan Python Hooks')
-                self.log('Rescan Python Hooks')
-            except:
-                self.log('no flame module to import yet')
+            self.sg_state_hash = state_hash
+            self.log('shotgun state hash updated')
+            # flame seem to crash if "Rescan Python Hooks"
+            # is not called from the main thread
+            # so have to work over it with some sort of
+            # rescan flag in connector
+            self.rescan_flag = True 
+            
+            # try:
+            #    import flame
+            #    flame.execute_shortcut('Rescan Python Hooks')
+            # except:
+            #    self.log('check_sg_state_hash: no flame module to import yet')
 
 '''
 class flameShotgunApp(flameMenuApp):
@@ -744,7 +792,6 @@ class flameMenuNewBatch(flameMenuApp):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
 
-        self.prefs = self.framework.prefs.get(self.name, None)
         if not self.prefs:
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
@@ -759,10 +806,14 @@ class flameMenuNewBatch(flameMenuApp):
         return method
 
     def build_menu(self):
+        start = time.time()
+
         if not self.sg_user:
             return None
         if not self.sg_linked_project:
             return None
+        if not self.flame:
+            return []
 
         flame_project_name = self.flame.project.current_project.name
         batch_groups = []
@@ -804,14 +855,14 @@ class flameMenuNewBatch(flameMenuApp):
             menu_main_body.append(menu_item)
             entities_by_name = {}
             for entity in found_entities[entity_type]:
-                entities_by_name[entity.get('code')] = entity
+                entities_by_name[entity.get('name')] = entity
             for entity_name in sorted(entities_by_name.keys()):
                 entity = entities_by_name.get(entity_name)
                 menu_item = {}
-                if entity.get('code') in batch_groups:
-                    menu_item['name'] = '  * ' + entity.get('code')
+                if entity.get('name') in batch_groups:
+                    menu_item['name'] = '  * ' + entity.get('name')
                 else:
-                    menu_item['name'] = '     ' + entity.get('code')
+                    menu_item['name'] = '     ' + entity.get('name')
 
                 self.dynamic_menu_data[str(id(entity))] = entity
                 menu_item['execute'] = getattr(self, str(id(entity)))
@@ -857,47 +908,38 @@ class flameMenuNewBatch(flameMenuApp):
         for action in menu['actions']:
             action['isVisible'] = self.scope_desktop
 
+        self.log('newbatch menu update took %s' % (time.time() - start))
         return menu
 
     def get_entities(self, user_only = True, filter_out=[]):
-        sg = self.sg_user.create_sg_connection()
-        project_id = self.get_shotgun_project_id(self.sg_linked_project)
-        task_filters = [['project.Project.id', 'is', project_id]]
+        if not self.connector.sg_state['tasks']:
+            return {}
 
+        tasks = []
         if user_only:
-            human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
-                []
-                )
-            task_filters.append(['task_assignees', 'is', human_user])
-
-        tasks = sg.find('Task',
-            task_filters,
-            ['entity']
-        )
+            for task in self.connector.sg_state['tasks']:
+                task_assignees = task.get('task_assignees')
+                for task_assignee in task_assignees:
+                    if task_assignee.get('id') == self.connector.sg_human_user.get('id'):
+                        tasks.append(task)
+        else:
+            tasks = list(self.connector.sg_state['tasks'])
 
         entities = {}
         for task in tasks:
             if task['entity']:
                 task_entity_type = task['entity']['type']
+                if task_entity_type in filter_out:
+                    continue
                 task_entity_id = task['entity']['id']
                 if task_entity_type not in entities.keys():
-                    entities[task_entity_type] = []
-                entities[task_entity_type].append(task_entity_id)
+                    entities[task_entity_type] = {}
+                entities[task_entity_type][task_entity_id] = task['entity']
 
-        found_entities = {}
         for entity_type in entities.keys():
-            if entity_type in filter_out:
-                continue
-            filters = ['id', 'in']
-            filters.extend(entities.get(entity_type))
-            found_by_type = sg.find(entity_type, 
-                [ filters ],
-                ['code']
-            )
-            found_entities[entity_type] = list(found_by_type)
+            entities[entity_type] = entities[entity_type].values()
 
-        return found_entities
+        return entities
 
     def create_new_batch(self, entity):        
         sg = self.sg_user.create_sg_connection()
@@ -1062,7 +1104,7 @@ class flameMenuNewBatch(flameMenuApp):
 
     def flip_assigned(self, *args, **kwargs):
         self.prefs['show_all'] = not self.prefs['show_all']
-        self.rescan()
+        # self.rescan()
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
@@ -1070,25 +1112,8 @@ class flameMenuNewBatch(flameMenuApp):
     def page_bkw(self, *args, **kwargs):
         self.prefs['current_page'] = max(self.prefs['current_page'] - 1, 0)
 
-    def refresh(self, *args, **kwargs):
-        # self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.name + '.signout')
-        if not os.path.isfile(self._sg_signout_marker):
-            self.sg_user = self.get_user()
-            sg = self.sg_user.create_sg_connection()
-            human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
-                ['name']
-            )
-            self.sg_user_name = human_user.get('name', None)
-            if not self.sg_user_name:
-                self.sg_user_name = self.sg_user.login
-
-        if self.flame:
-            self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
-
     def rescan(self, *args, **kwargs):
-        self.refresh()
-        self.framework.rescan()
+        self.rescan()
 
 '''
 
@@ -1537,19 +1562,14 @@ def get_main_menu_custom_ui_actions():
         # flameMenuProjectconnectApp.refresh()
     return menu
 
-'''
-
 def get_media_panel_custom_ui_actions():
     menu = []
-    flameMenuNewBatchApp = None
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
-            flameMenuNewBatchApp = app
-    if flameMenuNewBatchApp:
-        flameMenuNewBatchApp.refresh()
-        menu.append(flameMenuNewBatchApp.build_menu())
+            menu = app.build_menu()
     return menu
 
+'''
 def get_batch_custom_ui_actions():
     menu = []
     flameMenuBatchLoaderApp = None
