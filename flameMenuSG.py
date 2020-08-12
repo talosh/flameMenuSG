@@ -12,6 +12,7 @@ import pickle
 from datetime import datetime
 from pprint import pprint
 from pprint import pformat
+from sgtk.platform.qt import QtGui
 
 bundle_name = 'flameMenuSG'
 bundle_location = '/var/tmp'
@@ -32,9 +33,9 @@ types_to_include = [
 storage_root = '/Volumes/projects'
 DEBUG = True
         
-# redirect termination signals to sys.exit()
-# in order to avoid Flame crash window to come up
-# when terminating child processes
+# To avoid Flame crash window to come up
+# when terminating python child processes
+# we need to redirect termination signals to sys.exit()
 
 def sigterm_handler(signum, frame):
     if DEBUG:
@@ -42,7 +43,6 @@ def sigterm_handler(signum, frame):
     sys.exit()
 signal.signal(signal.SIGINT, sigterm_handler)
 signal.signal(signal.SIGTERM, sigterm_handler)
-
 
 # flameAppFramework class takes care of preferences 
 # and unpacking bundle to temporary location / cleanup on exit
@@ -61,7 +61,7 @@ class flameAppFramework(object):
     def log(self, message):
         if self.debug:
             print ('[DEBUG %s] %s' % (self._bundle_name, message))
-    
+
     def load_prefs(self):
         try:
             prefs_file = open(self.prefs_file_location, 'r')
@@ -100,6 +100,7 @@ class flameAppFramework(object):
     @property
     def bundle_location(self):
         return self._bundle_location
+        
 
 class flameMenuApp(object):
     def __init__(self, framework):
@@ -108,18 +109,22 @@ class flameMenuApp(object):
         self.menu_group_name = menu_group_name
         self.debug = DEBUG
         self.dynamic_menu_data = {}
+
+        # flame module is only avaliable when a 
+        # flame project is loaded and initialized
+        self.flame = None
         try:
             import flame
             self.flame = flame
         except:
             self.flame = None
-
-        if not self.framework.prefs[self.name]:
+        
+        if not self.framework.prefs.get(self.name):
             self.prefs = {}
             self.framework.prefs[self.name] = self.prefs
         else:
-            self.prefs = self.framework.prefs[self.name]
-    
+            self.prefs = self.framework.prefs.get(self.name)
+
     def __getattr__(self, name):
         def method(*args, **kwargs):
             print ('calling %s' % name)
@@ -140,6 +145,7 @@ class flameMenuApp(object):
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
 
+
 class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
@@ -155,6 +161,7 @@ class flameShotgunConnector(object):
         self.sg_user = None
         self.sg_human_user = None
         self.sg_user_name = None
+        self.sg = None
         if not self.prefs.get('user signed out', False):
             self.log('requesting for Shotgun user')
             self.get_user()
@@ -173,10 +180,9 @@ class flameShotgunConnector(object):
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.state_scanner, args=(1, )))
-        self.loops.append(threading.Thread(target=self.active_projects_loop, args=(30   , )))
-        self.loops.append(threading.Thread(target=self.update_tasks_loop, args=(30   , )))
-
+        #self.loops.append(threading.Thread(target=self.state_scanner_loop, args=(1, )))
+        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(30, )))
+        
         for loop in self.loops:
             loop.daemon = True
             loop.start()
@@ -199,80 +205,97 @@ class flameShotgunConnector(object):
         if timeout <= time_passed:
             return
         else:
+            self.log('sleeping for %s sec' % (timeout - time_passed))
             for n in range((timeout - time_passed) * 10):
                 if not self.threads:
                     self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
                     break
                 time.sleep(0.1)
 
-    def state_scanner(self, timeout):
+    def state_scanner_loop(self, timeout):
         while self.threads:
             start = time.time()
             self.check_sg_linked_project()
             self.check_sg_state_hash()
             self.loop_timeout(timeout, start)
-    
-    def active_projects_loop(self, timeout):
+
+    def sg_cache_loop(self, timeout):
         while self.threads:
             start = time.time()
+
             if not self.sg_user:
                 self.log('no shotgun user, wanking...')
-                self.loop_timeout(timeout, start)
+                time.sleep(1)
             else:
-                self.update_active_projects()
-                self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
-                self.loop_timeout(timeout, start)
+                self.sg_state['active projects'] = self.sg.find(
+                    'Project',
+                    [['archived', 'is', False]],
+                    ['name', 'tank_name']
+                )
+                for project in self.sg_state.get('active projects', []):
+                    if project.get('name'):
+                        if project.get('name') == self.sg_linked_project:
+                            if 'id' in project.keys():
+                                self.sg_linked_project_id = project.get('id')
+                                self.sg_state['current project name'] = self.sg_linked_project
+                                self.sg_state['current project id'] = self.sg_linked_project_id
+                                self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
+                
+                if self.sg_linked_project_id:
+                    self.sg_state['tasks'] = self.sg.find('Task',
+                        [['project.Project.id', 'is', self.sg_linked_project_id]],
+                        ['entity', 'task_assignees']
+                    )
 
-    def update_tasks_loop(self, timeout):
-        while self.threads:
-            start = time.time()
-            if not self.sg_user:
+                # self.update_active_projects()
+                # self.log('sg cache loop: calling update_tasks...')
+                # self.update_tasks()
+                if self.sg_state.get('active projects'):
+                    self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
                 self.loop_timeout(timeout, start)
-            else:
-                self.update_tasks()
-                self.loop_timeout(timeout, start)
-
+            
     def update_active_projects(self):
-        if not self.sg_user:
-            return False
         try:
             start = time.time()
-            sg = self.sg_user.create_sg_connection()
-            self.sg_state['active projects'] = sg.find(
+            self.sg_state['active projects'] = self.sg.find(
                 'Project',
                 [['archived', 'is', False]],
                 ['name', 'tank_name']
             )
-            for project in self.sg_state.get('active projects', []):
-                if project.get('name'):
-                    if project.get('name') == self.sg_linked_project:
-                        if 'id' in project.keys():
-                            self.sg_linked_project_id = project.get('id')
-                            self.sg_state['current project name'] = self.sg_linked_project
-                            self.sg_state['current project id'] = self.sg_linked_project_id
-                            self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
-            self.log('active projects update took %s' % (time.time() - start))
-            return True
         except:
+            self.log('active projects failed to update and still took %s' % (time.time() - start))
             return False
 
+        for project in self.sg_state.get('active projects', []):
+            if project.get('name'):
+                if project.get('name') == self.sg_linked_project:
+                    if 'id' in project.keys():
+                        self.sg_linked_project_id = project.get('id')
+                        self.sg_state['current project name'] = self.sg_linked_project
+                        self.sg_state['current project id'] = self.sg_linked_project_id
+                        self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
+        self.log('active projects update took %s' % (time.time() - start))
+        return True
+        
+
     def update_tasks(self):
-        if not self.sg_user:
-            return False
-        if not self.sg_linked_project_id:
+        self.log('update_tasks:')
+        if not (self.sg_user and self.sg_linked_project_id):
             return False
         try:
             start = time.time()
-            sg = self.sg_user.create_sg_connection()
             task_filters = [['project.Project.id', 'is', self.sg_linked_project_id]]
-            self.sg_state['tasks'] = sg.find('Task',
+            self.sg_state['tasks'] = self.sg.find('Task',
                 task_filters,
                 ['entity', 'task_assignees']
             )
-            self.log('tasks update took %s' % (time.time() - start))
-            return True
         except:
+            self.log('tasks update failed and still took %s' % (time.time() - start))
             return False
+        
+        self.log('tasks update took %s' % (time.time() - start))
+        return True
+
 
     def update_human_user(self):
         if not self.sg_user:
@@ -306,8 +329,7 @@ class flameShotgunConnector(object):
         
         self.prefs['user signed out'] = False
         self.update_human_user()
-        self.update_active_projects()
-
+        self.sg = self.sg_user.create_sg_connection()
         return self.sg_user
 
     def clear_user(self, *args, **kwargs):
@@ -321,17 +343,27 @@ class flameShotgunConnector(object):
     def check_sg_linked_project(self, *args, **kwargs):
         try:
             import flame
+        except:
+            self.log('no flame module avaliable to import')
+            return False
+        try:
             if self.flame_project != flame.project.current_project.name:
                 self.log('updating flame project name: %s' % flame.project.current_project.name)
                 self.flame_project = flame.project.current_project.name
+        except:
+            return False
+
+        try:
             if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
                 self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
                 self.sg_linked_project = flame.project.current_project.shotgun_project_name
                 self.update_active_projects()
-                self.update_tasks()
+                # self.update_tasks()
                 self.log('updated active projects')
         except:
-            self.log('no flame module avaliable to import')
+            return False
+
+        return True
 
     def check_sg_state_hash(self, *args, **kwargs):
         state_hash = ''
@@ -799,14 +831,31 @@ class flameMenuNewBatch(flameMenuApp):
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
-            entity = self.dynamic_menu_data.get(name)
-            if entity:
-                self.create_new_batch(entity)
-                self.rescan()
+            pass
+            #entity = self.dynamic_menu_data.get(name)
+            #if entity:
+            #    self.create_new_batch(entity)
         return method
 
     def build_menu(self):
-        start = time.time()
+
+        # ---------------------------------
+        # menu time debug code remove after
+
+        number_of_menu_itmes = 256
+        menu = {'name': self.name, 'actions': []}
+        for i in xrange(1, number_of_menu_itmes+1):
+            menu['actions'].append({
+                'name': 'Test selection ' + str(i),
+                # 'isVisible': self.scope_reel,
+                'execute': getattr(self, 'menu_item_' + str(i))
+            })
+        return menu
+
+
+        # ---------------------------------
+        # menu time debug code remove after
+
 
         if not self.sg_user:
             return None
@@ -864,8 +913,9 @@ class flameMenuNewBatch(flameMenuApp):
                 else:
                     menu_item['name'] = '     ' + entity.get('name')
 
-                self.dynamic_menu_data[str(id(entity))] = entity
-                menu_item['execute'] = getattr(self, str(id(entity)))
+                #self.dynamic_menu_data[str(id(entity))] = entity
+                #menu_item['execute'] = getattr(self, str(id(entity)))
+                menu_item['execute'] = getattr(self, 'hello')
                 menu_main_body.append(menu_item)
 
         if menu_lenght < max_menu_lenght:
@@ -905,10 +955,9 @@ class flameMenuNewBatch(flameMenuApp):
                 menu_item['execute'] = self.page_fwd
                 menu['actions'].append(menu_item)
 
-        for action in menu['actions']:
-            action['isVisible'] = self.scope_desktop
+        # for action in menu['actions']:
+        #     action['isVisible'] = self.scope_desktop
 
-        self.log('newbatch menu update took %s' % (time.time() - start))
         return menu
 
     def get_entities(self, user_only = True, filter_out=[]):
@@ -964,7 +1013,6 @@ class flameMenuNewBatch(flameMenuApp):
             ]
         )
 
-        
         publishes_to_import = []
         publishes_by_step = {}
         for publish in publishes:
@@ -1112,8 +1160,6 @@ class flameMenuNewBatch(flameMenuApp):
     def page_bkw(self, *args, **kwargs):
         self.prefs['current_page'] = max(self.prefs['current_page'] - 1, 0)
 
-    def rescan(self, *args, **kwargs):
-        self.rescan()
 
 '''
 
@@ -1516,13 +1562,14 @@ class flameMenuBatchLoader(flameShotgunApp):
 
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
-    apps.append(flameBatchBlessing(app_framework))
-    apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
+    #apps.append(flameBatchBlessing(app_framework))
+    #apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     # apps.append(flameMenuBatchLoader(app_framework))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
 
 print ('PYTHON\t: %s initializing' % bundle_name)
+
 app_framework = flameAppFramework()
 shotgunConnector = flameShotgunConnector(app_framework)
 apps = []
@@ -1563,11 +1610,13 @@ def get_main_menu_custom_ui_actions():
     return menu
 
 def get_media_panel_custom_ui_actions():
-    menu = []
+    start = time.time()
+    menu = {}
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
             menu = app.build_menu()
-    return menu
+    print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
+    return [menu]
 
 '''
 def get_batch_custom_ui_actions():
