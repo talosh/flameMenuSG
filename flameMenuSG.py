@@ -169,6 +169,14 @@ class flameShotgunConnector(object):
         self.flame_project = None
         self.sg_linked_project = None
         self.sg_linked_project_id = None
+
+        if not self.prefs.get('cache', False):
+            self.log('initializing cache')
+            self.prefs['cache'] = {}
+        else:
+            self.log('cache loaded from previous session')
+            self.log('cache has %s querie(s)' % len(self.prefs.get('cache').keys()))
+
         self.sg_state = {}
         self.sg_state['active projects'] = None
         self.sg_state['tasks'] = None
@@ -202,6 +210,7 @@ class flameShotgunConnector(object):
 
     def loop_timeout(self, timeout, start):
         time_passed = int(time.time() - start)
+        self.log('sg_cache_loop took %s sec' % str(time.time() - start))
         if timeout <= time_passed:
             return
         else:
@@ -224,34 +233,51 @@ class flameShotgunConnector(object):
             start = time.time()
 
             if not self.sg_user:
-                self.log('no shotgun user, wanking...')
+                self.log('no shotgun user...')
                 time.sleep(1)
             else:
-                self.sg_state['active projects'] = self.sg.find(
-                    'Project',
-                    [['archived', 'is', False]],
-                    ['name', 'tank_name']
-                )
-                for project in self.sg_state.get('active projects', []):
-                    if project.get('name'):
-                        if project.get('name') == self.sg_linked_project:
-                            if 'id' in project.keys():
-                                self.sg_linked_project_id = project.get('id')
-                                self.sg_state['current project name'] = self.sg_linked_project
-                                self.sg_state['current project id'] = self.sg_linked_project_id
-                                self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
+                cache = self.prefs.get('cache')
+                if not cache:
+                    continue
+                for cache_request_key in cache.keys():
+                    cache_request = cache.get(cache_request_key)
+                    if not cache_request:
+                        continue
+                    request_body = cache_request.get('request')
+                    if not request_body:
+                        continue
+                    entity = request_body.get('entity')
+                    if not entity:
+                        continue
+                    filters = request_body.get('filters')
+                    fields = request_body.get('fields')
+                    cache[cache_request_key]['result'] = self.sg.find(entity, filters, fields)
+                    
+                #self.sg_state['active projects'] = self.sg.find(
+                #    'Project',
+                #    [['archived', 'is', False]],
+                #    ['name', 'tank_name']
+                #)
+                #for project in self.sg_state.get('active projects', []):
+                #    if project.get('name'):
+                #        if project.get('name') == self.sg_linked_project:
+                #            if 'id' in project.keys():
+                #                self.sg_linked_project_id = project.get('id')
+                #                self.sg_state['current project name'] = self.sg_linked_project
+                #                self.sg_state['current project id'] = self.sg_linked_project_id
+                #                self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
                 
-                if self.sg_linked_project_id:
-                    self.sg_state['tasks'] = self.sg.find('Task',
-                        [['project.Project.id', 'is', self.sg_linked_project_id]],
-                        ['entity', 'task_assignees']
-                    )
+                #if self.sg_linked_project_id:
+                #    self.sg_state['tasks'] = self.sg.find('Task',
+                #        [['project.Project.id', 'is', self.sg_linked_project_id]],
+                #        ['entity', 'task_assignees']
+                #    )
 
                 # self.update_active_projects()
                 # self.log('sg cache loop: calling update_tasks...')
                 # self.update_tasks()
-                if self.sg_state.get('active projects'):
-                    self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
+                #if self.sg_state.get('active projects'):
+                #    self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
                 self.loop_timeout(timeout, start)
             
     def update_active_projects(self):
@@ -505,6 +531,18 @@ class flameMenuProjectconnect(flameMenuApp):
     def __init__(self, framework, connector):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
+
+        # add connector query cache request if not saved
+        request = {
+                'request': {
+                    'entity': 'Project',
+                    'filters': [['archived', 'is', False]],
+                    'fields': ['name', 'tank_name']
+                    },
+                'result': []
+        }
+        key_hash = hash(pformat(request.get('request')))
+        connector.prefs['cache'].update( {key_hash : request} )
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
