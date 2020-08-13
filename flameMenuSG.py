@@ -166,6 +166,8 @@ class flameShotgunConnector(object):
         self.async_cache_hash = hash(pformat(self.async_cache))
         self.rescan_flag = False
 
+        self.check_sg_linked_project()
+
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(30, )))
@@ -174,10 +176,6 @@ class flameShotgunConnector(object):
             loop.daemon = True
             loop.start()
         
-
-    def __del__(self):
-        self.log('destructor')
-
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
 
@@ -277,7 +275,7 @@ class flameShotgunConnector(object):
                         result = self.sg.find(entity, filters, fields)
                         self.async_cache[cache_request_uid]['result'] = result
                         results_by_hash[hash(pformat(query))] = result
-                        
+
                 self.async_cache_state_check()
                 self.loop_timeout(timeout, start)
 
@@ -383,11 +381,14 @@ class flameShotgunConnector(object):
             if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
                 self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
                 self.sg_linked_project = flame.project.current_project.shotgun_project_name
-                # self.update_active_projects()
-                # self.update_tasks()
-                self.log('updated active projects')
         except:
             return False
+
+        if self.sg_user:
+            self.log('updating project id')
+            project = self.sg.find_one('Project', [['name', 'is', self.sg_linked_project.get_value()]])
+            if project:
+                self.sg_linked_project_id = project.get('id')
 
         return True
 
@@ -511,7 +512,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector = connector
 
         # register async cache query
-        self.active_projects_uid = connector.async_cache_register({
+        self.active_projects_uid = self.connector.async_cache_register({
                     'entity': 'Project',
                     'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
@@ -595,7 +596,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
     def unlink_project(self, *args, **kwargs):
         self.flame.project.current_project.shotgun_project_name = ''
-        self.connector.sg_linked_project = ''
+        self.connector.sg_linked_project = None
         self.connector.sg_linked_project_id = None
         self.rescan()
 
@@ -830,6 +831,8 @@ class flameMenuNewBatch(flameMenuApp):
     def __init__(self, framework, connector):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
+        self.current_tasks_uid = None
+        self.register_query()
 
         if not self.prefs:
             self.prefs['show_all'] = False
@@ -858,7 +861,6 @@ class flameMenuNewBatch(flameMenuApp):
                 'execute': getattr(self, 'menu_item_' + str(i))
             })
         return menu
-
 
         # ---------------------------------
         # menu time debug code remove after
@@ -1167,6 +1169,41 @@ class flameMenuNewBatch(flameMenuApp):
     def page_bkw(self, *args, **kwargs):
         self.prefs['current_page'] = max(self.prefs['current_page'] - 1, 0)
 
+    def register_query(self, *args, **kwargs):
+        if self.connector.sg_linked_project_id and self.current_tasks_uid:
+            # check if project id match
+            try:
+                filters = self.connector.async_cache.get(self.current_tasks_uid).get('query').get('filters')
+                project_id = filters[0][2]
+            except:
+                return False
+
+            if project_id != self.connector.sg_linked_project_id:
+                # unregiter old id and register new one
+                self.connector.async_cache_unregister(self.current_tasks_uid)
+                self.current_tasks_uid = self.connector.async_cache_register({
+                    'entity': 'Task',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': ['entity', 'task_assignees']
+                })
+                return True
+            else:
+                return False
+            
+        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
+            # register new query from scratch
+            self.current_tasks_uid = self.connector.async_cache_register({
+                    'entity': 'Task',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': ['entity', 'task_assignees']
+            })
+            return True
+        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
+            # unregister current uid
+            self.connector.async_cache_unregister(self.current_tasks_uid)
+            return True
+        else:
+            return False
 
 '''
 
@@ -1608,8 +1645,8 @@ atexit.register(cleanup, apps, app_framework, shotgunConnector)
 
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
-    #apps.append(flameBatchBlessing(app_framework))
-    #apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
+    apps.append(flameBatchBlessing(app_framework))
+    apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     # apps.append(flameMenuBatchLoader(app_framework))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
@@ -1660,6 +1697,7 @@ def get_media_panel_custom_ui_actions():
     menu = {}
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
+            app.register_query()
             menu = app.build_menu()
     print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
     return [menu]
