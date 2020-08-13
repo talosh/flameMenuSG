@@ -32,17 +32,6 @@ types_to_include = [
 # flameMenuBatchLoader
 storage_root = '/Volumes/projects'
 DEBUG = True
-        
-# To avoid Flame crash window to come up
-# when terminating python child processes
-# we need to redirect termination signals to sys.exit()
-
-def sigterm_handler(signum, frame):
-    if DEBUG:
-        print ('PYTHON\t: %s DEBUG\t: SIRTERM handler' % bundle_name)
-    sys.exit()
-signal.signal(signal.SIGINT, sigterm_handler)
-signal.signal(signal.SIGTERM, sigterm_handler)
 
 # flameAppFramework class takes care of preferences 
 # and unpacking bundle to temporary location / cleanup on exit
@@ -106,6 +95,7 @@ class flameMenuApp(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
         self.framework = framework
+        self.connector = None
         self.menu_group_name = menu_group_name
         self.debug = DEBUG
         self.dynamic_menu_data = {}
@@ -144,6 +134,8 @@ class flameMenuApp(object):
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
+            if self.connector:
+                self.connector.rescan_flag = False
 
 
 class flameShotgunConnector(object):
@@ -171,25 +163,17 @@ class flameShotgunConnector(object):
         self.sg_linked_project_id = None
 
         self.async_cache = {}
-        self.sg_state = {}
-        self.sg_state['active projects'] = None
-        self.sg_state['tasks'] = None
-        # if not self.sg_user:
-        #    self.sg_state['active projects'] = None
-        # else:
-        #    self.update_active_projects()
-        self.sg_state_hash = hash(pformat(self.sg_state))
+        self.async_cache_hash = hash(pformat(self.async_cache))
+        self.rescan_flag = False
 
         self.loops = []
         self.threads = True
-        #self.loops.append(threading.Thread(target=self.state_scanner_loop, args=(1, )))
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(30, )))
         
         for loop in self.loops:
             loop.daemon = True
             loop.start()
         
-        self.rescan_flag = False
 
     def __del__(self):
         self.log('destructor')
@@ -227,11 +211,14 @@ class flameShotgunConnector(object):
             filters = query.get('filters')
             fields = query.get('fields')
             self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+        
+        self.async_cache_state_check()
         return uid
     
-    def async_cache_unregister(self, uid):
+    def async_cache_unregister(self, uid):            
         if uid in self.async_cache.keys():
             del self.async_cache[uid]
+            self.rescan_flag = True
             return True
         else:
             return False
@@ -253,15 +240,14 @@ class flameShotgunConnector(object):
 
     def async_cache_clear(self):
         self.async_cache = {}
+        self.rescan_flag = True
         return True
 
-    def state_scanner_loop(self, timeout):
-        while self.threads:
-            start = time.time()
-            self.check_sg_linked_project()
-            self.check_sg_state_hash()
-            self.loop_timeout(timeout, start)
-
+    def async_cache_state_check(self):
+        if hash(pformat(self.async_cache)) != self.async_cache_hash:
+            self.rescan_flag = True
+            self.async_cache_hash = hash(pformat(self.async_cache))
+    
     def sg_cache_loop(self, timeout):
         while self.threads:
             start = time.time()
@@ -270,50 +256,32 @@ class flameShotgunConnector(object):
                 self.log('no shotgun user...')
                 time.sleep(1)
             else:
-                pprint (self.async_cache)
-                '''
-                for cache_request_key in self.async_cache.keys():
-                    cache_request = self.async_cache.get(cache_request_key)
+                results_by_hash = {}
+
+                for cache_request_uid in self.async_cache.keys():
+                    cache_request = self.async_cache.get(cache_request_uid)
                     if not cache_request:
                         continue
-                    request_body = cache_request.get('request')
-                    if not request_body:
+                    query = cache_request.get('query')
+                    if not query:
                         continue
-                    entity = request_body.get('entity')
-                    if not entity:
-                        continue
-                    filters = request_body.get('filters')
-                    fields = request_body.get('fields')
-                    self.async_cache[cache_request_key]['result'] = self.sg.find(entity, filters, fields)
-                '''
                     
-                #self.sg_state['active projects'] = self.sg.find(
-                #    'Project',
-                #    [['archived', 'is', False]],
-                #    ['name', 'tank_name']
-                #)
-                #for project in self.sg_state.get('active projects', []):
-                #    if project.get('name'):
-                #        if project.get('name') == self.sg_linked_project:
-                #            if 'id' in project.keys():
-                #                self.sg_linked_project_id = project.get('id')
-                #                self.sg_state['current project name'] = self.sg_linked_project
-                #                self.sg_state['current project id'] = self.sg_linked_project_id
-                #                self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
-                
-                #if self.sg_linked_project_id:
-                #    self.sg_state['tasks'] = self.sg.find('Task',
-                #        [['project.Project.id', 'is', self.sg_linked_project_id]],
-                #        ['entity', 'task_assignees']
-                #    )
-
-                # self.update_active_projects()
-                # self.log('sg cache loop: calling update_tasks...')
-                # self.update_tasks()
-                #if self.sg_state.get('active projects'):
-                #    self.log('found %s active projects' % len(self.sg_state.get('active projects', [])))
+                    if hash(pformat(query)) in results_by_hash.keys():
+                        self.async_cache[cache_request_uid]['result'] = results_by_hash.get(hash(pformat(query)))
+                    else:
+                        entity = query.get('entity')
+                        if not entity:
+                            continue
+                        filters = query.get('filters')
+                        fields = query.get('fields')
+                        result = self.sg.find(entity, filters, fields)
+                        self.async_cache[cache_request_uid]['result'] = result
+                        results_by_hash[hash(pformat(query))] = result
+                        
+                self.async_cache_state_check()
                 self.loop_timeout(timeout, start)
-            
+
+    '''            
     def update_active_projects(self):
         try:
             start = time.time()
@@ -337,7 +305,6 @@ class flameShotgunConnector(object):
         self.log('active projects update took %s' % (time.time() - start))
         return True
         
-
     def update_tasks(self):
         self.log('update_tasks:')
         if not (self.sg_user and self.sg_linked_project_id):
@@ -355,7 +322,7 @@ class flameShotgunConnector(object):
         
         self.log('tasks update took %s' % (time.time() - start))
         return True
-
+    '''
 
     def update_human_user(self):
         if not self.sg_user:
@@ -398,7 +365,6 @@ class flameShotgunConnector(object):
         self.sg_user = None
         self.sg_human_user = None
         self.sg_user_name = None
-        self.sg_state['active projects'] = None
 
     def check_sg_linked_project(self, *args, **kwargs):
         try:
@@ -417,35 +383,13 @@ class flameShotgunConnector(object):
             if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
                 self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
                 self.sg_linked_project = flame.project.current_project.shotgun_project_name
-                self.update_active_projects()
+                # self.update_active_projects()
                 # self.update_tasks()
                 self.log('updated active projects')
         except:
             return False
 
         return True
-
-    def check_sg_state_hash(self, *args, **kwargs):
-        state_hash = ''
-        try:
-            state_hash = hash(pformat(self.sg_state))
-        except:
-            return
-        if self.sg_state_hash != state_hash:
-            self.log('updating shotgun state hash')
-            self.sg_state_hash = state_hash
-            self.log('shotgun state hash updated')
-            # flame seem to crash if "Rescan Python Hooks"
-            # is not called from the main thread
-            # so have to work over it with some sort of
-            # rescan flag in connector
-            self.rescan_flag = True 
-            
-            # try:
-            #    import flame
-            #    flame.execute_shortcut('Rescan Python Hooks')
-            # except:
-            #    self.log('check_sg_state_hash: no flame module to import yet')
 
 '''
 class flameShotgunApp(flameMenuApp):
@@ -566,15 +510,12 @@ class flameMenuProjectconnect(flameMenuApp):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
 
-        # add connector query cache request if not saved
+        # register async cache query
         self.active_projects_uid = connector.async_cache_register({
                     'entity': 'Project',
                     'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
                     })
-
-        #key_hash = hash(pformat(request.get('request')))
-        #    ['cache'].update( {key_hash : request} )
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -607,7 +548,7 @@ class flameMenuProjectconnect(flameMenuApp):
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             menu_item = {}
-            menu_item['name'] = 'Sign out ' + str(self.connector.sg_user_name)
+            menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
         else:
@@ -643,7 +584,7 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['actions'].append(menu_item)
 
             menu_item = {}
-            menu_item['name'] = 'Sign out ' + str(self.connector.sg_user_name)
+            menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
 
@@ -656,8 +597,6 @@ class flameMenuProjectconnect(flameMenuApp):
         self.flame.project.current_project.shotgun_project_name = ''
         self.connector.sg_linked_project = ''
         self.connector.sg_linked_project_id = None
-        self.connector.sg_state['current project name'] = None
-        self.connector.sg_state['current project id'] = None
         self.rescan()
 
     def link_project(self, project):
@@ -667,8 +606,6 @@ class flameMenuProjectconnect(flameMenuApp):
             self.connector.sg_linked_project = project_name
             if 'id' in project.keys():
                 self.connector.sg_linked_project_id = project.get('id')
-                self.connector.sg_state['current project name'] = self.connector.sg_linked_project
-                self.connector.sg_state['current project id'] = self.connector.sg_linked_project_id
         self.rescan()
 
     def refresh(self, *args, **kwargs):        
@@ -1699,7 +1636,14 @@ except:
     pass
 
 # --- FLAME OPERATIONAL HOOKS ---
-
+def project_saved(project_name, save_time, is_auto_save):
+    global shotgunConnector
+    if shotgunConnector:
+        if shotgunConnector.rescan_flag:
+            import flame
+            flame.execute_shortcut('Rescan Python Hooks')
+            shotgunConnector.rescan_flag = False
+            
 def get_main_menu_custom_ui_actions():
     menu = []
     flameMenuProjectconnectApp = None
