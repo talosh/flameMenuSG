@@ -170,13 +170,7 @@ class flameShotgunConnector(object):
         self.sg_linked_project = None
         self.sg_linked_project_id = None
 
-        if not self.prefs.get('cache', False):
-            self.log('initializing cache')
-            self.prefs['cache'] = {}
-        else:
-            self.log('cache loaded from previous session')
-            self.log('cache has %s querie(s)' % len(self.prefs.get('cache').keys()))
-
+        self.async_cache = {}
         self.sg_state = {}
         self.sg_state['active projects'] = None
         self.sg_state['tasks'] = None
@@ -221,6 +215,46 @@ class flameShotgunConnector(object):
                     break
                 time.sleep(0.1)
 
+    # async cache related methods
+
+    def async_cache_register(self, query, perform_query = True):
+        uid = (str(uuid.uuid1()).replace('-', '')).upper()
+        self.async_cache[uid] = {'query': query, 'result': []}
+        if not self.sg_user:
+            return uid
+        if perform_query:
+            entity = query.get('entity')
+            filters = query.get('filters')
+            fields = query.get('fields')
+            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+        return uid
+    
+    def async_cache_unregister(self, uid):
+        if uid in self.async_cache.keys():
+            del self.async_cache[uid]
+            return True
+        else:
+            return False
+
+    def async_cache_get(self, uid, perform_query = False):
+        if not uid in self.async_cache.keys():
+            return False
+        query = self.async_cache.get(uid)
+        if not query:
+            return False
+
+        if perform_query:
+            entity = query.get('entity')
+            filters = query.get('filters')
+            fields = query.get('fields')
+            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+        
+        return query.get('result')
+
+    def async_cache_clear(self):
+        self.async_cache = {}
+        return True
+
     def state_scanner_loop(self, timeout):
         while self.threads:
             start = time.time()
@@ -236,11 +270,10 @@ class flameShotgunConnector(object):
                 self.log('no shotgun user...')
                 time.sleep(1)
             else:
-                cache = self.prefs.get('cache')
-                if not cache:
-                    continue
-                for cache_request_key in cache.keys():
-                    cache_request = cache.get(cache_request_key)
+                pprint (self.async_cache)
+                '''
+                for cache_request_key in self.async_cache.keys():
+                    cache_request = self.async_cache.get(cache_request_key)
                     if not cache_request:
                         continue
                     request_body = cache_request.get('request')
@@ -251,7 +284,8 @@ class flameShotgunConnector(object):
                         continue
                     filters = request_body.get('filters')
                     fields = request_body.get('fields')
-                    cache[cache_request_key]['result'] = self.sg.find(entity, filters, fields)
+                    self.async_cache[cache_request_key]['result'] = self.sg.find(entity, filters, fields)
+                '''
                     
                 #self.sg_state['active projects'] = self.sg.find(
                 #    'Project',
@@ -533,16 +567,14 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector = connector
 
         # add connector query cache request if not saved
-        request = {
-                'request': {
+        self.active_projects_uid = connector.async_cache_register({
                     'entity': 'Project',
                     'filters': [['archived', 'is', False]],
                     'fields': ['name', 'tank_name']
-                    },
-                'result': []
-        }
-        key_hash = hash(pformat(request.get('request')))
-        connector.prefs['cache'].update( {key_hash : request} )
+                    })
+
+        #key_hash = hash(pformat(request.get('request')))
+        #    ['cache'].update( {key_hash : request} )
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -618,7 +650,7 @@ class flameMenuProjectconnect(flameMenuApp):
         return menu
 
     def get_projects(self, *args, **kwargs):
-        return self.connector.sg_state['active projects']
+        return self.connector.async_cache_get(self.active_projects_uid)
 
     def unlink_project(self, *args, **kwargs):
         self.flame.project.current_project.shotgun_project_name = ''
@@ -640,7 +672,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.rescan()
 
     def refresh(self, *args, **kwargs):        
-        self.connector.update_active_projects()
+        self.connector.async_cache_get(self.active_projects_uid, True)
         self.rescan()
 
     def sign_in(self, *args, **kwargs):
