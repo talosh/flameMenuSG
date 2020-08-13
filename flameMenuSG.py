@@ -569,7 +569,7 @@ class flameMenuProjectconnect(flameMenuApp):
         # add connector query cache request if not saved
         self.active_projects_uid = connector.async_cache_register({
                     'entity': 'Project',
-                    'filters': [['archived', 'is', False]],
+                    'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
                     })
 
