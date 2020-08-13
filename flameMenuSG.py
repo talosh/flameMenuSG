@@ -1630,6 +1630,45 @@ class flameMenuBatchLoader(flameShotgunApp):
 
 '''
 
+# --- FLAME STARTUP SEQUENCE ---
+# Flame startup sequence is a bit complicated
+# If the app installed in /opt/Autodesk/<user>/python
+# project hooks are not called at startup. 
+# One of the ways to work around it is to check 
+# if we are able to import flame module straght away. 
+# If it is the case - flame project is already loaded 
+# and we can start out constructor. Otherwise we need 
+# to wait for app_initialized hook to be called - that would 
+# mean the project is finally loaded. 
+# project_changed_dict hook seem to be a good place to wrap things up
+
+# main objects:
+# app_framework takes care of preferences and general stuff
+# shotgunConnector is a gateway to shotgun database
+# apps is a list of apps to load inside the main program
+
+app_framework = None
+shotgunConnector = None
+apps = []
+
+# register clean up logic to be called at Flame exit
+def cleanup(apps, app_framework, shotgunConnector):
+    if apps:
+        print ('PYTHON\t: %s cleaning up' % bundle_name)
+        if DEBUG:
+            print ('[DEBUG %s] unloading apps: %s' % (bundle_name, pformat(apps)))
+    while len(apps):
+        app = apps.pop()
+        del app
+    if shotgunConnector:
+        shotgunConnector.terminate_loops()
+        del shotgunConnector
+    if app_framework:
+        app_framework.save_prefs()
+        del app_framework
+
+atexit.register(cleanup, apps, app_framework, shotgunConnector)
+
 def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
     #apps.append(flameBatchBlessing(app_framework))
@@ -1638,35 +1677,28 @@ def load_apps(apps, app_framework, shotgunConnector):
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
 
-print ('PYTHON\t: %s initializing' % bundle_name)
-
-app_framework = flameAppFramework()
-shotgunConnector = flameShotgunConnector(app_framework)
-apps = []
-load_apps(apps, app_framework, shotgunConnector)
-
-def exit_handler(apps, app_framework, shotgunConnector):
-    if DEBUG:
-        print ('[DEBUG %s] %s' % (bundle_name, 'exit handler'))
-        print ('[DEBUG %s] unloading apps: %s' % (bundle_name, pformat(apps)))
-    while len(apps):
-        app = apps.pop()
-        del app
-    shotgunConnector.terminate_loops()
-    del shotgunConnector
-    app_framework.save_prefs()
-    del app_framework
-
-atexit.register(exit_handler, apps, app_framework, shotgunConnector)
-
-# --- FLAME HOOKS ---
+def project_changed_dict(info):
+    global app_framework
+    global shotgunConnector
+    global apps
+    cleanup(apps, app_framework, shotgunConnector)
 
 def app_initialized(project_name):
-    print ('[%s] app_initialized HOOK' % bundle_name)
-    while len(apps):
-        app = apps.pop()
-        del app
+    global app_framework
+    global shotgunConnector
+    global apps
+    print ('PYTHON\t: %s initializing' % bundle_name)
+    app_framework = flameAppFramework()
+    shotgunConnector = flameShotgunConnector(app_framework)
     load_apps(apps, app_framework, shotgunConnector)
+
+try:
+    import flame
+    app_initialized(flame.project.current_project.name)
+except:
+    pass
+
+# --- FLAME OPERATIONAL HOOKS ---
 
 def get_main_menu_custom_ui_actions():
     menu = []
