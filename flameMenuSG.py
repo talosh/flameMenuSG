@@ -941,8 +941,8 @@ class flameMenuNewBatch(flameMenuApp):
                 menu_item['execute'] = self.page_fwd
                 menu['actions'].append(menu_item)
 
-        # for action in menu['actions']:
-        #     action['isVisible'] = self.scope_desktop
+        for action in menu['actions']:
+            action['isVisible'] = self.scope_desktop
 
         return menu
 
@@ -1575,12 +1575,17 @@ class flameMenuBatchLoader(flameMenuApp):
         self.framework.rescan()
 
 class flameMenuPublisher(flameMenuApp):
-    def __init__(self, framework):
-        flameShotgunApp.__init__(self, framework)
-        self.prefs['show_all'] = False
-        self.prefs['current_page'] = 0
-        self.prefs['menu_max_items_per_page'] = 64
-        self.prefs['flame_bug_message_shown'] = False
+    def __init__(self, framework, connector):
+        # app configuration settings
+
+        # app constructor
+        flameMenuApp.__init__(self, framework)
+        self.connector = connector
+        if not self.prefs:
+            self.prefs['show_all'] = False
+            self.prefs['current_page'] = 0
+            self.prefs['menu_max_items_per_page'] = 64
+            self.prefs['flame_bug_message_shown'] = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
         
@@ -2343,6 +2348,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameBatchBlessing(app_framework))
     apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
+    apps.append(flameMenuPublisher(app_framework, shotgunConnector))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
 
