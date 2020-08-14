@@ -346,6 +346,7 @@ class flameShotgunConnector(object):
     def resolve_storage_root(self, path_cache_storage):
         pprint (path_cache_storage)
         return default_storage_root
+
 '''
 class flameShotgunApp(flameMenuApp):
     def __init__(self, framework):
@@ -1171,17 +1172,16 @@ class flameMenuNewBatch(flameMenuApp):
         else:
             return False
 
-'''
-
-class flameMenuBatchLoader(flameShotgunApp):
-    def __init__(self, framework):
+class flameMenuBatchLoader(flameMenuApp):
+    def __init__(self, framework, connector):
         self.types_to_include = [
             'Image Sequence',
             'Flame Render'
         ]
 
+        flameMenuApp.__init__(self, framework)
+        self.connector = connector
 
-        flameShotgunApp.__init__(self, framework)
         self.prefs['show_all'] = False
         self.prefs['current_page'] = 0
         self.prefs['menu_max_items_per_page'] = 64
@@ -1198,9 +1198,9 @@ class flameMenuBatchLoader(flameShotgunApp):
         return method
 
     def build_menu(self):
-        if not self.sg_user:
+        if not self.connector.sg_user:
             return None
-        if not self.sg_linked_project:
+        if not self.connector.sg_linked_project:
             return None
 
         batch_name = self.flame.batch.name.get_value()
@@ -1208,8 +1208,8 @@ class flameMenuBatchLoader(flameShotgunApp):
             add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
         else:
             self.prefs[batch_name + '_batch_loader_add'] = []
-            sg = self.sg_user.create_sg_connection()
-            project_id = self.get_shotgun_project_id(self.sg_linked_project)
+            sg = self.connector.sg_user.create_sg_connection()
+            project_id = self.connector.sg_linked_project_id
             task_filters = [['project.Project.id', 'is', project_id]]
             tasks = sg.find('Task',
                 task_filters,
@@ -1235,9 +1235,9 @@ class flameMenuBatchLoader(flameShotgunApp):
         return menus
 
     def build_addremove_menu(self):
-        if not self.sg_user:
+        if not self.connector.sg_user:
             return None
-        if not self.sg_linked_project:
+        if not self.connector.sg_linked_project:
             return None
 
         flame_project_name = self.flame.project.current_project.name
@@ -1336,7 +1336,7 @@ class flameMenuBatchLoader(flameShotgunApp):
         return menu
 
     def build_batch_loader_menu(self, entity):
-        sg = self.sg_user.create_sg_connection()
+        sg = self.connector.sg_user.create_sg_connection()
         entity_type = entity.get('type')
         entity_id = entity.get('id')
         publishes = sg.find(
@@ -1437,7 +1437,7 @@ class flameMenuBatchLoader(flameShotgunApp):
         if not path_cache:
             return
         
-        storage_root = self.get_storage_root(entity.get('path_cache_storage'))
+        storage_root = self.connector.resolve_storage_root(entity.get('path_cache_storage'))
         path = os.path.join(storage_root, path_cache)
         flame_path = self.build_flame_friendly_path(path)
         if not flame_path:
@@ -1446,13 +1446,13 @@ class flameMenuBatchLoader(flameShotgunApp):
         self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
     def get_entities(self, user_only = True, filter_out=[]):
-        sg = self.sg_user.create_sg_connection()
-        project_id = self.get_shotgun_project_id(self.sg_linked_project)
+        sg = self.connector.sg_user.create_sg_connection()
+        project_id = self.connector.sg_linked_project_id
         task_filters = [['project.Project.id', 'is', project_id]]
 
         if user_only:
             human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
+                [['login', 'is', self.connector.sg_user.login]],
                 []
                 )
             task_filters.append(['task_assignees', 'is', human_user])
@@ -1555,26 +1555,12 @@ class flameMenuBatchLoader(flameShotgunApp):
         self.prefs['current_page'] = max(self.prefs['current_page'] - 1, 0)
 
     def refresh(self, *args, **kwargs):
-        # self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.name + '.signout')
-        if not os.path.isfile(self._sg_signout_marker):
-            self.sg_user = self.get_user()
-            sg = self.sg_user.create_sg_connection()
-            human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
-                ['name']
-            )
-            self.sg_user_name = human_user.get('name', None)
-            if not self.sg_user_name:
-                self.sg_user_name = self.sg_user.login
-
-        if self.flame:
-            self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
+        pass
 
     def rescan(self, *args, **kwargs):
         self.refresh()
         self.framework.rescan()
 
-'''
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
@@ -1619,7 +1605,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
     apps.append(flameBatchBlessing(app_framework))
     apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
-    # apps.append(flameMenuBatchLoader(app_framework))
+    apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     if DEBUG:
         print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
 
@@ -1674,7 +1660,6 @@ def get_media_panel_custom_ui_actions():
     print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
     return [menu]
 
-'''
 def get_batch_custom_ui_actions():
     menu = []
     flameMenuBatchLoaderApp = None
@@ -1686,8 +1671,6 @@ def get_batch_custom_ui_actions():
         for menuitem in flameMenuBatchLoaderApp.build_menu():
             menu.append(menuitem)
     return menu
-
-'''
 
 def batch_render_begin(info, userData, *args, **kwargs):
     import flame
