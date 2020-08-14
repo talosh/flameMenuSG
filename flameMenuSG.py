@@ -35,7 +35,19 @@ class flameAppFramework(object):
         self._prefs = {}
         self._bundle_location = bundle_location
         self.debug = DEBUG
-        self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
+        try:
+            import flame
+            self.flame = flame
+        except:
+            self.flame = None
+        if self.flame:
+            flame_project_name = self.flame.project.current_project.name
+            flame_user_name = flame.users.current_user.name
+            prefs_file_name = bundle_name + '.' + flame_project_name + '.' + flame_user_name + '.prefs'
+            self.prefs_file_location = bundle_location + os.path.sep + prefs_file_name
+        else:
+            self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
+
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
 
@@ -1182,9 +1194,10 @@ class flameMenuBatchLoader(flameMenuApp):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
 
-        self.prefs['show_all'] = False
-        self.prefs['current_page'] = 0
-        self.prefs['menu_max_items_per_page'] = 64
+        if not self.prefs:
+            self.prefs['show_all'] = False
+            self.prefs['current_page'] = 0
+            self.prefs['menu_max_items_per_page'] = 64
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
