@@ -17,20 +17,12 @@ from sgtk.platform.qt import QtGui
 bundle_name = 'flameMenuSG'
 bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
+default_storage_root = '/Volumes/projects'
+
 # flameBatchBlessing
 flame_batch_root = bundle_location
 flame_batch_folder = 'flame_batch_setups'
-# flameMenuNewbatch
-steps_to_ignore = [
-            'turnover',
-            'roto'
-    ]
-types_to_include = [
-            'Image Sequence',
-            'Flame Render'
-    ]
 # flameMenuBatchLoader
-storage_root = '/Volumes/projects'
 DEBUG = True
 
 # flameAppFramework class takes care of preferences 
@@ -221,7 +213,7 @@ class flameShotgunConnector(object):
         else:
             return False
 
-    def async_cache_get(self, uid, perform_query = False):
+    def async_cache_get(self, uid, perform_query = False, query_type = 'result'):
         if not uid in self.async_cache.keys():
             return False
         query = self.async_cache.get(uid)
@@ -234,7 +226,7 @@ class flameShotgunConnector(object):
             fields = query.get('fields')
             self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
         
-        return query.get('result')
+        return query.get(query_type)
 
     def async_cache_clear(self):
         self.async_cache = {}
@@ -246,6 +238,8 @@ class flameShotgunConnector(object):
             self.rescan_flag = True
             self.async_cache_hash = hash(pformat(self.async_cache))
     
+    # end of async cache methods
+
     def sg_cache_loop(self, timeout):
         while self.threads:
             start = time.time()
@@ -278,49 +272,6 @@ class flameShotgunConnector(object):
 
                 self.async_cache_state_check()
                 self.loop_timeout(timeout, start)
-
-    '''            
-    def update_active_projects(self):
-        try:
-            start = time.time()
-            self.sg_state['active projects'] = self.sg.find(
-                'Project',
-                [['archived', 'is', False]],
-                ['name', 'tank_name']
-            )
-        except:
-            self.log('active projects failed to update and still took %s' % (time.time() - start))
-            return False
-
-        for project in self.sg_state.get('active projects', []):
-            if project.get('name'):
-                if project.get('name') == self.sg_linked_project:
-                    if 'id' in project.keys():
-                        self.sg_linked_project_id = project.get('id')
-                        self.sg_state['current project name'] = self.sg_linked_project
-                        self.sg_state['current project id'] = self.sg_linked_project_id
-                        self.log('project name: %s, id: %s' % (project.get('name'), project.get('id')))
-        self.log('active projects update took %s' % (time.time() - start))
-        return True
-        
-    def update_tasks(self):
-        self.log('update_tasks:')
-        if not (self.sg_user and self.sg_linked_project_id):
-            return False
-        try:
-            start = time.time()
-            task_filters = [['project.Project.id', 'is', self.sg_linked_project_id]]
-            self.sg_state['tasks'] = self.sg.find('Task',
-                task_filters,
-                ['entity', 'task_assignees']
-            )
-        except:
-            self.log('tasks update failed and still took %s' % (time.time() - start))
-            return False
-        
-        self.log('tasks update took %s' % (time.time() - start))
-        return True
-    '''
 
     def update_human_user(self):
         if not self.sg_user:
@@ -392,6 +343,9 @@ class flameShotgunConnector(object):
 
         return True
 
+    def resolve_storage_root(self, path_cache_storage):
+        pprint (path_cache_storage)
+        return default_storage_root
 '''
 class flameShotgunApp(flameMenuApp):
     def __init__(self, framework):
@@ -545,7 +499,8 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['name'] = self.menu_group_name
 
             menu_item = {}
-            menu_item['name'] = 'Unlink `' + flame_project_name + '` from Shotgun project `' + self.connector.sg_linked_project + '`'
+            # menu_item['name'] = 'Unlink `' + flame_project_name + '` from Shotgun project `' + self.connector.sg_linked_project + '`'
+            menu_item['name'] = 'Unlink from Shotgun project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             menu_item = {}
@@ -829,6 +784,17 @@ class flameBatchBlessing(flameMenuApp):
 
 class flameMenuNewBatch(flameMenuApp):
     def __init__(self, framework, connector):
+        # app configuration settings
+        self.steps_to_ignore = [
+            'step_one',
+            'step_two'
+        ]
+        self.types_to_include = [
+            'Image Sequence',
+            'Flame Render'
+        ]
+
+        # app constructor
         flameMenuApp.__init__(self, framework)
         self.connector = connector
         self.current_tasks_uid = None
@@ -841,16 +807,15 @@ class flameMenuNewBatch(flameMenuApp):
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
-            pass
-            #entity = self.dynamic_menu_data.get(name)
-            #if entity:
-            #    self.create_new_batch(entity)
+            entity = self.dynamic_menu_data.get(name)
+            if entity:
+                self.create_new_batch(entity)
         return method
 
     def build_menu(self):
-
+        '''
         # ---------------------------------
-        # menu time debug code remove after
+        # menu time debug code
 
         number_of_menu_itmes = 256
         menu = {'name': self.name, 'actions': []}
@@ -863,12 +828,12 @@ class flameMenuNewBatch(flameMenuApp):
         return menu
 
         # ---------------------------------
-        # menu time debug code remove after
+        # menu time debug code
+        '''
 
-
-        if not self.sg_user:
+        if not self.connector.sg_user:
             return None
-        if not self.sg_linked_project:
+        if not self.connector.sg_linked_project:
             return None
         if not self.flame:
             return []
@@ -922,9 +887,8 @@ class flameMenuNewBatch(flameMenuApp):
                 else:
                     menu_item['name'] = '     ' + entity.get('name')
 
-                #self.dynamic_menu_data[str(id(entity))] = entity
-                #menu_item['execute'] = getattr(self, str(id(entity)))
-                menu_item['execute'] = getattr(self, 'hello')
+                self.dynamic_menu_data[str(id(entity))] = entity
+                menu_item['execute'] = getattr(self, str(id(entity)))
                 menu_main_body.append(menu_item)
 
         if menu_lenght < max_menu_lenght:
@@ -970,18 +934,19 @@ class flameMenuNewBatch(flameMenuApp):
         return menu
 
     def get_entities(self, user_only = True, filter_out=[]):
-        if not self.connector.sg_state['tasks']:
+        current_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        if not current_tasks:
             return {}
 
         tasks = []
         if user_only:
-            for task in self.connector.sg_state['tasks']:
+            for task in current_tasks:
                 task_assignees = task.get('task_assignees')
                 for task_assignee in task_assignees:
                     if task_assignee.get('id') == self.connector.sg_human_user.get('id'):
                         tasks.append(task)
         else:
-            tasks = list(self.connector.sg_state['tasks'])
+            tasks = list(current_tasks)
 
         entities = {}
         for task in tasks:
@@ -1000,7 +965,7 @@ class flameMenuNewBatch(flameMenuApp):
         return entities
 
     def create_new_batch(self, entity):        
-        sg = self.sg_user.create_sg_connection()
+        sg = self.connector.sg_user.create_sg_connection()
         entity = sg.find_one (
             entity.get('type'),
             [['id', 'is', entity.get('id')]],
@@ -1026,15 +991,16 @@ class flameMenuNewBatch(flameMenuApp):
         publishes_by_step = {}
         for publish in publishes:
             step_short_name = publish.get('task.Task.step.Step.short_name')
-            if step_short_name in steps_to_ignore:
+            if step_short_name in self.steps_to_ignore:
                 continue
             if step_short_name not in publishes_by_step.keys():
                 publishes_by_step[step_short_name] = []
             published_file_type = publish.get('published_file_type')
             if published_file_type:
                 published_file_type_name = published_file_type.get('name')
-            if published_file_type_name in types_to_include:
+            if published_file_type_name in self.types_to_include:
                 publishes_by_step[step_short_name].append(publish)
+        
 
         for step in publishes_by_step.keys():
             step_group = publishes_by_step.get(step)
@@ -1056,13 +1022,13 @@ class flameMenuNewBatch(flameMenuApp):
                     version_number = publish.get('version_number')
                     if version_number == max_version:
                         publishes_to_import.append(publish)
-
+        
         flame_paths_to_import = []
         for publish in publishes_to_import:
             path_cache = publish.get('path_cache')
             if not path_cache:
-                continue
-            storage_root = self.get_storage_root(publish.get('path_cache_storage'))
+                continue            
+            storage_root = self.connector.resolve_storage_root(publish.get('path_cache_storage'))
             path = os.path.join(storage_root, path_cache)
             flame_path = self.build_flame_friendly_path(path)
             flame_paths_to_import.append(flame_path)
@@ -1209,6 +1175,12 @@ class flameMenuNewBatch(flameMenuApp):
 
 class flameMenuBatchLoader(flameShotgunApp):
     def __init__(self, framework):
+        self.types_to_include = [
+            'Image Sequence',
+            'Flame Render'
+        ]
+
+
         flameShotgunApp.__init__(self, framework)
         self.prefs['show_all'] = False
         self.prefs['current_page'] = 0
@@ -1423,7 +1395,7 @@ class flameMenuBatchLoader(flameShotgunApp):
                     else:
                         published_file_type_name = None
 
-                    if published_file_type_name in types_to_include:
+                    if published_file_type_name in self.types_to_include:
                         name = publish.get('name')
                         if not name:
                             name = ''
