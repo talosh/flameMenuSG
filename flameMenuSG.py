@@ -9,6 +9,7 @@ import base64
 import uuid
 import inspect
 import pickle
+import re
 from datetime import datetime
 from pprint import pprint
 from pprint import pformat
@@ -1217,10 +1218,10 @@ class flameMenuBatchLoader(flameMenuApp):
             return None
 
         batch_name = self.flame.batch.name.get_value()
-        if (batch_name + '_batch_loader_add') in self.prefs.keys():
-            add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
+        if ('additional menu ' + batch_name) in self.prefs.keys():
+            add_menu_list = self.prefs.get('additional menu ' + batch_name)
         else:
-            self.prefs[batch_name + '_batch_loader_add'] = []
+            self.prefs['additional menu ' + batch_name] = []
             sg = self.connector.sg_user.create_sg_connection()
             project_id = self.connector.sg_linked_project_id
             task_filters = [['project.Project.id', 'is', project_id]]
@@ -1235,7 +1236,7 @@ class flameMenuBatchLoader(flameMenuApp):
                         break
             if entity:
                 self.update_loader_list(entity)
-            add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
+            add_menu_list = self.prefs.get('additional menu ' + batch_name)
 
         menus = []
         menus.append(self.build_addremove_menu())
@@ -1256,7 +1257,7 @@ class flameMenuBatchLoader(flameMenuApp):
         flame_project_name = self.flame.project.current_project.name
         batch_name = self.flame.batch.name.get_value()
         entities_to_mark = []
-        batch_loader_additional = self.prefs.get(batch_name + '_batch_loader_add')
+        batch_loader_additional = self.prefs.get('additional menu ' + batch_name)
         for item in batch_loader_additional:
             entities_to_mark.append(item.get('id'))
 
@@ -1432,7 +1433,7 @@ class flameMenuBatchLoader(flameMenuApp):
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
-        add_list = self.prefs.get(batch_name + '_batch_loader_add')
+        add_list = self.prefs.get('additional menu ' + batch_name)
         add_list_ids = []
         entity_id = entity.get('id')
         for existing_entity in add_list:
@@ -1443,7 +1444,7 @@ class flameMenuBatchLoader(flameMenuApp):
                     add_list.pop(index)
         else:
             add_list.append(entity)
-        self.prefs[batch_name + '_batch_loader_add'] = add_list
+        self.prefs['additional menu ' + batch_name] = add_list
 
     def load_into_batch(self, entity):
         path_cache = entity.get('path_cache')
@@ -1578,6 +1579,24 @@ class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
         # app configuration settings
         self.flame_bug_message = True
+        self.templates = {
+            # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
+            # {name} and {version} will be guessed from the clip name and taken from
+            # number of Batch itertations as a fallback.
+            # EXAMPLE: There are 9 batch iterations in batch group.
+            # Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
+            # Would give us "mycomp" as a {name} and 009 as {version}
+            # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
+            # Publishing into asset will just replace {Shot} fied with asset name
+            # 'flame_image_sequence': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
+            # 'flame_movie': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.mov',
+            'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+            'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+            'version_name': '{Shot}_{name}_v{version}'
+        }
+        self.flame_render_type = 'Flame Render'
+        self.flame_batch_type = 'Flame Batch File'
+        self.poster_frame = 1
 
         # app constructor
         flameMenuApp.__init__(self, framework)
@@ -1605,7 +1624,7 @@ class flameMenuPublisher(flameMenuApp):
             self.rescan()
         return method
 
-    def create_uid():
+    def create_uid(self):
         '''
         generates UUID for the batch setup
         '''
@@ -1629,10 +1648,10 @@ class flameMenuPublisher(flameMenuApp):
             return None
 
         batch_name = self.flame.batch.name.get_value()
-        if (batch_name + '_batch_loader_add') in self.prefs.keys():
-            add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
+        if ('additional menu ' + batch_name) in self.prefs.keys():
+            add_menu_list = self.prefs.get('additional menu ' + batch_name)
         else:
-            self.prefs[batch_name + '_batch_loader_add'] = []
+            self.prefs['additional menu ' + batch_name] = []
             sg = self.connector.sg_user.create_sg_connection()
             project_id = self.connector.sg_linked_project_id
             task_filters = [['project.Project.id', 'is', project_id]]
@@ -1648,7 +1667,7 @@ class flameMenuPublisher(flameMenuApp):
                         break
             if entity:
                 self.update_loader_list(entity)
-            add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
+            add_menu_list = self.prefs.get('additional menu ' + batch_name)
 
         menus = []
         add_remove_menu = self.build_addremove_menu()
@@ -1674,7 +1693,7 @@ class flameMenuPublisher(flameMenuApp):
         flame_project_name = self.flame.project.current_project.name
         batch_name = self.flame.batch.name.get_value()
         entities_to_mark = []
-        batch_loader_additional = self.prefs.get(batch_name + '_batch_loader_add')
+        batch_loader_additional = self.prefs.get('additional menu ' + batch_name)
         for item in batch_loader_additional:
             entities_to_mark.append(item.get('id'))
 
@@ -1913,22 +1932,11 @@ class flameMenuPublisher(flameMenuApp):
         task_entity_type = task_entity.get('type')
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
-        task_step = task.get('step.Step.short_name')
-        poster_frame = 1
+        task_step = task.get('step.Step.code')
         uid = self.create_uid()
-
-
-        if not builtin_publisher:
-            message = ''
-            message += 'Built-in publisher is not yet fully implemented. '
-            message += 'You can connect it to your current working publising backend. '
-            message += 'If you want to try anyway set builtin_publisher to True '
-            message += 'in the beginning of the flame-menu-publisher.py file. '
-            message += 'Use it on your own risk. '
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
         
+        storage_root = self.connector.resolve_storage_root(False)
+
         if not os.path.isdir(storage_root):
             message = 'folder "'
             message += storage_root
@@ -2017,11 +2025,11 @@ class flameMenuPublisher(flameMenuApp):
             
         sequence = shot.get('sg_sequence')
         if not sequence:
-            sequence_name = 'no_sequence'
+            sequence_name = 'DefaultSequence'
         else:
             sequence_name = sequence.get('name')
             if not sequence_name:
-                sequence_name = 'no_sequence'
+                sequence_name = 'DefaultSequence'
 
         # That's the way they do it on toolkit
         # template_data = {}
@@ -2032,7 +2040,7 @@ class flameMenuPublisher(flameMenuApp):
         # template_data['version'] = '{:03d}'.format(version_number)
         # export_path.format(**template_data)
 
-        export_path = templates.get('flame_render')
+        export_path = self.templates.get('flame_render')
         export_path = export_path.replace('{Shot}', task_entity_name)
         export_path = export_path.replace('{name}', clip_name)
         export_path = export_path.replace('{Step}', task_step)
@@ -2040,8 +2048,6 @@ class flameMenuPublisher(flameMenuApp):
         export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
         export_path = export_path.replace('{version_four}', '{:04d}'.format(version_number))
         export_path = os.path.join(storage_root, project_folder_name, export_path)
-
-        pprint ('export path: %s' % export_path)
 
         if export_path.endswith('.exr'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
@@ -2097,6 +2103,7 @@ class flameMenuPublisher(flameMenuApp):
         preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
         clip.name.set_value('preview_' + uid)
         export_dir = '/var/tmp'
+        preview_path = os.path.join(export_dir, 'preview_' + uid + '.mov')
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
@@ -2109,14 +2116,14 @@ class flameMenuPublisher(flameMenuApp):
         preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
         clip.name.set_value('thumbnail_' + uid)
         export_dir = '/var/tmp'
-        clip.in_mark = poster_frame
-        clip.out_mark = poster_frame + 1
+        thumbnail_path = os.path.join(export_dir, 'thumbnail_' + uid + '.jpg')
+        clip.in_mark = self.poster_frame
+        clip.out_mark = self.poster_frame + 1
         exporter.export_between_marks = True
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
             pass
-          
         clip.name.set_value(original_clip_name)
 
         filters = [["code", "is", "Flame Render"]]
@@ -2126,13 +2133,99 @@ class flameMenuPublisher(flameMenuApp):
                                                                             "project": proj})
 
         # get published file type or create a published file type on the fly
-        sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
+        sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", self.flame_render_type]])
         if not sg_published_file_type:
-            sg_published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
+            sg_published_file_type = sg.create("PublishedFileType", {"code": self.flame_render_type})
+        
+        version_name = self.templates.get('version_name')
+        version_name = version_name.replace('{Shot}', task_entity_name)
+        version_name = version_name.replace('{name}', clip_name)
+        version_name = version_name.replace('{Step}', task_step)
+        version_name = version_name.replace('{Sequence}', sequence_name)
+        version_name = version_name.replace('{version}', '{:03d}'.format(version_number))
+        version_name = version_name.replace('{version_four}', '{:04d}'.format(version_number))
 
-        pprint (sg_published_file_type)
+        # taken from tk-multipublish flame plugin
+        # /opt/Autodesk/presets/2020.2/shotgun/bundle_cache/app_store/tk-flame/v1.15.4/hooks/tk-multi-publish2/create_version.py
+        """
+        Executes the publish logic for the given item and settings.
+
+        :param settings: Dictionary of Settings. The keys are strings, matching
+            the keys returned in the settings property. The values are `Setting`
+            instances.
+        :param item: Item to process
+        """
+        '''
+        path = item.properties.get("path", None)
+
+        # Build the Version metadata dictionary
+        ver_data = dict(
+            project=item.context.project,
+            code=item.name,
+            description=item.description,
+            entity=item.context.entity,
+            sg_task=item.context.task,
+            sg_path_to_frames=path
+        )
+
+        ver_data["sg_department"] = "Flame"
+
+        asset_info = item.properties.get("assetInfo", {})
+
+        frame_rate = asset_info.get("fps")
+        if frame_rate:
+            ver_data["sg_uploaded_movie_frame_rate"] = float(frame_rate)
+
+        aspect_ratio = asset_info.get("aspectRatio")
+        if asset_info:
+            ver_data["sg_frames_aspect_ratio"] = float(aspect_ratio)
+            ver_data["sg_movie_aspect_ratio"] = float(aspect_ratio)
+
+        # For file sequences, we want the path as provided by flame.
+        # The property 'path' will be encoded the shotgun way file.%d.ext
+        # while 'file_path' will be encoded the flame way file.[##-##].ext.
+        file_path = item.properties.get("file_path", path)
+
+        re_match = re.search(r"(\[[0-9]+-[0-9]+\])\.", file_path)
+        if re_match:
+            ver_data["frame_range"] = re_match.group(1)[1:-1]
+
+        if "sourceIn" in asset_info and "sourceOut" in asset_info:
+            ver_data["sg_first_frame"] = asset_info["sourceIn"]
+            ver_data["sg_last_frame"] = asset_info["sourceOut"] - 1
+            ver_data["frame_count"] = int(ver_data["sg_last_frame"]) - int(ver_data["sg_first_frame"]) + 1
+
+        # Create the Version
+        version = self.sg.create("Version", ver_data)
+
+        # Keep the version reference for the other plugins
+        item.properties["Version"] = version
+        '''
+
+        version_data = dict(
+            project={'type': 'Project', 'id': self.connector.sg_linked_project_id},
+            code=version_name,
+            #description=item.description,
+            entity=task_entity,
+            sg_task=task,
+            #sg_path_to_frames=path
+        )
+        version = sg.create('Version', version_data)
+        if os.path.isfile(thumbnail_path):
+            sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
+            os.remove(thumbnail_path)
+        if os.path.isfile(preview_path):
+            sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+            os.remove(preview_path)
+
+        print ('HOOOO====')
+        print ('version name: %s' % version_name)
+        print ('version number: %s' % version_number)
+        print ('version padding: %s' % version_padding)
+        pprint (version_data)
+        pprint (version)
         # pprint (entity)
-        # pprint (selection)s
+        # pprint (selection)
         # pprint (proj)
 
         message = 'Built-in publishing backend is in progress. '
@@ -2143,7 +2236,7 @@ class flameMenuPublisher(flameMenuApp):
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
-        add_list = self.prefs.get(batch_name + '_batch_loader_add')
+        add_list = self.prefs.get('additional menu ' + batch_name)
         add_list_ids = []
         entity_id = entity.get('id')
         for existing_entity in add_list:
@@ -2154,7 +2247,7 @@ class flameMenuPublisher(flameMenuApp):
                     add_list.pop(index)
         else:
             add_list.append(entity)
-        self.prefs[batch_name + '_batch_loader_add'] = add_list
+        self.prefs['additional menu ' + batch_name] = add_list
 
     def get_entities(self, user_only = True, filter_out=[]):
         sg = self.connector.sg_user.create_sg_connection()
@@ -2271,9 +2364,6 @@ class flameMenuPublisher(flameMenuApp):
 
     def refresh(self, *args, **kwargs):
         pass
-
-    def rescan(self, *args, **kwargs):
-        self._framework.rescan()
 
     def show_bug_message(self, *args, **kwargs):
         if self.flame_bug_message:
