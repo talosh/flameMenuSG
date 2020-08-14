@@ -1577,6 +1577,7 @@ class flameMenuBatchLoader(flameMenuApp):
 class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
         # app configuration settings
+        self.flame_bug_message = True
 
         # app constructor
         flameMenuApp.__init__(self, framework)
@@ -1622,9 +1623,9 @@ class flameMenuPublisher(flameMenuApp):
         return visibility
 
     def build_menu(self):
-        if not self.sg_user:
+        if not self.connector.sg_user:
             return None
-        if not self.sg_linked_project:
+        if not self.connector.sg_linked_project:
             return None
 
         batch_name = self.flame.batch.name.get_value()
@@ -1632,8 +1633,8 @@ class flameMenuPublisher(flameMenuApp):
             add_menu_list = self.prefs.get(batch_name + '_batch_loader_add')
         else:
             self.prefs[batch_name + '_batch_loader_add'] = []
-            sg = self.sg_user.create_sg_connection()
-            project_id = self.get_shotgun_project_id(self.sg_linked_project)
+            sg = self.connector.sg_user.create_sg_connection()
+            project_id = self.connector.sg_linked_project_id
             task_filters = [['project.Project.id', 'is', project_id]]
             tasks = sg.find('Task',
                 task_filters,
@@ -1665,9 +1666,9 @@ class flameMenuPublisher(flameMenuApp):
         return menus
 
     def build_addremove_menu(self):
-        if not self.sg_user:
+        if not self.connector.sg_user:
             return None
-        if not self.sg_linked_project:
+        if not self.connector.sg_linked_project:
             return None
 
         flame_project_name = self.flame.project.current_project.name
@@ -1773,7 +1774,7 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def build_publish_menu(self, entity):
-        sg = self.sg_user.create_sg_connection()
+        sg = self.connector.sg_user.create_sg_connection()
 
         entity_type = entity.get('type')
         entity_id = entity.get('id')
@@ -1811,7 +1812,7 @@ class flameMenuPublisher(flameMenuApp):
         )
 
         human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
+                [['login', 'is', self.connector.sg_user.login]],
                 []
                 )
 
@@ -1824,15 +1825,16 @@ class flameMenuPublisher(flameMenuApp):
         menu_item['execute'] = self.rescan
         menu['actions'].append(menu_item)
 
-        menu_item = {}
-        if prefs['show_all']:            
-            menu_item['name'] = '~ Show Assigned Only'
-        else:
-            menu_item['name'] = '~ Show All Tasks'
-        
+        menu_item = {}        
         show_all_entity = {}
         show_all_entity['caller'] = 'flip_assigned_for_entity'
         show_all_entity['id'] = entity_id
+
+        if self.prefs[entity_id]['show_all']:            
+            menu_item['name'] = '~ Show Assigned Only'
+        else:
+            menu_item['name'] = '~ Show All Tasks'
+
         self.dynamic_menu_data[str(id(show_all_entity))] = show_all_entity
         menu_item['execute'] = getattr(self, str(id(show_all_entity)))
         menu['actions'].append(menu_item)
@@ -1935,7 +1937,7 @@ class flameMenuPublisher(flameMenuApp):
             self.mbox.exec_()
             return False
 
-        sg = self.sg_user.create_sg_connection()
+        sg = self.connector.sg_user.create_sg_connection()
         project_id = entity['task']['project.Project.id']
         proj = sg.find_one(
             'Project',
@@ -2155,13 +2157,13 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs[batch_name + '_batch_loader_add'] = add_list
 
     def get_entities(self, user_only = True, filter_out=[]):
-        sg = self.sg_user.create_sg_connection()
-        project_id = self.get_shotgun_project_id(self.sg_linked_project)
+        sg = self.connector.sg_user.create_sg_connection()
+        project_id = self.connector.sg_linked_project_id
         task_filters = [['project.Project.id', 'is', project_id]]
 
         if user_only:
             human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
+                [['login', 'is', self.connector.sg_user.login]],
                 []
                 )
             task_filters.append(['task_assignees', 'is', human_user])
@@ -2268,26 +2270,13 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['current_page'] = max(self.prefs['current_page'] - 1, 0)
 
     def refresh(self, *args, **kwargs):
-        self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.name + '.signout')
-        if not os.path.isfile(self._sg_signout_marker):
-            self.sg_user = self.get_user()
-            sg = self.sg_user.create_sg_connection()
-            human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.sg_user.login]],
-                ['name']
-            )
-            self.sg_user_name = human_user.get('name', None)
-            if not self.sg_user_name:
-                self.sg_user_name = self.sg_user.login
-
-        if self.flame:
-            self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
+        pass
 
     def rescan(self, *args, **kwargs):
         self._framework.rescan()
 
     def show_bug_message(self, *args, **kwargs):
-        if flame_bug_message:
+        if self.flame_bug_message:
             if not self.prefs['flame_bug_message_shown']:
                 message = "WARINIG: There is a bug in Flame that messes up menu actions "
                 message += "if total number of menu items in all menus is more then 164. "
@@ -2395,13 +2384,15 @@ def get_main_menu_custom_ui_actions():
 
 def get_media_panel_custom_ui_actions():
     start = time.time()
-    menu = {}
+    menu = []
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
             app.register_query()
-            menu = app.build_menu()
+            menu.append(app.build_menu())
+        if app.__class__.__name__ == 'flameMenuPublisher':
+            menu.extend(app.build_menu())
     print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
-    return [menu]
+    return menu
 
 def get_batch_custom_ui_actions():
     menu = []
