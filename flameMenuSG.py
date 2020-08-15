@@ -1,3 +1,10 @@
+'''
+flameMenuSG
+Flame 2020 and higher
+written by Andrii Toloshnyy
+andriy.toloshnyy@gmail.com
+'''
+
 import os
 import sys
 import sgtk
