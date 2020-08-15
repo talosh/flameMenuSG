@@ -7,13 +7,13 @@ out of the box for most common tasks.
 copy flameMenuSG.py into /opt/Autodesk/shared/python 
 (for user-only install use /opt/Autodesk/user/{FlameUserName}/python)
 
-### Shotgun's "Local File Storage"
-| storage root | project name
-/media/projects/myproject
-
 ### CONFIGURATION
+### Shotgun's "Local File Storage"
+flameMenuPublisher needs at least one "Local File Storage" to be defined. This should be done on Shotgun website.
+"Local File Stoarge" acts as a common place where you keep your projects. It is possible to create (and delete afterwards)
+as many "Local File Stoarage" records as needed if for a reason projects should be stored in different locations.
+The file storage to use with a particular flame project can be selected via flameMenuSG preferences dialog.
 
-Make sure to set default_storage_root on top of flameMenuSG.py file to your actual projects root if you want to try it out.
 Some things are still hardcoded so it might not work for you out of the box. If this is the case please let me know what exactly does not work for you.
 
 NOTE: Refreshing custom menus in flame is currently limited to "refresh pyton hooks".
