@@ -23,8 +23,10 @@ default_storage_root = '/Volumes/projects'
 # flameBatchBlessing
 flame_batch_root = bundle_location
 flame_batch_folder = 'flame_batch_setups'
-# flameMenuBatchLoader
+
 DEBUG = True
+
+__version__ = 'v0.0.1'
 
 # flameAppFramework class takes care of preferences 
 # and unpacking bundle to temporary location / cleanup on exit
@@ -1629,8 +1631,8 @@ class flameMenuPublisher(flameMenuApp):
         generates UUID for the batch setup
         '''
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
-        timestamp = (datetime.now()).strftime('%y%m%d%H%M')
-        return timestamp + uid[:1]
+        # timestamp = (datetime.now()).strftime('%y%m%d%H%M')
+        return uid[:4]
 
     def scope_clip(self, selection):
         selected_clips = []
@@ -1984,6 +1986,20 @@ class flameMenuPublisher(flameMenuApp):
 
         clip = selection[0]
 
+        shot = sg.find_one(
+                'Shot',
+                [['id', 'is', task_entity_id]],
+                ['sg_sequence']
+            )
+            
+        sequence = shot.get('sg_sequence')
+        if not sequence:
+            sequence_name = 'DefaultSequence'
+        else:
+            sequence_name = sequence.get('name')
+            if not sequence_name:
+                sequence_name = 'DefaultSequence'
+
         # basic name/version detection from clip name
         batch_group_name = self.flame.batch.name.get_value()
 
@@ -2014,22 +2030,27 @@ class flameMenuPublisher(flameMenuApp):
             version_number = len(self.flame.batch.batch_iterations)
             version_padding = 3
         
+        version_name = self.templates.get('version_name')
+        version_name = version_name.replace('{Shot}', task_entity_name)
+        version_name = version_name.replace('{name}', clip_name)
+        version_name = version_name.replace('{Step}', task_step)
+        version_name = version_name.replace('{Sequence}', sequence_name)
+        version_name = version_name.replace('{version}', '{:03d}'.format(version_number))
+        version_name = version_name.replace('{version_four}', '{:04d}'.format(version_number))
+
+        if sg.find('Version', [['entity', 'is', shot], ['code', 'is', version_name]]):
+            message = 'Version '
+            message += version_name
+            message += ' already exists in '
+            message += task_entity_name
+            message += '->'
+            message += task_step
+            message += '. Please iterate version number or choose another name'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
         # build export path
-        shot = sg.find_one(
-                'Shot',
-                [['id', 'is', task_entity_id]],
-                [
-                'sg_sequence',
-                ]
-            )
-            
-        sequence = shot.get('sg_sequence')
-        if not sequence:
-            sequence_name = 'DefaultSequence'
-        else:
-            sequence_name = sequence.get('name')
-            if not sequence_name:
-                sequence_name = 'DefaultSequence'
 
         # That's the way they do it on toolkit
         # template_data = {}
@@ -2101,9 +2122,9 @@ class flameMenuPublisher(flameMenuApp):
             self.flame.PyExporter.PresetType.Movie
         )
         preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
-        clip.name.set_value('preview_' + uid)
+        clip.name.set_value(version_name + '_preview_' + uid)
         export_dir = '/var/tmp'
-        preview_path = os.path.join(export_dir, 'preview_' + uid + '.mov')
+        preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
@@ -2114,9 +2135,9 @@ class flameMenuPublisher(flameMenuApp):
             self.flame.PyExporter.PresetType.Image_Sequence
         )
         preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
-        clip.name.set_value('thumbnail_' + uid)
+        clip.name.set_value(version_name + '_thumbnail_' + uid)
         export_dir = '/var/tmp'
-        thumbnail_path = os.path.join(export_dir, 'thumbnail_' + uid + '.jpg')
+        thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
         clip.in_mark = self.poster_frame
         clip.out_mark = self.poster_frame + 1
         exporter.export_between_marks = True
@@ -2124,7 +2145,9 @@ class flameMenuPublisher(flameMenuApp):
             exporter.export(clip, preset_path, export_dir)
         except:
             pass
+
         clip.name.set_value(original_clip_name)
+
 
         filters = [["code", "is", "Flame Render"]]
         sg_published_file_type = sg.find_one('PublishedFileType', filters=filters)
@@ -2137,100 +2160,89 @@ class flameMenuPublisher(flameMenuApp):
         if not sg_published_file_type:
             sg_published_file_type = sg.create("PublishedFileType", {"code": self.flame_render_type})
         
-        version_name = self.templates.get('version_name')
-        version_name = version_name.replace('{Shot}', task_entity_name)
-        version_name = version_name.replace('{name}', clip_name)
-        version_name = version_name.replace('{Step}', task_step)
-        version_name = version_name.replace('{Sequence}', sequence_name)
-        version_name = version_name.replace('{version}', '{:03d}'.format(version_number))
-        version_name = version_name.replace('{version_four}', '{:04d}'.format(version_number))
-
-        # taken from tk-multipublish flame plugin
         # /opt/Autodesk/presets/2020.2/shotgun/bundle_cache/app_store/tk-flame/v1.15.4/hooks/tk-multi-publish2/create_version.py
-        """
-        Executes the publish logic for the given item and settings.
-
-        :param settings: Dictionary of Settings. The keys are strings, matching
-            the keys returned in the settings property. The values are `Setting`
-            instances.
-        :param item: Item to process
-        """
-        '''
-        path = item.properties.get("path", None)
-
-        # Build the Version metadata dictionary
-        ver_data = dict(
-            project=item.context.project,
-            code=item.name,
-            description=item.description,
-            entity=item.context.entity,
-            sg_task=item.context.task,
-            sg_path_to_frames=path
-        )
-
-        ver_data["sg_department"] = "Flame"
-
-        asset_info = item.properties.get("assetInfo", {})
-
-        frame_rate = asset_info.get("fps")
-        if frame_rate:
-            ver_data["sg_uploaded_movie_frame_rate"] = float(frame_rate)
-
-        aspect_ratio = asset_info.get("aspectRatio")
-        if asset_info:
-            ver_data["sg_frames_aspect_ratio"] = float(aspect_ratio)
-            ver_data["sg_movie_aspect_ratio"] = float(aspect_ratio)
-
-        # For file sequences, we want the path as provided by flame.
-        # The property 'path' will be encoded the shotgun way file.%d.ext
-        # while 'file_path' will be encoded the flame way file.[##-##].ext.
-        file_path = item.properties.get("file_path", path)
-
-        re_match = re.search(r"(\[[0-9]+-[0-9]+\])\.", file_path)
-        if re_match:
-            ver_data["frame_range"] = re_match.group(1)[1:-1]
-
-        if "sourceIn" in asset_info and "sourceOut" in asset_info:
-            ver_data["sg_first_frame"] = asset_info["sourceIn"]
-            ver_data["sg_last_frame"] = asset_info["sourceOut"] - 1
-            ver_data["frame_count"] = int(ver_data["sg_last_frame"]) - int(ver_data["sg_first_frame"]) + 1
-
-        # Create the Version
-        version = self.sg.create("Version", ver_data)
-
-        # Keep the version reference for the other plugins
-        item.properties["Version"] = version
-        '''
-
+           
         version_data = dict(
-            project={'type': 'Project', 'id': self.connector.sg_linked_project_id},
-            code=version_name,
+            project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
+            code = version_name,
             #description=item.description,
-            entity=task_entity,
-            sg_task=task,
+            entity = task_entity,
+            sg_task = task,
             #sg_path_to_frames=path
         )
         version = sg.create('Version', version_data)
         if os.path.isfile(thumbnail_path):
             sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
-            os.remove(thumbnail_path)
         if os.path.isfile(preview_path):
             sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+
+        # check if there's storage root in Shotgun website
+        # with path that matches ours
+
+        storage_data = sg.find(
+            'LocalStorage',
+            [],
+            ['id', 'code', 'windows_path', 'linux_path', 'mac_path']
+        )
+
+        if sys.platform == 'darwin':
+            platform_path_field = 'mac_path'
+        elif sys.startswith('linux'):
+            platform_path_field = 'linux_path'
+        else:
+             message = 'Cannot resolve storage roots - unsupported platform:'
+             message += sys.platform
+             self.mbox.setText(message)
+             self.mbox.exec_()
+             return False
+        
+        storage = None
+        for storage in storage_data:
+            if storage.get(platform_path_field) == self.connector.resolve_storage_root(False):
+                break
+        
+        if not storage:
+            message = 'Can not find publish path '
+            message += self.connector.resolve_storage_root(False)
+            message += 'in any Shotgun Local File Storage. '
+            message += 'Please check in Shotgun Site Preferences -> File Management '
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        path_cache = self.templates.get('flame_render')
+        path_cache = path_cache.replace('{Shot}', task_entity_name)
+        path_cache = path_cache.replace('{name}', clip_name)
+        path_cache = path_cache.replace('{Step}', task_step)
+        path_cache = path_cache.replace('{Sequence}', sequence_name)
+        path_cache = path_cache.replace('{version}', '{:03d}'.format(version_number))
+        path_cache = path_cache.replace('{version_four}', '{:04d}'.format(version_number))
+        path_cache = path_cache.replace('{frame}', '%08d')
+        path_cache = os.path.join(project_folder_name, path_cache)
+
+        published_file_data = dict(
+            project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
+            version_number = version_number,
+            task = task,
+            version = version,
+            entity = task_entity,
+            published_file_type = sg_published_file_type,
+            path = {"relative_path": path_cache, "local_storage": storage},
+            path_cache = path_cache,
+            code = os.path.basename(path_cache),
+            name = task_entity_name + ', ' + clip_name,
+        )
+        published_file = sg.create('PublishedFile', published_file_data)
+        sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+
+        try:
+            os.remove(thumbnail_path)
             os.remove(preview_path)
+        except:
+            pass
 
-        print ('HOOOO====')
-        print ('version name: %s' % version_name)
-        print ('version number: %s' % version_number)
-        print ('version padding: %s' % version_padding)
-        pprint (version_data)
-        pprint (version)
-        # pprint (entity)
-        # pprint (selection)
-        # pprint (proj)
-
-        message = 'Built-in publishing backend is in progress. '
-        message += 'Have another look at github in a couple of days. '
-        message += "If you wish to help with coding you're very welcome! "
+        message = 'Sucessfully published version: '
+        message += version_name
         self.mbox.setText(message)
         self.mbox.exec_()
 
