@@ -26,7 +26,7 @@ flame_batch_folder = 'flame_batch_setups'
 
 DEBUG = True
 
-__version__ = 'v0.0.1'
+__version__ = 'v0.0.2'
 
 # flameAppFramework class takes care of preferences 
 # and unpacking bundle to temporary location / cleanup on exit
@@ -361,6 +361,95 @@ class flameShotgunConnector(object):
     def resolve_storage_root(self, path_cache_storage):
         pprint (path_cache_storage)
         return default_storage_root
+
+    def get_storage_root_dialog(self):
+        from PySide2 import QtWidgets, QtCore
+        window = None
+        storage_root_paths = None
+        sg_storage_data = self.get_local_file_storages()
+        self.sg_storage_index = 0
+        return_value = False
+
+        if not sg_storage_data:
+            message = '<p align = "center">'
+            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
+            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+
+        def combobox_changed(index):
+            self.sg_storage_index = index
+            storage_root_paths.setText(
+                'Lunux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
+                '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
+                '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path'))
+            )
+            
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(300, 180)
+        window.setWindowTitle('Hello Wolrd')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
+        
+        vbox1 = QtWidgets.QVBoxLayout()
+        storage_list = QtWidgets.QComboBox(window)
+        for storage in sg_storage_data:
+            storage_list.addItem(storage.get('code'))
+        storage_list.setCurrentIndex(self.sg_storage_index)
+        storage_list.currentIndexChanged.connect(combobox_changed)
+        vbox1.addWidget(storage_list)
+
+        storage_root_paths = QtWidgets.QLabel(
+            'Lunux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
+            '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
+            '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path')), 
+            window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame { border: 1px solid gray }')
+        vbox1.addWidget(storage_root_paths)
+
+        select_btn = QtWidgets.QPushButton('Select', window)
+        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        select_btn.setMinimumSize(100, 24)
+        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        select_btn.clicked.connect(window.accept)
+
+        cancel_btn = QtWidgets.QPushButton('Cancel', window)
+        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        cancel_btn.setMinimumSize(100, 24)
+        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        cancel_btn.clicked.connect(window.reject)
+
+        hbox2 = QtWidgets.QHBoxLayout()
+        hbox2.addWidget(cancel_btn)
+        hbox2.addWidget(select_btn)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(vbox1)
+        vbox.addLayout(hbox2)
+
+        window.setLayout(vbox)
+        if window.exec_():
+            return sg_storage_data[self.sg_storage_index]
+        else:
+            return False
+
+    def get_local_file_storages(self):
+        return self.sg.find(
+            'LocalStorage',
+            [],
+            ['id', 'code', 'windows_path', 'linux_path', 'mac_path']
+        )
 
 '''
 class flameShotgunApp(flameMenuApp):
@@ -1923,11 +2012,20 @@ class flameMenuPublisher(flameMenuApp):
                 publish_entity['task'] = task
                 self.dynamic_menu_data[str(id(publish_entity))] = publish_entity
                 menu_item['execute'] = getattr(self, str(id(publish_entity)))
+                menu_item['waitCursor'] = False
                 menu['actions'].append(menu_item)
                 
         return menu
 
     def publish(self, entity, selection):
+        
+        ### DIALOG TEST
+
+        result = self.connector.get_storage_root_dialog()
+        pprint (result)
+        return False
+        
+        ### END DIALOG TEST
 
         task = entity.get('task')
         task_entity = task.get('entity')
