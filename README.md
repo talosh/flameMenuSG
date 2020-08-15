@@ -6,6 +6,9 @@ It is lightweight single-file alternative to Shotgun Desktop / Pipeline Toolkit 
 copy flameMenuSG.py into /opt/Autodesk/shared/python 
 (for user-only installation use /opt/Autodesk/user/{FlameUserName}/python)
 
+### GETTING STARTED
+placeholder for a video link
+
 ### CONFIGURATION
 ### Shotgun's "Local File Storage"
 flameMenuPublisher needs at least one "Local File Storage" to be defined. This should be done on Shotgun website.
