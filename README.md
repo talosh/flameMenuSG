@@ -5,7 +5,7 @@ out of the box for most common tasks.
 
 ### INSTALLATION
 copy flameMenuSG.py into /opt/Autodesk/shared/python 
-(for user-only install use /opt/Autodesk/user/{FlameUserName}/python)
+(for user-only installation use /opt/Autodesk/user/{FlameUserName}/python)
 
 ### CONFIGURATION
 ### Shotgun's "Local File Storage"
