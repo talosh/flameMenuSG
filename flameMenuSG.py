@@ -24,7 +24,6 @@ from sgtk.platform.qt import QtGui
 
 bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
-default_storage_root = '/Volumes/projects'
 
 # flameBatchBlessing
 flame_batch_root = bundle_location
@@ -180,6 +179,7 @@ class flameShotgunConnector(object):
         self.rescan_flag = False
 
         self.check_sg_linked_project()
+        self.update_sg_storage_root()
 
         self.loops = []
         self.threads = True
@@ -188,6 +188,8 @@ class flameShotgunConnector(object):
         for loop in self.loops:
             loop.daemon = True
             loop.start()
+        
+        self.mbox = QtGui.QMessageBox()
         
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
@@ -364,9 +366,37 @@ class flameShotgunConnector(object):
 
         return True
 
+    # shotgun storage root related methods
+
+    @property
+    def sg_storage_root(self):
+        return self.prefs.get('sg_storage_root', {})
+    @sg_storage_root.setter
+    def sg_storage_root(self, value):
+        self.prefs['sg_storage_root'] = value
+
     def resolve_storage_root(self, path_cache_storage):
-        pprint (path_cache_storage)
-        return default_storage_root
+        local_file_storages = self.get_local_file_storages()
+        for local_file_storage in local_file_storages:
+            if local_file_storage.get('id') == path_cache_storage.get('id'):
+                return self.resolve_storage_root_path(local_file_storage)
+        return None
+
+    def resolve_storage_root_path(self, path_cache_storage):
+        if sys.platform == 'darwin':
+            platform_path_field = 'mac_path'
+        elif sys.startswith('linux'):
+            platform_path_field = 'linux_path'
+        else:
+             message = 'Cannot resolve storage roots - unsupported platform:'
+             message += sys.platform
+             self.mbox.setText(message)
+             self.mbox.exec_()
+             return False
+        
+        if not path_cache_storage:
+            return None
+        return path_cache_storage.get(platform_path_field)
 
     def get_storage_root_dialog(self):
         from PySide2 import QtWidgets, QtCore
@@ -389,7 +419,7 @@ class flameShotgunConnector(object):
         def combobox_changed(index):
             self.sg_storage_index = index
             storage_root_paths.setText(
-                'Lunux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
+                'Linux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
                 '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
                 '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path'))
             )
@@ -413,7 +443,7 @@ class flameShotgunConnector(object):
         vbox1.addWidget(storage_list)
 
         storage_root_paths = QtWidgets.QLabel(
-            'Lunux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
+            'Linux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
             '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
             '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path')), 
             window)
@@ -446,9 +476,9 @@ class flameShotgunConnector(object):
 
         window.setLayout(vbox)
         if window.exec_():
-            return sg_storage_data[self.sg_storage_index]
-        else:
-            return False
+            self.sg_storage_root = sg_storage_data[self.sg_storage_index]
+        
+        return self.sg_storage_root
 
     def get_local_file_storages(self):
         return self.sg.find(
@@ -457,119 +487,15 @@ class flameShotgunConnector(object):
             ['id', 'code', 'windows_path', 'linux_path', 'mac_path']
         )
 
-'''
-class flameShotgunApp(flameMenuApp):
-    def __init__(self, framework):
-        flameApp.__init__(self, framework)
-        self._sg_signout_marker = os.path.join(self.framework.bundle_location, self.framework.bundle_name + '.signout')
-        self.sg_user = None
-        self.sg_user_name = None
-        self.sg_linked_project = ''
-        self.TIMEOUT = 10
+    def update_sg_storage_root(self):
+        sg_storage_data = self.get_local_file_storages()
+        for storage in sg_storage_data:
+            if storage.get('id') == self.sg_storage_root.get('id'):
+                self.sg_storage_root = storage
+                return True
 
-        if not os.path.isfile(self._sg_signout_marker):
-            self.sg_user = self.get_user()
-            if self.sg_user:
-                sg = self.sg_user.create_sg_connection()
-                human_user = sg.find_one('HumanUser', 
-                    [['login', 'is', self.sg_user.login]],
-                    ['name']
-                )
-                self.sg_user_name = human_user.get('name', None)
-                if not self.sg_user_name:
-                    self.sg_user_name = self.sg_user.login
-
-        if self.flame:
-            self.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
-
-    def __del__(self):
-        self.log('flameShotgunApp destructor')
-
-    def get_user(self):        
-        authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
-        try:
-            user = authenticator.get_user()
-        except sgtk.authentication.AuthenticationCancelled:
-            return None
-
-        # try to see if we're actually able to connect
-        credentials_expired = False
-        
-        def credentials_handler(user, q):
-            q.put(user.are_credentials_expired())
-            return True
-        
-        q = multiprocessing.Queue()
-        p = multiprocessing.Process(target=credentials_handler, args=(user, q))
-        p.start()
-        p.join(self.TIMEOUT)
-
-        if p.is_alive():
-            p.terminate()
-            p.join()
-            print ('timeout while trying to obtain Shotgun credentials')
-            return None
-
-        credentials_expired = q.get()
-
-        if credentials_expired:
-            authenticator.clear_default_user()
-            user = authenticator.get_user()
-        
-        return user
-
-    def clear_user(self):
-        authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
-        authenticator.clear_default_user()
-
-    def get_projects(self, *args, **kwargs):
-        sg = self.sg_user.create_sg_connection()
-        projects = sg.find(
-            'Project',
-            [['archived', 'is', False]],
-            ['name', 'tank_name']
-        )
-        return projects
-
-    def get_shotgun_project_id(self, shotgun_project_name):
-        user = self.get_user()
-        sg = user.create_sg_connection()
-        if not sg:
-            return None
-
-        proj = sg.find_one(
-            'Project',
-            [['name', 'is', shotgun_project_name]]
-        )
-
-        if proj :
-            # Found project, return it.
-            return proj['id']
-
-    def sign_in(self, *args, **kwargs):
-        if os.path.isfile(self._sg_signout_marker):
-            os.remove(self._sg_signout_marker)
-        self.sg_user = self.get_user()
-        if not self.sg_user:
-            self.sign_out()
-        sg = self.sg_user.create_sg_connection()
-        human_user = sg.find_one('HumanUser', 
-            [['login', 'is', self.sg_user.login]],
-            ['name']
-        )
-        self.sg_user_name = human_user.get('name', None)
-        if not self.sg_user_name:
-            self.sg_user_name = self.sg_user.login
-        self.rescan()
-
-    def sign_out(self, *args, **kwargs):
-        self.clear_user()
-        open(self._sg_signout_marker, 'a').close()
-        self.sg_user = None
-        self.sg_user_name = None
-        self.rescan()
-
-'''
+        self.sg_storage_root = {}
+        return False
 
 class flameMenuProjectconnect(flameMenuApp):
     def __init__(self, framework, connector):
@@ -621,7 +547,7 @@ class flameMenuProjectconnect(flameMenuApp):
             
             menu_item = {}
             menu_item['name'] = 'Preferences'
-            menu_item['execute'] = self.show_preferences
+            menu_item['execute'] = self.preferences_window
             menu_item['waitCursor'] = False
             menu['actions'].append(menu_item)
 
@@ -664,7 +590,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
             menu_item = {}
             menu_item['name'] = 'Preferences'
-            menu_item['execute'] = self.show_preferences
+            menu_item['execute'] = self.preferences_window
             menu_item['waitCursor'] = False
             menu['actions'].append(menu_item)
 
@@ -700,8 +626,19 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.clear_user()
         self.rescan()
 
-    def show_preferences(self, *args, **kwargs):
-        from PySide2 import QtWidgets, QtCore
+    def preferences_window(self, *args, **kwargs):
+        from PySide2 import QtWidgets, QtCore, QtGui
+        
+        # storage root section
+        self.connector.update_sg_storage_root()
+        def update_sg_storage_root_widget():
+            self.connector.get_storage_root_dialog()
+            storage_root.setText(self.connector.sg_storage_root.get('code'))
+            storage_root_paths.setText(
+            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
+            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
+            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
+
         window = None
         window = QtWidgets.QDialog()
         window.setMinimumSize(800, 280)
@@ -713,10 +650,58 @@ class flameMenuProjectconnect(flameMenuApp):
         screen_res = QtWidgets.QDesktopWidget().screenGeometry()
         window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
 
+        hbox_storage = QtWidgets.QHBoxLayout()
+        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
+        storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        storage_root_btn.setMinimumSize(199, 24)
+        storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
+        hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
+
+        storage_name = QtWidgets.QLabel('Current storage:', window)
+        hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
+
+        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
+        boldFont = QtGui.QFont()
+        boldFont.setBold(True)
+        storage_root.setFont(boldFont)
+        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
+
+        vbox1 = QtWidgets.QVBoxLayout()
+        vbox1.setAlignment(QtCore.Qt.AlignTop)
+        vbox1.addLayout(hbox_storage)
+
+        storage_root_paths = QtWidgets.QLabel(
+            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
+            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
+            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
+            window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox1.addWidget(storage_root_paths)
+
         dummy = QtWidgets.QLabel('Not yet implemented', window)
         dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
 
+        close_btn = QtWidgets.QPushButton('Close', window)
+        close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        close_btn.setMinimumSize(88, 24)
+        close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        close_btn.clicked.connect(window.accept)
+
+        hbox1 = QtWidgets.QHBoxLayout()
+        hbox1.addLayout(vbox1)
+        hbox1.addWidget(dummy)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(hbox1)
+        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
+
+        window.setLayout(vbox)
         window.exec_()
 
 
@@ -925,6 +910,7 @@ class flameBatchBlessing(flameMenuApp):
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
         timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return timestamp + uid[:1]
+
 
 class flameMenuNewBatch(flameMenuApp):
     def __init__(self, framework, connector):
@@ -1173,6 +1159,8 @@ class flameMenuNewBatch(flameMenuApp):
             if not path_cache:
                 continue            
             storage_root = self.connector.resolve_storage_root(publish.get('path_cache_storage'))
+            if not storage_root:
+                continue
             path = os.path.join(storage_root, path_cache)
             flame_path = self.build_flame_friendly_path(path)
             flame_paths_to_import.append(flame_path)
@@ -1314,6 +1302,7 @@ class flameMenuNewBatch(flameMenuApp):
             return True
         else:
             return False
+
 
 class flameMenuBatchLoader(flameMenuApp):
     def __init__(self, framework, connector):
@@ -1582,6 +1571,8 @@ class flameMenuBatchLoader(flameMenuApp):
             return
         
         storage_root = self.connector.resolve_storage_root(entity.get('path_cache_storage'))
+        if not storage_root:
+            return
         path = os.path.join(storage_root, path_cache)
         flame_path = self.build_flame_friendly_path(path)
         if not flame_path:
@@ -1705,9 +1696,10 @@ class flameMenuBatchLoader(flameMenuApp):
         self.refresh()
         self.framework.rescan()
 
+
 class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
-        # app configuration settings
+        # app configuration settings (to be moved to preferences)
         self.flame_bug_message = True
         self.templates = {
             # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
@@ -2058,14 +2050,37 @@ class flameMenuPublisher(flameMenuApp):
 
     def publish(self, entity, selection):
         
-        ### DIALOG TEST
-
-        result = self.connector.get_storage_root_dialog()
-        pprint (result)
-        return False
+        # shotgun storage root resolution
+        storage_root_path = None
+        if not self.connector.sg_storage_root:
+            if not self.connector.get_storage_root_dialog():
+                return False
         
-        ### END DIALOG TEST
+        self.connector.update_sg_storage_root()
+        storage_root_path = self.connector.resolve_storage_root_path(self.connector.sg_storage_root)
 
+        if not storage_root_path:
+            if sys.platform == 'darwin':
+                message = 'No Mac path '
+            elif sys.startswith('linux'):
+                platform_path_field = 'No Linux path '
+            message += 'specified for Shotgun Local File Storage "'
+            message += self.connector.sg_storage_root.get('code')
+            message += '". Can not continue with publishing.'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        if not os.path.isdir(storage_root_path):
+            message = 'Path "' + storage_root_path
+            message += '" specified in Shotgun Local File Storage "'
+            message += self.connector.sg_storage_root.get('code')
+            message += '"  does not exist. Can not continue with publishing.'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        # start of main publishing routine
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
@@ -2074,16 +2089,6 @@ class flameMenuPublisher(flameMenuApp):
         task_step = task.get('step.Step.code')
         uid = self.create_uid()
         
-        storage_root = self.connector.resolve_storage_root(False)
-
-        if not os.path.isdir(storage_root):
-            message = 'folder "'
-            message += storage_root
-            message += '" does not exist. Please set correct project root manually in python file'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
         sg = self.connector.sg_user.create_sg_connection()
         project_id = entity['task']['project.Project.id']
         proj = sg.find_one(
@@ -2099,7 +2104,7 @@ class flameMenuPublisher(flameMenuApp):
         if not project_folder_name:
             project_folder_name = proj.get('name')
         
-        project_root = os.path.join(storage_root, project_folder_name)
+        project_root = os.path.join(storage_root_path, project_folder_name)
         if not os.path.isdir(project_root):
             message = 'project folder "'
             message += project_root
@@ -2205,7 +2210,7 @@ class flameMenuPublisher(flameMenuApp):
         export_path = export_path.replace('{Sequence}', sequence_name)
         export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
         export_path = export_path.replace('{version_four}', '{:04d}'.format(version_number))
-        export_path = os.path.join(storage_root, project_folder_name, export_path)
+        export_path = os.path.join(storage_root_path, project_folder_name, export_path)
 
         if export_path.endswith('.exr'):
             preset_dir = self.flame.PyExporter.get_presets_dir(
@@ -2313,40 +2318,6 @@ class flameMenuPublisher(flameMenuApp):
         if os.path.isfile(preview_path):
             sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
 
-        # check if there's storage root in Shotgun website
-        # with path that matches ours
-
-        storage_data = sg.find(
-            'LocalStorage',
-            [],
-            ['id', 'code', 'windows_path', 'linux_path', 'mac_path']
-        )
-
-        if sys.platform == 'darwin':
-            platform_path_field = 'mac_path'
-        elif sys.startswith('linux'):
-            platform_path_field = 'linux_path'
-        else:
-             message = 'Cannot resolve storage roots - unsupported platform:'
-             message += sys.platform
-             self.mbox.setText(message)
-             self.mbox.exec_()
-             return False
-        
-        storage = None
-        for storage in storage_data:
-            if storage.get(platform_path_field) == self.connector.resolve_storage_root(False):
-                break
-        
-        if not storage:
-            message = 'Can not find publish path '
-            message += self.connector.resolve_storage_root(False)
-            message += 'in any Shotgun Local File Storage. '
-            message += 'Please check in Shotgun Site Preferences -> File Management '
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
         path_cache = self.templates.get('flame_render')
         path_cache = path_cache.replace('{Shot}', task_entity_name)
         path_cache = path_cache.replace('{name}', clip_name)
@@ -2364,7 +2335,7 @@ class flameMenuPublisher(flameMenuApp):
             version = version,
             entity = task_entity,
             published_file_type = sg_published_file_type,
-            path = {"relative_path": path_cache, "local_storage": storage},
+            path = {"relative_path": path_cache, "local_storage": self.connector.sg_storage_root},
             path_cache = path_cache,
             code = os.path.basename(path_cache),
             name = task_entity_name + ', ' + clip_name,
@@ -2556,9 +2527,10 @@ apps = []
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
     if apps:
-        print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
-        if DEBUG:
-            print ('[DEBUG %s] unloading apps: %s' % (app_framework_bundle_name, pformat(apps)))
+        if app_framework:
+            print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
+            if DEBUG:
+                print ('[DEBUG %s] unloading apps: %s' % (app_framework.bundle_name, pformat(apps)))
     while len(apps):
         app = apps.pop()
         del app
