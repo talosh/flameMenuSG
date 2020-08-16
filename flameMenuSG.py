@@ -7,19 +7,15 @@ andriy.toloshnyy@gmail.com
 
 import os
 import sys
-import sgtk
 import time
 import threading
-import signal
 import atexit
-import base64
-import uuid
 import inspect
-import pickle
 import re
-from datetime import datetime
 from pprint import pprint
 from pprint import pformat
+
+import sgtk
 from sgtk.platform.qt import QtGui
 
 bundle_location = '/var/tmp'
@@ -31,7 +27,7 @@ flame_batch_folder = 'flame_batch_setups'
 
 DEBUG = True
 
-__version__ = 'v0.0.2'
+__version__ = 'v0.0.3'
 
 # flameAppFramework class takes care of preferences 
 # and unpacking bundle to temporary location / cleanup on exit
@@ -64,6 +60,8 @@ class flameAppFramework(object):
             print ('[DEBUG %s] %s' % (self._bundle_name, message))
 
     def load_prefs(self):
+        import pickle
+
         try:
             prefs_file = open(self.prefs_file_location, 'r')
             self._prefs = pickle.load(prefs_file)
@@ -76,6 +74,8 @@ class flameAppFramework(object):
             return False
 
     def save_prefs(self):
+        import pickle
+
         try:
             prefs_file = open(self.prefs_file_location, 'w')
             pickle.dump(self._prefs, prefs_file)
@@ -215,6 +215,8 @@ class flameShotgunConnector(object):
     # async cache related methods
 
     def async_cache_register(self, query, perform_query = True):
+        import uuid
+
         uid = (str(uuid.uuid1()).replace('-', '')).upper()
         self.async_cache[uid] = {'query': query, 'result': []}
         if not self.sg_user:
@@ -906,10 +908,12 @@ class flameBatchBlessing(flameMenuApp):
 
     def create_batch_uid(self):
         # generates UUID for the batch setup
-
+        import uuid
+        from datetime import datetime
+        
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
-        timestamp = (datetime.now()).strftime('%y%m%d%H%M')
-        return timestamp + uid[:1]
+        timestamp = (datetime.now())..strftime('%Y%b%d_%H%M').upper()
+        return timestamp + '_' + uid[:2]
 
 
 class flameMenuNewBatch(flameMenuApp):
@@ -1747,11 +1751,9 @@ class flameMenuPublisher(flameMenuApp):
         return method
 
     def create_uid(self):
-        '''
-        generates UUID for the batch setup
-        '''
+        import uuid
+
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
-        # timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return uid[:4]
 
     def scope_clip(self, selection):
