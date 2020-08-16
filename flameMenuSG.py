@@ -22,7 +22,6 @@ from pprint import pprint
 from pprint import pformat
 from sgtk.platform.qt import QtGui
 
-bundle_name = 'flameMenuSG'
 bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
 default_storage_root = '/Volumes/projects'
@@ -41,7 +40,7 @@ __version__ = 'v0.0.2'
 class flameAppFramework(object):
     def __init__(self):
         self.name = self.__class__.__name__
-        self._bundle_name = bundle_name
+        self._bundle_name = 'flameMenuSG'
         self._prefs = {}
         self._bundle_location = bundle_location
         self.debug = DEBUG
@@ -53,10 +52,10 @@ class flameAppFramework(object):
         if self.flame:
             flame_project_name = self.flame.project.current_project.name
             flame_user_name = flame.users.current_user.name
-            prefs_file_name = bundle_name + '.' + flame_project_name + '.' + flame_user_name + '.prefs'
+            prefs_file_name = self.bundle_name + '.' + flame_project_name + '.' + flame_user_name + '.prefs'
             self.prefs_file_location = bundle_location + os.path.sep + prefs_file_name
         else:
-            self.prefs_file_location = bundle_location + os.path.sep + bundle_name + '.prefs'
+            self.prefs_file_location = bundle_location + os.path.sep + self.bundle_name + '.prefs'
 
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
@@ -397,7 +396,7 @@ class flameShotgunConnector(object):
             
         window = QtWidgets.QDialog()
         window.setMinimumSize(300, 180)
-        window.setWindowTitle('Hello Wolrd')
+        window.setWindowTitle('Select Local File Storage')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         window.setStyleSheet('background-color: #313131')
@@ -419,7 +418,7 @@ class flameShotgunConnector(object):
             '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path')), 
             window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        storage_root_paths.setStyleSheet('QFrame { border: 1px solid gray }')
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
         vbox1.addWidget(storage_root_paths)
 
         select_btn = QtWidgets.QPushButton('Select', window)
@@ -712,7 +711,7 @@ class flameBatchBlessing(flameMenuApp):
                 os.makedirs(flame_batch_path)
                 self.log('creating %s' % flame_batch_path)
             except:
-                print ('PYTHON\t: %s can not create %s' % (bundle_name, flame_batch_path))
+                print ('PYTHON\t: %s can not create %s' % (self.framework.bundle_name, flame_batch_path))
                 return False
         return flame_batch_path
 
@@ -866,8 +865,8 @@ class flameBatchBlessing(flameMenuApp):
                                             batch_setup_name = batch_setup_name,
                                             batch_setup_file = batch_setup_file)
                                     except:
-                                        print ('PYTHON\t: %s unable to bless %s' % (bundle_name, clip.name))
-                                        print ('PYTHON\t: %s libraries are protected from editing' % bundle_name)
+                                        print ('PYTHON\t: %s unable to bless %s' % (self.framework.bundle_name, clip.name))
+                                        print ('PYTHON\t: %s libraries are protected from editing' % self.framework.bundle_name)
                                         continue
 
             elif dest == 'Reel Groups':
@@ -2524,9 +2523,9 @@ apps = []
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
     if apps:
-        print ('PYTHON\t: %s cleaning up' % bundle_name)
+        print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
         if DEBUG:
-            print ('[DEBUG %s] unloading apps: %s' % (bundle_name, pformat(apps)))
+            print ('[DEBUG %s] unloading apps: %s' % (app_framework_bundle_name, pformat(apps)))
     while len(apps):
         app = apps.pop()
         del app
@@ -2546,7 +2545,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     apps.append(flameMenuPublisher(app_framework, shotgunConnector))
     if DEBUG:
-        print ('[DEBUG %s] loaded %s' % (bundle_name, pformat(apps)))
+        print ('[DEBUG %s] loaded %s' % (app_framework.bundle_name, pformat(apps)))
 
 def project_changed_dict(info):
     global app_framework
@@ -2558,8 +2557,8 @@ def app_initialized(project_name):
     global app_framework
     global shotgunConnector
     global apps
-    print ('PYTHON\t: %s initializing' % bundle_name)
     app_framework = flameAppFramework()
+    print ('PYTHON\t: %s initializing' % app_framework.bundle_name)
     shotgunConnector = flameShotgunConnector(app_framework)
     load_apps(apps, app_framework, shotgunConnector)
 
