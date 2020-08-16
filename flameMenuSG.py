@@ -610,14 +610,21 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['name'] = self.menu_group_name
 
             menu_item = {}
-            # menu_item['name'] = 'Unlink `' + flame_project_name + '` from Shotgun project `' + self.connector.sg_linked_project + '`'
             menu_item['name'] = 'Unlink from Shotgun project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
+            
             menu_item = {}
             menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
+            
+            menu_item = {}
+            menu_item['name'] = 'Preferences'
+            menu_item['execute'] = self.show_preferences
+            menu_item['waitCursor'] = False
+            menu['actions'].append(menu_item)
+
         else:
             menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
 
@@ -655,6 +662,12 @@ class flameMenuProjectconnect(flameMenuApp):
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
 
+            menu_item = {}
+            menu_item['name'] = 'Preferences'
+            menu_item['execute'] = self.show_preferences
+            menu_item['waitCursor'] = False
+            menu['actions'].append(menu_item)
+
         return menu
 
     def get_projects(self, *args, **kwargs):
@@ -686,6 +699,26 @@ class flameMenuProjectconnect(flameMenuApp):
     def sign_out(self, *args, **kwargs):
         self.connector.clear_user()
         self.rescan()
+
+    def show_preferences(self, *args, **kwargs):
+        from PySide2 import QtWidgets, QtCore
+        window = None
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(800, 280)
+        window.setWindowTitle(self.framework.bundle_name + ' Preferences')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
+
+        dummy = QtWidgets.QLabel('Not yet implemented', window)
+        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+
+        window.exec_()
+
 
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
