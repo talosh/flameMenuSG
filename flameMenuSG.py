@@ -7,31 +7,23 @@ andriy.toloshnyy@gmail.com
 
 import os
 import sys
-import sgtk
 import time
 import threading
-import signal
 import atexit
-import base64
-import uuid
 import inspect
-import pickle
 import re
-from datetime import datetime
 from pprint import pprint
 from pprint import pformat
+
+import sgtk
 from sgtk.platform.qt import QtGui
 
 bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
 
-# flameBatchBlessing
-flame_batch_root = bundle_location
-flame_batch_folder = 'flame_batch_setups'
-
 DEBUG = True
 
-__version__ = 'v0.0.2'
+__version__ = 'v0.0.3'
 
 # flameAppFramework class takes care of preferences 
 # and unpacking bundle to temporary location / cleanup on exit
@@ -64,6 +56,8 @@ class flameAppFramework(object):
             print ('[DEBUG %s] %s' % (self._bundle_name, message))
 
     def load_prefs(self):
+        import pickle
+
         try:
             prefs_file = open(self.prefs_file_location, 'r')
             self._prefs = pickle.load(prefs_file)
@@ -76,6 +70,8 @@ class flameAppFramework(object):
             return False
 
     def save_prefs(self):
+        import pickle
+
         try:
             prefs_file = open(self.prefs_file_location, 'w')
             pickle.dump(self._prefs, prefs_file)
@@ -215,6 +211,8 @@ class flameShotgunConnector(object):
     # async cache related methods
 
     def async_cache_register(self, query, perform_query = True):
+        import uuid
+
         uid = (str(uuid.uuid1()).replace('-', '')).upper()
         self.async_cache[uid] = {'query': query, 'result': []}
         if not self.sg_user:
@@ -708,8 +706,12 @@ class flameMenuProjectconnect(flameMenuApp):
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
         flameMenuApp.__init__(self, framework)
-        if self.flame:
-            self.root_folder = self.batch_setup_root_folder()
+        # app defaults
+        if not self.prefs:
+            self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
+            self.prefs['flame_batch_folder'] = 'flame_batch_setups'
+
+        self.root_folder = self.batch_setup_root_folder()
 
     def batch_setup_root_folder(self):
         try:
@@ -719,9 +721,10 @@ class flameBatchBlessing(flameMenuApp):
 
         current_project_name = flame.project.current_project.name
         flame_batch_path = os.path.join(
-                                    flame_batch_root,
+                                    self.prefs.get('flame_batch_root'),
+                                    self.prefs.get('flame_batch_folder'),
                                     current_project_name,
-                                    flame_batch_folder
+                                    flame.batch.name.get_value()
                                     )
         
         if not os.path.isdir(flame_batch_path):
@@ -906,10 +909,12 @@ class flameBatchBlessing(flameMenuApp):
 
     def create_batch_uid(self):
         # generates UUID for the batch setup
-
+        import uuid
+        from datetime import datetime
+        
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
-        timestamp = (datetime.now()).strftime('%y%m%d%H%M')
-        return timestamp + uid[:1]
+        timestamp = (datetime.now()).strftime('%Y%b%d_%H%M').upper()
+        return timestamp + '_' + uid[:3]
 
 
 class flameMenuNewBatch(flameMenuApp):
@@ -1314,6 +1319,7 @@ class flameMenuBatchLoader(flameMenuApp):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
 
+        # app defaults
         if not self.prefs:
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
@@ -1747,11 +1753,9 @@ class flameMenuPublisher(flameMenuApp):
         return method
 
     def create_uid(self):
-        '''
-        generates UUID for the batch setup
-        '''
+        import uuid
+
         uid = ((str(uuid.uuid1()).replace('-', '')).upper())
-        # timestamp = (datetime.now()).strftime('%y%m%d%H%M')
         return uid[:4]
 
     def scope_clip(self, selection):
@@ -2028,13 +2032,23 @@ class flameMenuPublisher(flameMenuApp):
                 menu['actions'].append(menu_item)
 
                 task_id = task.get('id')
+                version_names = []
+                version_name_lenghts = set()
                 for version in versions:
                     if task_id == version.get('sg_task.Task.id'):
-                        menu_item = {}
-                        menu_item['name'] = ' '*8 + '* ' + version.get('code')
-                        menu_item['execute'] = self.rescan
-                        menu_item['isEnabled'] = False
-                        menu['actions'].append(menu_item)
+                        version_names.append('* ' + version.get('code'))
+                        version_name_lenghts.add(len('* ' + version.get('code')))
+                
+                version_names = sorted(version_names)
+                if len(version_names) > 5:
+                    version_names = version_names[:2] + version_names[-3:]
+                    version_names[2] = ' '*8 + ' '*(max(list(version_name_lenghts))//2 - 4) + '. . . . .'
+                for version_name in version_names:
+                    menu_item = {}
+                    menu_item['name'] = ' '*8 + version_name
+                    menu_item['execute'] = self.rescan
+                    menu_item['isEnabled'] = False
+                    menu['actions'].append(menu_item)
                 
                 menu_item = {}
                 menu_item['name'] = ' '*12 + 'publish to task "' + task_name + '"'
@@ -2115,9 +2129,8 @@ class flameMenuPublisher(flameMenuApp):
             return False
         
         # we need to bootstrap toolkit here but
-        # let's do a quick and dirty manual assignments
-        # for now
-        # multiple selections are left for later
+        # let's do a quick and dirty manual assignments for now
+        # multiple selections are left for later enhancements
         if len(selection) > 1:
             message = 'More than one clip selected. '
             message += 'Multiple selection publish is not yet implemented. '
@@ -2127,7 +2140,26 @@ class flameMenuPublisher(flameMenuApp):
             return False
 
         clip = selection[0]
+        
+        # batch file name resolution
+        # if the clip consists of several clips with different linked batch setups
+        # fall back to the current batch setup
+        import ast
 
+        linked_batch_path = None
+        comments = set()
+        for version in clip.versions:
+            for track in version.tracks:
+                for segment in track.segments:
+                    comments.add(segment.comment.get_value())
+        if len(comments) == 1:
+            try:
+                linked_batch_path_dict = ast.literal_eval(comments.pop())
+                linked_batch_path = linked_batch_path_dict.get('batch_file')
+            except:
+                pass
+
+        # resolve Sequence name if linked to the shot
         shot = sg.find_one(
                 'Shot',
                 [['id', 'is', task_entity_id]],
@@ -2290,14 +2322,7 @@ class flameMenuPublisher(flameMenuApp):
 
         clip.name.set_value(original_clip_name)
 
-
-        filters = [["code", "is", "Flame Render"]]
-        sg_published_file_type = sg.find_one('PublishedFileType', filters=filters)
-        if not sg_published_file_type:
-            sg_published_file_type = sg.create("TankType", {"code": "Flame Render",
-                                                                            "project": proj})
-
-        # get published file type or create a published file type on the fly
+        # get published file type for Flame Render or create a published file type on the fly
         sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", self.flame_render_type]])
         if not sg_published_file_type:
             sg_published_file_type = sg.create("PublishedFileType", {"code": self.flame_render_type})
@@ -2335,11 +2360,54 @@ class flameMenuPublisher(flameMenuApp):
             version = version,
             entity = task_entity,
             published_file_type = sg_published_file_type,
-            path = {"relative_path": path_cache, "local_storage": self.connector.sg_storage_root},
+            path = {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root},
             path_cache = path_cache,
             code = os.path.basename(path_cache),
             name = task_entity_name + ', ' + clip_name,
         )
+        published_file = sg.create('PublishedFile', published_file_data)
+        sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+
+        # copy flame .batch file linked to the clip or save current one if not resolved from comments
+        export_path = self.templates.get('flame_batch')
+        export_path = export_path.replace('{Shot}', task_entity_name)
+        export_path = export_path.replace('{name}', clip_name)
+        export_path = export_path.replace('{Step}', task_step)
+        export_path = export_path.replace('{Sequence}', sequence_name)
+        export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
+        export_path = export_path.replace('{version_four}', '{:04d}'.format(version_number))
+        path_cache = os.path.join(project_folder_name, export_path)
+        export_path = os.path.join(storage_root_path, project_folder_name, export_path)
+        
+        if linked_batch_path:
+            src, ext = os.path.splitext(linked_batch_path)
+            dest, ext = os.path.splitext(export_path)
+            if os.path.isfile(linked_batch_path) and  os.path.isdir(src):
+                try:
+                    from subprocess import call
+                    call(['cp', '-a', src, dest])
+                    call(['cp', '-a', linked_batch_path, export_path])
+                except:
+                    message = 'Can not copy flame batch to "'
+                    message += dest + '"'
+                    self.mbox.setText(message)
+                    self.mbox.exec_()
+                    return False
+            else:
+                self.flame.batch.save_setup(export_path)
+        else:
+            self.flame.batch.save_setup(export_path)
+
+        # get published file type for Flame Batch or create a published file type on the fly
+        sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", self.flame_batch_type]])
+        if not sg_published_file_type:
+            sg_published_file_type = sg.create("PublishedFileType", {"code": self.flame_batch_type})
+        # update published file data and create PublishedFile for flame batch
+        published_file_data['published_file_type'] = sg_published_file_type
+        published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
+        published_file_data['path_cache'] = path_cache
+        published_file_data['code'] = os.path.basename(path_cache)
+        published_file_data['name'] = task_entity_name
         published_file = sg.create('PublishedFile', published_file_data)
         sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
@@ -2349,8 +2417,9 @@ class flameMenuPublisher(flameMenuApp):
         except:
             pass
 
-        message = 'Sucessfully published version: '
+        message = 'Version: "'
         message += version_name
+        message += '" sucessfully published.'
         self.mbox.setText(message)
         self.mbox.exec_()
 
@@ -2628,10 +2697,10 @@ def batch_render_begin(info, userData, *args, **kwargs):
     
     # get uid and make sure there's no batch with the same name
     current_batch_uid = flameBatchBlessingApp.create_batch_uid()
-    batch_file_name = flame.batch.name + '_' + current_batch_uid + '.batch'
+    batch_file_name = flame.batch.name.get_value() + '_' + current_batch_uid + '.batch'
     while os.path.isfile(batch_file_name):
         current_batch_uid = flameBatchBlessingApp.create_batch_uid()
-        batch_file_name = flame.batch.name + '_' + current_batch_uid + '.batch'
+        batch_file_name = flame.batch.name.get_value() + '_' + current_batch_uid + '.batch'
 
     # get render destinations
     render_dest = dict()
@@ -2660,7 +2729,7 @@ def batch_render_end(info, userData, *args, **kwargs):
     flameBatchBlessingApp.batch_setup_root_folder()
     flame_batch_path = flameBatchBlessingApp.root_folder
     current_batch_uid = userData.get('current_batch_uid')
-    batch_setup_name = flame.batch.name + '_' + current_batch_uid
+    batch_setup_name = flame.batch.name.get_value() + '_' + current_batch_uid
     path = os.path.join(flame_batch_path, batch_setup_name)
     if not info.get('aborted'):
         print ('saving batch %s.batch' % path)
