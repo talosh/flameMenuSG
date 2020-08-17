@@ -26,6 +26,7 @@ __version__ = 'v0.0.4'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
+
     def __init__(self):
         self.name = self.__class__.__name__
         self.bundle_name = 'flameMenuSG'
@@ -111,7 +112,6 @@ class flameAppFramework(object):
 
         return True
 
-
     def save_prefs(self):
         import pickle
 
@@ -156,6 +156,59 @@ class flameAppFramework(object):
             
         return True
 
+    class prefs_dict(dict):
+        # subclass of a dict() in order to directly link it 
+        # to main framework prefs dictionaries
+        # when accessed directly it will operate on a dictionary under a 'name'
+        # key in master_dict dictionary.
+        # master_dict = {}
+        # p = prefs(master_dict, 'app_name')
+        # p['key'] = 'value'
+        # master_dict - {'app_name': {'key', 'value'}}
+            
+        def __init__(self, master_dict, name, **kwargs):
+            self.name = name
+            self.master_dict = master_dict
+            if not self.master_dict.get(self.name):
+                self.master_dict[self.name] = {}
+            self.master_dict[self.name].__init__()
+
+        def __getitem__(self, k):
+            return self.master_dict[self.name].__getitem__()
+        
+        def __setitem__(self, k, v):
+            return self.master_dict[self.name].__setitem__(k, v)
+
+        def __delitem__(self, k):
+            return self.master_dict[self.name].__delitem__(k)
+        
+        def get(self, k, default=None):
+            return self.master_dict[self.name].get(k, default)
+        
+        def setdefault(self, k, default=None):
+            return self.master_dict[self.name].setdefault(k, default)
+
+        def pop(self, k, v=object()):
+            if v is object():
+                return self.master_dict[self.name].pop(k)
+            return self.master_dict[self.name].pop(k, v)
+        
+        def update(self, mapping=(), **kwargs):
+            self.master_dict[self.name].update(mapping, **kwargs)
+        
+        def __contains__(self, k):
+            return self.master_dict[self.name].__contains__(k)
+
+        def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
+            return type(self)(self)
+        
+        @classmethod
+        def fromkeys(cls, keys, v=None):
+            return self.master_dict[self.name].fromkeys(keys, v)
+        
+        def __repr__(self):
+            return '{0}({1})'.format(type(self).__name__, self.master_dict[self.name].__repr__())
+
 
 class flameMenuApp(object):
     def __init__(self, framework):
@@ -176,10 +229,18 @@ class flameMenuApp(object):
             self.flame = None
         
         if not self.framework.prefs.get(self.name):
-            self.prefs = {}
             self.framework.prefs[self.name] = self.prefs
         else:
             self.prefs = self.framework.prefs.get(self.name)
+
+    # preferences properties for global, user and project scopes
+
+    @property
+    def prefs_global(self):
+        return self.framework.prefs_global.get(self.name, {})
+    @prefs_global.setter
+    def prefs_global(self, value):
+        self.framework.prefs_global[self.name] = value
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -209,12 +270,20 @@ class flameShotgunConnector(object):
         self.name = self.__class__.__name__
         self.framework = framework
         self.log('waking up')
-        
+
+        # defautl values are set here
+
+        self.prefs_global = self.framework.prefs_dict(
+                self.framework.prefs_global, 
+                self.name)
+        self.prefs_global['hello'] = False
+
         self.prefs = self.framework.prefs.get(self.name, None)
         if not self.prefs:
             self.prefs = {}
             self.prefs['user signed out'] = False
-            self.framework.prefs[self.name] = self.prefs
+            # self.framework.prefs[self.name] = self.prefs
+
         
         self.sg_user = None
         self.sg_human_user = None
@@ -244,7 +313,7 @@ class flameShotgunConnector(object):
             loop.start()
         
         self.mbox = QtGui.QMessageBox()
-        
+
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
 
@@ -764,7 +833,9 @@ class flameMenuProjectconnect(flameMenuApp):
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
         flameMenuApp.__init__(self, framework)
+        
         # app defaults
+        self.prefs = {}
         if not self.prefs:
             self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
             self.prefs['flame_batch_folder'] = 'flame_batch_setups'
