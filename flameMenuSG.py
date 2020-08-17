@@ -18,86 +18,200 @@ from pprint import pformat
 import sgtk
 from sgtk.platform.qt import QtGui
 
-bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
 
 DEBUG = True
 
-__version__ = 'v0.0.3'
-
-# flameAppFramework class takes care of preferences 
-# and unpacking bundle to temporary location / cleanup on exit
+__version__ = 'v0.0.4'
 
 class flameAppFramework(object):
+    # flameAppFramework class takes care of preferences
+
     def __init__(self):
         self.name = self.__class__.__name__
-        self._bundle_name = 'flameMenuSG'
-        self._prefs = {}
-        self._bundle_location = bundle_location
+        self.bundle_name = 'flameMenuSG'
+        # self.prefs scope is limited to flame project and user
+        self.prefs = {}
+        self.prefs_user = {}
+        self.prefs_global = {}
         self.debug = DEBUG
+        
         try:
             import flame
             self.flame = flame
+            self.flame_project_name = self.flame.project.current_project.name
+            self.flame_user_name = flame.users.current_user.name
         except:
             self.flame = None
-        if self.flame:
-            flame_project_name = self.flame.project.current_project.name
-            flame_user_name = flame.users.current_user.name
-            prefs_file_name = self.bundle_name + '.' + flame_project_name + '.' + flame_user_name + '.prefs'
-            self.prefs_file_location = bundle_location + os.path.sep + prefs_file_name
-        else:
-            self.prefs_file_location = bundle_location + os.path.sep + self.bundle_name + '.prefs'
+            self.flame_project_name = None
+            self.flame_user_name = None
+        
+        import socket
+        self.hostname = socket.gethostname()
+        
+        if sys.platform == 'darwin':
+            self.prefs_folder = os.path.join(
+                os.path.expanduser('~'),
+                 'Library',
+                 'Caches',
+                 'Shotgun',
+                 self.bundle_name)
+        elif sys.startswith('linux'):
+            self.prefs_folder = os.path.join(
+                os.path.expanduser('~'),
+                '.shotgun',
+                self.bundle_name)
+
+        self.prefs_folder = os.path.join(
+            self.prefs_folder,
+            self.hostname,
+        )
 
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
 
     def log(self, message):
         if self.debug:
-            print ('[DEBUG %s] %s' % (self._bundle_name, message))
+            print ('[DEBUG %s] %s' % (self.bundle_name, message))
 
     def load_prefs(self):
         import pickle
+        
+        prefix = self.prefs_folder + os.path.sep + self.bundle_name
+        prefs_file_path = prefix + '.' + self.flame_user_name + '.' + self.flame_project_name + '.prefs'
+        prefs_user_file_path = prefix + '.' + self.flame_user_name  + '.prefs'
+        prefs_global_file_path = prefix + '.prefs'
 
         try:
-            prefs_file = open(self.prefs_file_location, 'r')
-            self._prefs = pickle.load(prefs_file)
+            prefs_file = open(prefs_file_path, 'r')
+            self.prefs = pickle.load(prefs_file)
             prefs_file.close()
-            self.log('preferences loaded from %s' % self.prefs_file_location)
-            self.log('preferences contents:\n' + pformat(self._prefs))
-            return True
+            self.log('preferences loaded from %s' % prefs_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs))
         except:
-            self.log('unable to load preferences from %s' % self.prefs_file_location)
-            return False
+            self.log('unable to load preferences from %s' % prefs_file_path)
+
+        try:
+            prefs_file = open(prefs_user_file_path, 'r')
+            self.prefs_user = pickle.load(prefs_file)
+            prefs_file.close()
+            self.log('preferences loaded from %s' % prefs_user_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_user))
+        except:
+            self.log('unable to load preferences from %s' % prefs_user_file_path)
+
+        try:
+            prefs_file = open(prefs_global_file_path, 'r')
+            self.prefs_global = pickle.load(prefs_file)
+            prefs_file.close()
+            self.log('preferences loaded from %s' % prefs_global_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_global))
+
+        except:
+            self.log('unable to load preferences from %s' % prefs_global_file_path)
+
+        return True
 
     def save_prefs(self):
         import pickle
 
+        if not os.path.isdir(self.prefs_folder):
+            try:
+                os.makedirs(self.prefs_folder)
+            except:
+                self.log('unable to create folder %s' % prefs_folder)
+                return False
+
+        prefix = self.prefs_folder + os.path.sep + self.bundle_name
+        prefs_file_path = prefix + '.' + self.flame_user_name + '.' + self.flame_project_name + '.prefs'
+        prefs_user_file_path = prefix + '.' + self.flame_user_name  + '.prefs'
+        prefs_global_file_path = prefix + '.prefs'
+
         try:
-            prefs_file = open(self.prefs_file_location, 'w')
-            pickle.dump(self._prefs, prefs_file)
+            prefs_file = open(prefs_file_path, 'w')
+            pickle.dump(self.prefs, prefs_file)
             prefs_file.close()
-            self.log('preferences saved to %s' % self.prefs_file_location)
-            self.log('preferences contents:\n' + pformat(self._prefs))
-            return True
+            self.log('preferences saved to %s' % prefs_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs))
         except:
-            self.log('unable to save preferences to %s' % self.prefs_file_location)
-            return False
+            self.log('unable to save preferences to %s' % prefs_file_path)
 
-    @property
-    def prefs(self):
-        return self._prefs
-    @prefs.setter
-    def prefs(self, value):
-        self._prefs = value
-    
-    @property
-    def bundle_name(self):
-        return self._bundle_name
+        try:
+            prefs_file = open(prefs_user_file_path, 'w')
+            pickle.dump(self.prefs_user, prefs_file)
+            prefs_file.close()
+            self.log('preferences saved to %s' % prefs_user_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_user))
+        except:
+            self.log('unable to save preferences to %s' % prefs_user_file_path)
 
-    @property
-    def bundle_location(self):
-        return self._bundle_location
+        try:
+            prefs_file = open(prefs_global_file_path, 'w')
+            pickle.dump(self.prefs_global, prefs_file)
+            prefs_file.close()
+            self.log('preferences saved to %s' % prefs_global_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_global))
+        except:
+            self.log('unable to save preferences to %s' % prefs_global_file_path)
+            
+        return True
+
+    class prefs_dict(dict):
+        # subclass of a dict() in order to directly link it 
+        # to main framework prefs dictionaries
+        # when accessed directly it will operate on a dictionary under a 'name'
+        # key in master_dict dictionary.
+        # master_dict = {}
+        # p = prefs(master_dict, 'app_name')
+        # p['key'] = 'value'
+        # master_dict - {'app_name': {'key', 'value'}}
+            
+        def __init__(self, master_dict, name, **kwargs):
+            self.name = name
+            self.master_dict = master_dict
+            if not self.master_dict.get(self.name):
+                self.master_dict[self.name] = {}
+            self.master_dict[self.name].__init__()
+
+        def __getitem__(self, k):
+            return self.master_dict[self.name].__getitem__()
         
+        def __setitem__(self, k, v):
+            return self.master_dict[self.name].__setitem__(k, v)
+
+        def __delitem__(self, k):
+            return self.master_dict[self.name].__delitem__(k)
+        
+        def get(self, k, default=None):
+            return self.master_dict[self.name].get(k, default)
+        
+        def setdefault(self, k, default=None):
+            return self.master_dict[self.name].setdefault(k, default)
+
+        def pop(self, k, v=object()):
+            if v is object():
+                return self.master_dict[self.name].pop(k)
+            return self.master_dict[self.name].pop(k, v)
+        
+        def update(self, mapping=(), **kwargs):
+            self.master_dict[self.name].update(mapping, **kwargs)
+        
+        def __contains__(self, k):
+            return self.master_dict[self.name].__contains__(k)
+
+        def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
+            return type(self)(self)
+        
+        def keys(self):
+            return self.master_dict[self.name].keys()
+
+        @classmethod
+        def fromkeys(cls, keys, v=None):
+            return self.master_dict[self.name].fromkeys(keys, v)
+        
+        def __repr__(self):
+            return '{0}({1})'.format(type(self).__name__, self.master_dict[self.name].__repr__())
+
 
 class flameMenuApp(object):
     def __init__(self, framework):
@@ -117,12 +231,10 @@ class flameMenuApp(object):
         except:
             self.flame = None
         
-        if not self.framework.prefs.get(self.name):
-            self.prefs = {}
-            self.framework.prefs[self.name] = self.prefs
-        else:
-            self.prefs = self.framework.prefs.get(self.name)
-
+        self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
+        self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
+        self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
+        
     def __getattr__(self, name):
         def method(*args, **kwargs):
             print ('calling %s' % name)
@@ -151,18 +263,20 @@ class flameShotgunConnector(object):
         self.name = self.__class__.__name__
         self.framework = framework
         self.log('waking up')
-        
-        self.prefs = self.framework.prefs.get(self.name, None)
-        if not self.prefs:
-            self.prefs = {}
-            self.prefs['user signed out'] = False
-            self.framework.prefs[self.name] = self.prefs
+
+        self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
+        self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
+        self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
+
+        # defautl values are set here
+        if not 'user signed out' in self.prefs_global.keys():
+            self.prefs_global['user signed out'] = False
         
         self.sg_user = None
         self.sg_human_user = None
         self.sg_user_name = None
         self.sg = None
-        if not self.prefs.get('user signed out', False):
+        if not self.prefs_global.get('user signed out', False):
             self.log('requesting for Shotgun user')
             self.get_user()
         
@@ -186,7 +300,7 @@ class flameShotgunConnector(object):
             loop.start()
         
         self.mbox = QtGui.QMessageBox()
-        
+
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
 
@@ -287,6 +401,8 @@ class flameShotgunConnector(object):
                             continue
                         filters = query.get('filters')
                         fields = query.get('fields')
+                        while not self.sg:
+                            time.sleep(1)
                         result = self.sg.find(entity, filters, fields)
                         self.async_cache[cache_request_uid]['result'] = result
                         results_by_hash[hash(pformat(query))] = result
@@ -317,14 +433,14 @@ class flameShotgunConnector(object):
         try:
             self.sg_user = authenticator.get_user()
         except sgtk.authentication.AuthenticationCancelled:
-            self.prefs['user signed out'] = True
+            self.prefs_global['user signed out'] = True
             return None
 
         if self.sg_user.are_credentials_expired():
             authenticator.clear_default_user()
             self.sg_user = authenticator.get_user()
         
-        self.prefs['user signed out'] = False
+        self.prefs_global['user signed out'] = False
         self.update_human_user()
         self.sg = self.sg_user.create_sg_connection()
         return self.sg_user
@@ -479,6 +595,8 @@ class flameShotgunConnector(object):
         return self.sg_storage_root
 
     def get_local_file_storages(self):
+        if not self.sg_user:
+            return []
         return self.sg.find(
             'LocalStorage',
             [],
@@ -495,7 +613,11 @@ class flameShotgunConnector(object):
         self.sg_storage_root = {}
         return False
 
+
 class flameMenuProjectconnect(flameMenuApp):
+
+    # flameMenuProjectconnect app takes care of the preferences dialog as well
+    
     def __init__(self, framework, connector):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
@@ -550,7 +672,8 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['actions'].append(menu_item)
 
         else:
-            menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
+            # menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
+            menu['name'] = self.menu_group_name + ': Link to Shotgun'
 
             menu_item = {}
             menu_item['name'] = '~ Rescan Shotgun Projects'
@@ -617,10 +740,12 @@ class flameMenuProjectconnect(flameMenuApp):
         self.rescan()
 
     def sign_in(self, *args, **kwargs):
+        self.connector.prefs_global['user signed out'] = False
         self.connector.get_user()
         self.rescan()
 
     def sign_out(self, *args, **kwargs):
+        self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
         self.rescan()
 
@@ -706,6 +831,7 @@ class flameMenuProjectconnect(flameMenuApp):
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
         flameMenuApp.__init__(self, framework)
+        
         # app defaults
         if not self.prefs:
             self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
@@ -719,13 +845,13 @@ class flameBatchBlessing(flameMenuApp):
         except:
             return False
 
+        flame_batch_name = flame.batch.name.get_value()
         current_project_name = flame.project.current_project.name
         flame_batch_path = os.path.join(
                                     self.prefs.get('flame_batch_root'),
                                     self.prefs.get('flame_batch_folder'),
                                     current_project_name,
-                                    flame.batch.name.get_value()
-                                    )
+                                    flame_batch_name)
         
         if not os.path.isdir(flame_batch_path):
             try:
@@ -1323,7 +1449,7 @@ class flameMenuBatchLoader(flameMenuApp):
         if not self.prefs:
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
-            self.prefs['menu_max_items_per_page'] = 64
+            self.prefs['menu_max_items_per_page'] = 128
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -1705,9 +1831,16 @@ class flameMenuBatchLoader(flameMenuApp):
 
 class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
-        # app configuration settings (to be moved to preferences)
-        self.flame_bug_message = True
-        self.templates = {
+        flameMenuApp.__init__(self, framework)
+        self.connector = connector
+        
+        # app defaults
+        if not self.prefs:
+            self.prefs['show_all'] = False
+            self.prefs['current_page'] = 0
+            self.prefs['menu_max_items_per_page'] = 128
+            self.prefs['flame_bug_message_shown'] = False
+            self.prefs['templates'] = {
             # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
             # {name} and {version} will be guessed from the clip name and taken from
             # number of Batch itertations as a fallback.
@@ -1721,19 +1854,12 @@ class flameMenuPublisher(flameMenuApp):
             'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
             'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
             'version_name': '{Shot}_{name}_v{version}'
-        }
-        self.flame_render_type = 'Flame Render'
-        self.flame_batch_type = 'Flame Batch File'
-        self.poster_frame = 1
+            }
+            self.prefs['flame_render_type'] = 'Flame Render'
+            self.prefs['flame_batch_type'] = 'Flame Batch File'
+            self.prefs['poster_frame'] = 1
 
-        # app constructor
-        flameMenuApp.__init__(self, framework)
-        self.connector = connector
-        if not self.prefs:
-            self.prefs['show_all'] = False
-            self.prefs['current_page'] = 0
-            self.prefs['menu_max_items_per_page'] = 64
-            self.prefs['flame_bug_message_shown'] = False
+        self.flame_bug_message = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
         
@@ -2064,6 +2190,11 @@ class flameMenuPublisher(flameMenuApp):
 
     def publish(self, entity, selection):
         
+        self.templates = self.prefs.get('templates')
+        self.flame_render_type = self.prefs.get('flame_render_type')
+        self.flame_batch_type = self.prefs.get('flame_batch_type')
+        self.poster_frame = self.prefs.get('poster_frame')
+
         # shotgun storage root resolution
         storage_root_path = None
         if not self.connector.sg_storage_root:
@@ -2571,6 +2702,83 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['flame_bug_message_shown'] = True
 
 
+        from PySide2 import QtWidgets, QtCore, QtGui
+        
+        # storage root section
+        self.connector.update_sg_storage_root()
+        def update_sg_storage_root_widget():
+            self.connector.get_storage_root_dialog()
+            storage_root.setText(self.connector.sg_storage_root.get('code'))
+            storage_root_paths.setText(
+            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
+            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
+            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
+
+        window = None
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(800, 280)
+        window.setWindowTitle(self.framework.bundle_name + ' Preferences')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
+
+        hbox_storage = QtWidgets.QHBoxLayout()
+        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
+        storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        storage_root_btn.setMinimumSize(199, 24)
+        storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
+        hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
+
+        storage_name = QtWidgets.QLabel('Current storage:', window)
+        hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
+
+        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
+        boldFont = QtGui.QFont()
+        boldFont.setBold(True)
+        storage_root.setFont(boldFont)
+        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
+
+        vbox1 = QtWidgets.QVBoxLayout()
+        vbox1.setAlignment(QtCore.Qt.AlignTop)
+        vbox1.addLayout(hbox_storage)
+
+        storage_root_paths = QtWidgets.QLabel(
+            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
+            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
+            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
+            window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox1.addWidget(storage_root_paths)
+
+        dummy = QtWidgets.QLabel('Not yet implemented', window)
+        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+
+        close_btn = QtWidgets.QPushButton('Close', window)
+        close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        close_btn.setMinimumSize(88, 24)
+        close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        close_btn.clicked.connect(window.accept)
+
+        hbox1 = QtWidgets.QHBoxLayout()
+        hbox1.addLayout(vbox1)
+        hbox1.addWidget(dummy)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(hbox1)
+        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
+
+        window.setLayout(vbox)
+        window.exec_()
+    
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
@@ -2619,7 +2827,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     apps.append(flameMenuPublisher(app_framework, shotgunConnector))
     if DEBUG:
-        print ('[DEBUG %s] loaded %s' % (app_framework.bundle_name, pformat(apps)))
+        print ('[DEBUG %s] loaded:\n%s' % (app_framework.bundle_name, pformat(apps)))
 
 def project_changed_dict(info):
     global app_framework

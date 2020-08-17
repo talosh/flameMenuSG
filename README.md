@@ -16,6 +16,11 @@ flameMenuPublisher needs at least one "Local File Storage" to be defined. This s
 as many "Local File Stoarage" records as needed in case projects are be stored in different locations.
 The file storage to use with a particular flame project can be selected via flameMenuSG preferences dialog.
 
+### Preferences
+Preferences for flameMenuSG are stored next to Shotgun preferences, \~/Library/Caches/Shotgun/flameMenuSG/<hostname> on MacOSX and \~/.shotgun/flameMenuSG/<hostname> on 
+Linux. flameMenuSG.prefs file contains global scope preferences, while flameMenuSG.<flame_user>.prefs and flameMenuSG.<flame_user>.<flame_project>.prefs are user scope and project scope preferences.
+
+
 Some things are still hardcoded so it might not work for you out of the box. If this is the case please let me know what exactly does not work for you.
 
 NOTE: Refreshing custom menus in flame is currently limited to "refresh pyton hooks".
