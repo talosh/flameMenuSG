@@ -404,7 +404,6 @@ class flameShotgunConnector(object):
                         while not self.sg:
                             time.sleep(1)
                         result = self.sg.find(entity, filters, fields)
-                        pprint (result)
                         self.async_cache[cache_request_uid]['result'] = result
                         results_by_hash[hash(pformat(query))] = result
 
@@ -616,6 +615,9 @@ class flameShotgunConnector(object):
 
 
 class flameMenuProjectconnect(flameMenuApp):
+
+    # flameMenuProjectconnect app takes care of the preferences dialog as well
+    
     def __init__(self, framework, connector):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
@@ -670,7 +672,8 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['actions'].append(menu_item)
 
         else:
-            menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
+            # menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
+            menu['name'] = self.menu_group_name + ': Link to Shotgun'
 
             menu_item = {}
             menu_item['name'] = '~ Rescan Shotgun Projects'
@@ -830,7 +833,6 @@ class flameBatchBlessing(flameMenuApp):
         flameMenuApp.__init__(self, framework)
         
         # app defaults
-        self.prefs = {}
         if not self.prefs:
             self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
             self.prefs['flame_batch_folder'] = 'flame_batch_setups'
@@ -843,13 +845,13 @@ class flameBatchBlessing(flameMenuApp):
         except:
             return False
 
+        flame_batch_name = flame.batch.name.get_value()
         current_project_name = flame.project.current_project.name
         flame_batch_path = os.path.join(
                                     self.prefs.get('flame_batch_root'),
                                     self.prefs.get('flame_batch_folder'),
                                     current_project_name,
-                                    flame.batch.name.get_value()
-                                    )
+                                    flame_batch_name)
         
         if not os.path.isdir(flame_batch_path):
             try:
@@ -1829,9 +1831,16 @@ class flameMenuBatchLoader(flameMenuApp):
 
 class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
-        # app configuration settings (to be moved to preferences)
-        self.flame_bug_message = True
-        self.templates = {
+        flameMenuApp.__init__(self, framework)
+        self.connector = connector
+        
+        # app defaults
+        if not self.prefs:
+            self.prefs['show_all'] = False
+            self.prefs['current_page'] = 0
+            self.prefs['menu_max_items_per_page'] = 128
+            self.prefs['flame_bug_message_shown'] = False
+            self.prefs['templates'] = {
             # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
             # {name} and {version} will be guessed from the clip name and taken from
             # number of Batch itertations as a fallback.
@@ -1845,19 +1854,12 @@ class flameMenuPublisher(flameMenuApp):
             'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
             'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
             'version_name': '{Shot}_{name}_v{version}'
-        }
-        self.flame_render_type = 'Flame Render'
-        self.flame_batch_type = 'Flame Batch File'
-        self.poster_frame = 1
+            }
+            self.prefs['flame_render_type'] = 'Flame Render'
+            self.prefs['flame_batch_type'] = 'Flame Batch File'
+            self.prefs['poster_frame'] = 1
 
-        # app constructor
-        flameMenuApp.__init__(self, framework)
-        self.connector = connector
-        if not self.prefs:
-            self.prefs['show_all'] = False
-            self.prefs['current_page'] = 0
-            self.prefs['menu_max_items_per_page'] = 128
-            self.prefs['flame_bug_message_shown'] = False
+        self.flame_bug_message = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
         
@@ -2188,6 +2190,11 @@ class flameMenuPublisher(flameMenuApp):
 
     def publish(self, entity, selection):
         
+        self.templates = self.prefs.get('templates')
+        self.flame_render_type = self.prefs.get('flame_render_type')
+        self.flame_batch_type = self.prefs.get('flame_batch_type')
+        self.poster_frame = self.prefs.get('poster_frame')
+
         # shotgun storage root resolution
         storage_root_path = None
         if not self.connector.sg_storage_root:
@@ -2695,6 +2702,83 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['flame_bug_message_shown'] = True
 
 
+        from PySide2 import QtWidgets, QtCore, QtGui
+        
+        # storage root section
+        self.connector.update_sg_storage_root()
+        def update_sg_storage_root_widget():
+            self.connector.get_storage_root_dialog()
+            storage_root.setText(self.connector.sg_storage_root.get('code'))
+            storage_root_paths.setText(
+            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
+            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
+            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
+
+        window = None
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(800, 280)
+        window.setWindowTitle(self.framework.bundle_name + ' Preferences')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
+
+        hbox_storage = QtWidgets.QHBoxLayout()
+        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
+        storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        storage_root_btn.setMinimumSize(199, 24)
+        storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
+        hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
+
+        storage_name = QtWidgets.QLabel('Current storage:', window)
+        hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
+
+        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
+        boldFont = QtGui.QFont()
+        boldFont.setBold(True)
+        storage_root.setFont(boldFont)
+        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
+
+        vbox1 = QtWidgets.QVBoxLayout()
+        vbox1.setAlignment(QtCore.Qt.AlignTop)
+        vbox1.addLayout(hbox_storage)
+
+        storage_root_paths = QtWidgets.QLabel(
+            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
+            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
+            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
+            window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox1.addWidget(storage_root_paths)
+
+        dummy = QtWidgets.QLabel('Not yet implemented', window)
+        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+
+        close_btn = QtWidgets.QPushButton('Close', window)
+        close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        close_btn.setMinimumSize(88, 24)
+        close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        close_btn.clicked.connect(window.accept)
+
+        hbox1 = QtWidgets.QHBoxLayout()
+        hbox1.addLayout(vbox1)
+        hbox1.addWidget(dummy)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(hbox1)
+        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
+
+        window.setLayout(vbox)
+        window.exec_()
+    
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
@@ -2743,7 +2827,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     apps.append(flameMenuPublisher(app_framework, shotgunConnector))
     if DEBUG:
-        print ('[DEBUG %s] loaded %s' % (app_framework.bundle_name, pformat(apps)))
+        print ('[DEBUG %s] loaded:\n%s' % (app_framework.bundle_name, pformat(apps)))
 
 def project_changed_dict(info):
     global app_framework
