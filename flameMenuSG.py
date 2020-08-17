@@ -202,6 +202,9 @@ class flameAppFramework(object):
         def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
             return type(self)(self)
         
+        def keys(self):
+            return self.master_dict[self.name].keys()
+
         @classmethod
         def fromkeys(cls, keys, v=None):
             return self.master_dict[self.name].fromkeys(keys, v)
@@ -228,20 +231,10 @@ class flameMenuApp(object):
         except:
             self.flame = None
         
-        if not self.framework.prefs.get(self.name):
-            self.framework.prefs[self.name] = self.prefs
-        else:
-            self.prefs = self.framework.prefs.get(self.name)
-
-    # preferences properties for global, user and project scopes
-
-    @property
-    def prefs_global(self):
-        return self.framework.prefs_global.get(self.name, {})
-    @prefs_global.setter
-    def prefs_global(self, value):
-        self.framework.prefs_global[self.name] = value
-
+        self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
+        self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
+        self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
+        
     def __getattr__(self, name):
         def method(*args, **kwargs):
             print ('calling %s' % name)
@@ -271,25 +264,19 @@ class flameShotgunConnector(object):
         self.framework = framework
         self.log('waking up')
 
+        self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
+        self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
+        self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
+
         # defautl values are set here
-
-        self.prefs_global = self.framework.prefs_dict(
-                self.framework.prefs_global, 
-                self.name)
-        self.prefs_global['hello'] = False
-
-        self.prefs = self.framework.prefs.get(self.name, None)
-        if not self.prefs:
-            self.prefs = {}
-            self.prefs['user signed out'] = False
-            # self.framework.prefs[self.name] = self.prefs
-
+        if not 'user signed out' in self.prefs_global.keys():
+            self.prefs_global['user signed out'] = False
         
         self.sg_user = None
         self.sg_human_user = None
         self.sg_user_name = None
         self.sg = None
-        if not self.prefs.get('user signed out', False):
+        if not self.prefs_global.get('user signed out', False):
             self.log('requesting for Shotgun user')
             self.get_user()
         
@@ -414,7 +401,10 @@ class flameShotgunConnector(object):
                             continue
                         filters = query.get('filters')
                         fields = query.get('fields')
+                        while not self.sg:
+                            time.sleep(1)
                         result = self.sg.find(entity, filters, fields)
+                        pprint (result)
                         self.async_cache[cache_request_uid]['result'] = result
                         results_by_hash[hash(pformat(query))] = result
 
@@ -444,14 +434,14 @@ class flameShotgunConnector(object):
         try:
             self.sg_user = authenticator.get_user()
         except sgtk.authentication.AuthenticationCancelled:
-            self.prefs['user signed out'] = True
+            self.prefs_global['user signed out'] = True
             return None
 
         if self.sg_user.are_credentials_expired():
             authenticator.clear_default_user()
             self.sg_user = authenticator.get_user()
         
-        self.prefs['user signed out'] = False
+        self.prefs_global['user signed out'] = False
         self.update_human_user()
         self.sg = self.sg_user.create_sg_connection()
         return self.sg_user
@@ -606,6 +596,8 @@ class flameShotgunConnector(object):
         return self.sg_storage_root
 
     def get_local_file_storages(self):
+        if not self.sg_user:
+            return []
         return self.sg.find(
             'LocalStorage',
             [],
@@ -621,6 +613,7 @@ class flameShotgunConnector(object):
 
         self.sg_storage_root = {}
         return False
+
 
 class flameMenuProjectconnect(flameMenuApp):
     def __init__(self, framework, connector):
@@ -744,10 +737,12 @@ class flameMenuProjectconnect(flameMenuApp):
         self.rescan()
 
     def sign_in(self, *args, **kwargs):
+        self.connector.prefs_global['user signed out'] = False
         self.connector.get_user()
         self.rescan()
 
     def sign_out(self, *args, **kwargs):
+        self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
         self.rescan()
 
