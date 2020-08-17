@@ -18,86 +18,144 @@ from pprint import pformat
 import sgtk
 from sgtk.platform.qt import QtGui
 
-bundle_location = '/var/tmp'
 menu_group_name = 'Menu(SG)'
 
 DEBUG = True
 
-__version__ = 'v0.0.3'
-
-# flameAppFramework class takes care of preferences 
-# and unpacking bundle to temporary location / cleanup on exit
+__version__ = 'v0.0.4'
 
 class flameAppFramework(object):
+    # flameAppFramework class takes care of preferences
     def __init__(self):
         self.name = self.__class__.__name__
-        self._bundle_name = 'flameMenuSG'
-        self._prefs = {}
-        self._bundle_location = bundle_location
+        self.bundle_name = 'flameMenuSG'
+        # self.prefs scope is limited to flame project and user
+        self.prefs = {}
+        self.prefs_user = {}
+        self.prefs_global = {}
         self.debug = DEBUG
+        
         try:
             import flame
             self.flame = flame
+            self.flame_project_name = self.flame.project.current_project.name
+            self.flame_user_name = flame.users.current_user.name
         except:
             self.flame = None
-        if self.flame:
-            flame_project_name = self.flame.project.current_project.name
-            flame_user_name = flame.users.current_user.name
-            prefs_file_name = self.bundle_name + '.' + flame_project_name + '.' + flame_user_name + '.prefs'
-            self.prefs_file_location = bundle_location + os.path.sep + prefs_file_name
-        else:
-            self.prefs_file_location = bundle_location + os.path.sep + self.bundle_name + '.prefs'
+            self.flame_project_name = None
+            self.flame_user_name = None
+        
+        import socket
+        self.hostname = socket.gethostname()
+        
+        if sys.platform == 'darwin':
+            self.prefs_folder = os.path.join(
+                os.path.expanduser('~'),
+                 'Library',
+                 'Caches',
+                 'Shotgun',
+                 self.bundle_name)
+        elif sys.startswith('linux'):
+            self.prefs_folder = os.path.join(
+                os.path.expanduser('~'),
+                '.shotgun',
+                self.bundle_name)
+
+        self.prefs_folder = os.path.join(
+            self.prefs_folder,
+            self.hostname,
+        )
 
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
 
     def log(self, message):
         if self.debug:
-            print ('[DEBUG %s] %s' % (self._bundle_name, message))
+            print ('[DEBUG %s] %s' % (self.bundle_name, message))
 
     def load_prefs(self):
         import pickle
+        
+        prefix = self.prefs_folder + os.path.sep + self.bundle_name
+        prefs_file_path = prefix + '.' + self.flame_user_name + '.' + self.flame_project_name + '.prefs'
+        prefs_user_file_path = prefix + '.' + self.flame_user_name  + '.prefs'
+        prefs_global_file_path = prefix + '.prefs'
 
         try:
-            prefs_file = open(self.prefs_file_location, 'r')
-            self._prefs = pickle.load(prefs_file)
+            prefs_file = open(prefs_file_path, 'r')
+            self.prefs = pickle.load(prefs_file)
             prefs_file.close()
-            self.log('preferences loaded from %s' % self.prefs_file_location)
-            self.log('preferences contents:\n' + pformat(self._prefs))
-            return True
+            self.log('preferences loaded from %s' % prefs_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs))
         except:
-            self.log('unable to load preferences from %s' % self.prefs_file_location)
-            return False
+            self.log('unable to load preferences from %s' % prefs_file_path)
+
+        try:
+            prefs_file = open(prefs_user_file_path, 'r')
+            self.prefs_user = pickle.load(prefs_file)
+            prefs_file.close()
+            self.log('preferences loaded from %s' % prefs_user_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_user))
+        except:
+            self.log('unable to load preferences from %s' % prefs_user_file_path)
+
+        try:
+            prefs_file = open(prefs_global_file_path, 'r')
+            self.prefs_global = pickle.load(prefs_file)
+            prefs_file.close()
+            self.log('preferences loaded from %s' % prefs_global_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_global))
+
+        except:
+            self.log('unable to load preferences from %s' % prefs_global_file_path)
+
+        return True
+
 
     def save_prefs(self):
         import pickle
 
+        if not os.path.isdir(self.prefs_folder):
+            try:
+                os.makedirs(self.prefs_folder)
+            except:
+                self.log('unable to create folder %s' % prefs_folder)
+                return False
+
+        prefix = self.prefs_folder + os.path.sep + self.bundle_name
+        prefs_file_path = prefix + '.' + self.flame_user_name + '.' + self.flame_project_name + '.prefs'
+        prefs_user_file_path = prefix + '.' + self.flame_user_name  + '.prefs'
+        prefs_global_file_path = prefix + '.prefs'
+
         try:
-            prefs_file = open(self.prefs_file_location, 'w')
-            pickle.dump(self._prefs, prefs_file)
+            prefs_file = open(prefs_file_path, 'w')
+            pickle.dump(self.prefs, prefs_file)
             prefs_file.close()
-            self.log('preferences saved to %s' % self.prefs_file_location)
-            self.log('preferences contents:\n' + pformat(self._prefs))
-            return True
+            self.log('preferences saved to %s' % prefs_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs))
         except:
-            self.log('unable to save preferences to %s' % self.prefs_file_location)
-            return False
+            self.log('unable to save preferences to %s' % prefs_file_path)
 
-    @property
-    def prefs(self):
-        return self._prefs
-    @prefs.setter
-    def prefs(self, value):
-        self._prefs = value
-    
-    @property
-    def bundle_name(self):
-        return self._bundle_name
+        try:
+            prefs_file = open(prefs_user_file_path, 'w')
+            pickle.dump(self.prefs_user, prefs_file)
+            prefs_file.close()
+            self.log('preferences saved to %s' % prefs_user_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_user))
+        except:
+            self.log('unable to save preferences to %s' % prefs_user_file_path)
 
-    @property
-    def bundle_location(self):
-        return self._bundle_location
-        
+        try:
+            prefs_file = open(prefs_global_file_path, 'w')
+            pickle.dump(self.prefs_global, prefs_file)
+            prefs_file.close()
+            self.log('preferences saved to %s' % prefs_global_file_path)
+            self.log('preferences contents:\n' + pformat(self.prefs_global))
+        except:
+            self.log('unable to save preferences to %s' % prefs_global_file_path)
+            
+        return True
+
 
 class flameMenuApp(object):
     def __init__(self, framework):
@@ -1323,7 +1381,7 @@ class flameMenuBatchLoader(flameMenuApp):
         if not self.prefs:
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
-            self.prefs['menu_max_items_per_page'] = 64
+            self.prefs['menu_max_items_per_page'] = 128
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -1732,7 +1790,7 @@ class flameMenuPublisher(flameMenuApp):
         if not self.prefs:
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
-            self.prefs['menu_max_items_per_page'] = 64
+            self.prefs['menu_max_items_per_page'] = 128
             self.prefs['flame_bug_message_shown'] = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
