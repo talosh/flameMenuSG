@@ -18,8 +18,8 @@ The file storage to use with a particular flame project can be selected via flam
 
 ### Preferences
 Preferences for flameMenuSG are stored next to Shotgun preferences, 
-on MacOSX it is "~/Library/Caches/Shotgun/flameMenuSG/<hostname>" and on 
-Linux "~/.shotgun/flameMenuSG/<hostname>". flameMenuSG.prefs file contains global scope preferences, while flameMenuSG.<flame_user>.prefs and flameMenuSG.<flame_user>.<flame_project>.prefs are user scope and project scope preferences.
+on MacOSX it is \~/Library/Caches/Shotgun/flameMenuSG/<hostname> and on 
+Linux \~/.shotgun/flameMenuSG/<hostname>. flameMenuSG.prefs file contains global scope preferences, while flameMenuSG.<flame_user>.prefs and flameMenuSG.<flame_user>.<flame_project>.prefs are user scope and project scope preferences.
 
 
 Some things are still hardcoded so it might not work for you out of the box. If this is the case please let me know what exactly does not work for you.
