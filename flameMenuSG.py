@@ -19,7 +19,6 @@ import sgtk
 from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-
 DEBUG = True
 
 __version__ = 'v0.0.5'
@@ -768,7 +767,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         window = None
         window = QtWidgets.QDialog()
-        window.setMinimumSize(800, 260)
+        window.setMinimumSize(1024, 260)
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
@@ -777,69 +776,186 @@ class flameMenuProjectconnect(flameMenuApp):
         screen_res = QtWidgets.QDesktopWidget().screenGeometry()
         window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
 
-        # apps selector preferences module
+        # Main Preferences window HBox
+
+        hbox_main = QtWidgets.QHBoxLayout()
+        hbox_main.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Modules: apps selector preferences block
+        # Modules: apps are hardcoded at the moment
+
+        # Modules: Button functions
 
         vbox_apps = QtWidgets.QVBoxLayout()
-        vbox_apps.setAlignment(QtCore.Qt.AlignTop)
+        vbox_apps.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+
+        # Modules: Label
 
         lbl_modules = QtWidgets.QLabel('Modules', window)
         lbl_modules.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_modules.setMinimumSize(100, 28)
+        lbl_modules.setMinimumSize(168, 28)
         lbl_modules.setAlignment(QtCore.Qt.AlignCenter)
+        vbox_apps.addWidget(lbl_modules)
+
+        # Modules: Selection buttons
+
+        # Modules: General preferences button
+
+        hbox_General = QtWidgets.QHBoxLayout()
+        hbox_General.setAlignment(QtCore.Qt.AlignLeft)
+        btn_General = QtWidgets.QPushButton('General', window)
+        btn_General.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_General.setMinimumSize(168, 28)
+        btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        hbox_General.addWidget(btn_General)
+        vbox_apps.addLayout(hbox_General, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameMenuCreate button
+
+        hbox_CreateShot = QtWidgets.QHBoxLayout()
+        hbox_CreateShot.setAlignment(QtCore.Qt.AlignLeft)
+        btn_CreateShot = QtWidgets.QPushButton('Create Shot / Asset', window)
+        btn_CreateShot.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_CreateShot.setMinimumSize(168, 28)
+        btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_CreateShot_light = QtWidgets.QLabel('', window)
+        btn_CreateShot_light.setMinimumSize(10, 28)
+        btn_CreateShot_light.setMaximumSize(10, 28)
+        btn_CreateShot_light.setStyleSheet('background-color: #647db2')
+        hbox_CreateShot.addWidget(btn_CreateShot)
+        hbox_CreateShot.addWidget(btn_CreateShot_light)
+        vbox_apps.addLayout(hbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameMenuBatchBlessing button
 
         hbox_BatchBlessing = QtWidgets.QHBoxLayout()
         btn_BatchBlessing = QtWidgets.QPushButton('Batch Linking', window)
         btn_BatchBlessing.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_BatchBlessing.setMinimumSize(120, 24)
+        btn_BatchBlessing.setMinimumSize(168, 28)
         btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
             'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
         btn_BatchBlessing.setCheckable(True)
         btn_BatchBlessing.setChecked(True)
         btn_BatchBlessing_light = QtWidgets.QLabel('', window)
-        btn_BatchBlessing_light.setMinimumSize(10, 24)
-        btn_BatchBlessing_light.setMaximumSize(10, 24)
+        btn_BatchBlessing_light.setMinimumSize(10, 28)
+        btn_BatchBlessing_light.setMaximumSize(10, 28)
         btn_BatchBlessing_light.setStyleSheet('background-color: #647db2')
         hbox_BatchBlessing.addWidget(btn_BatchBlessing)
         hbox_BatchBlessing.addWidget(btn_BatchBlessing_light)
+        vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
 
+        # Modules: flameMenuBatchLoader button
+        
         hbox_BatchLoader = QtWidgets.QHBoxLayout()
         hbox_BatchLoader.setAlignment(QtCore.Qt.AlignLeft)
         btn_BatchLoader = QtWidgets.QPushButton('Batch Loader', window)
         btn_BatchLoader.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_BatchLoader.setMinimumSize(120, 24)
+        btn_BatchLoader.setMinimumSize(168, 28)
         btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
             'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-        # btn_BatchLoader.setStyleSheet('QPushButton {color: #ffffff; background-color: #9a9a9a; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-        #                        'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_BatchLoader.setCheckable(True)                 
-        btn_BatchLoader.setChecked(True)
         btn_BatchLoader_light = QtWidgets.QLabel('', window)
-        btn_BatchLoader_light.setMinimumSize(10, 24)
-        btn_BatchLoader_light.setMaximumSize(10, 24)
+        btn_BatchLoader_light.setMinimumSize(10, 28)
+        btn_BatchLoader_light.setMaximumSize(10, 28)
         btn_BatchLoader_light.setStyleSheet('background-color: #647db2')
         hbox_BatchLoader.addWidget(btn_BatchLoader)
         hbox_BatchLoader.addWidget(btn_BatchLoader_light)
-
-        chkbox_NewBatch = QtWidgets.QCheckBox('New Batch', window)
-        chkbox_Publisher = QtWidgets.QCheckBox('Menu Publish', window)
-        chkbox_CreateAsset = QtWidgets.QCheckBox('Create Asset', window)
-        chkbox_CreateShot = QtWidgets.QCheckBox('Create Shot', window)
-        chkbox_Superclips = QtWidgets.QCheckBox('Superclips', window)
-        
-        vbox_apps.addWidget(lbl_modules)
-        vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
         vbox_apps.addLayout(hbox_BatchLoader, alignment = QtCore.Qt.AlignLeft)
-        vbox_apps.addWidget(chkbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
-        vbox_apps.addWidget(chkbox_Publisher, alignment = QtCore.Qt.AlignLeft)
-        vbox_apps.addWidget(chkbox_CreateAsset, alignment = QtCore.Qt.AlignLeft)
-        vbox_apps.addWidget(chkbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
-        vbox_apps.addWidget(chkbox_Superclips, alignment = QtCore.Qt.AlignLeft)
 
+
+        # Modules: flameMenuNewBatch button
+
+        hbox_NewBatch = QtWidgets.QHBoxLayout()
+        hbox_NewBatch.setAlignment(QtCore.Qt.AlignLeft)
+        btn_NewBatch = QtWidgets.QPushButton('New Batch', window)
+        btn_NewBatch.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_NewBatch.setMinimumSize(168, 28)
+        btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        btn_NewBatch.setCheckable(True)                 
+        btn_NewBatch_light = QtWidgets.QLabel('', window)
+        btn_NewBatch_light.setMinimumSize(10, 28)
+        btn_NewBatch_light.setMaximumSize(10, 28)
+        btn_NewBatch_light.setStyleSheet('background-color: #647db2')
+        hbox_NewBatch.addWidget(btn_NewBatch)
+        hbox_NewBatch.addWidget(btn_NewBatch_light)
+        vbox_apps.addLayout(hbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameMenuPublisher button
+
+        hbox_Publish = QtWidgets.QHBoxLayout()
+        hbox_Publish.setAlignment(QtCore.Qt.AlignLeft)
+        btn_Publish = QtWidgets.QPushButton('Menu Publish', window)
+        btn_Publish.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Publish.setMinimumSize(168, 28)
+        btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        #    'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        btn_Publish_light = QtWidgets.QLabel('', window)
+        btn_Publish_light.setMinimumSize(10, 28)
+        btn_Publish_light.setMaximumSize(10, 28)
+        btn_Publish_light.setStyleSheet('background-color: #647db2')
+        hbox_Publish.addWidget(btn_Publish)
+        hbox_Publish.addWidget(btn_Publish_light)
+        vbox_apps.addLayout(hbox_Publish, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameSuperclips button
+
+        hbox_Superclips = QtWidgets.QHBoxLayout()
+        hbox_Superclips.setAlignment(QtCore.Qt.AlignLeft)
+        btn_Superclips = QtWidgets.QPushButton('Superclips', window)
+        btn_Superclips.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Superclips.setMinimumSize(168, 28)
+        btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        btn_Superclips.setCheckable(True)                 
+        btn_Superclips.setChecked(True)
+        btn_Superclips_light = QtWidgets.QLabel('', window)
+        btn_Superclips_light.setMinimumSize(10, 28)
+        btn_Superclips_light.setMaximumSize(10, 28)
+        btn_Superclips_light.setStyleSheet('background-color: #647db2')
+        hbox_Superclips.addWidget(btn_Superclips)
+        hbox_Superclips.addWidget(btn_Superclips_light)
+        vbox_apps.addLayout(hbox_Superclips, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: End of Modules section
+        hbox_main.addLayout(vbox_apps)
+
+        # Vertical separation line
+        
+        vertical_sep_01 = QtWidgets.QLabel('', window)
+        vertical_sep_01.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
+        vertical_sep_01.setStyleSheet('QFrame {color: #444444}')
+        hbox_main.addWidget(vertical_sep_01)
+
+        # Publish section:
+        # Publish: main VBox
+        vbox_publish = QtWidgets.QVBoxLayout()
+        vbox_publish.setAlignment(QtCore.Qt.AlignTop)
+
+        # Publish: hbox for storage root and export presets
+        hbox_storage_root = QtWidgets.QHBoxLayout()
+        hbox_storage_root.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Publish: StorageRoot section
+
+        vbox_storage_root = QtWidgets.QVBoxLayout()
+        vbox_storage_root.setAlignment(QtCore.Qt.AlignTop)
+        
+        # Publish: StorageRoot: label
+
+        lbl_storage_root = QtWidgets.QLabel('Local File Storage', window)
+        lbl_storage_root.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_storage_root.setMinimumSize(100, 28)
+        lbl_storage_root.setAlignment(QtCore.Qt.AlignCenter)
+
+        vbox_storage_root.addWidget(lbl_storage_root)
+
+        # Publish: StorageRoot: button and storage root name block
 
         hbox_storage = QtWidgets.QHBoxLayout()
         storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
         storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        storage_root_btn.setMinimumSize(199, 24)
+        storage_root_btn.setMinimumSize(199, 28)
         storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         storage_root_btn.clicked.connect(update_sg_storage_root_widget)
@@ -853,10 +969,9 @@ class flameMenuProjectconnect(flameMenuApp):
         boldFont.setBold(True)
         storage_root.setFont(boldFont)
         hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
+        vbox_storage_root.addLayout(hbox_storage)
 
-        vbox1 = QtWidgets.QVBoxLayout()
-        vbox1.setAlignment(QtCore.Qt.AlignTop)
-        vbox1.addLayout(hbox_storage)
+        # Publish: StorageRoot: Paths info label
 
         storage_root_paths = QtWidgets.QLabel(
             'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
@@ -865,36 +980,268 @@ class flameMenuProjectconnect(flameMenuApp):
             window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
-        vbox1.addWidget(storage_root_paths)
+        vbox_storage_root.addWidget(storage_root_paths)
+        hbox_storage_root.addLayout(vbox_storage_root)
+
+        # Publish: StorageRoot: end of section
+
+        # Publish: ExportPresets section
+
+        vbox_export_preset = QtWidgets.QVBoxLayout()
+        vbox_export_preset.setAlignment(QtCore.Qt.AlignTop)
+
+        # Publish: ExportPresets: label
+
+        lbl_export_preset = QtWidgets.QLabel('Export Preset', window)
+        lbl_export_preset.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_export_preset.setMinimumSize(600, 28)
+        lbl_export_preset.setAlignment(QtCore.Qt.AlignCenter)
+        vbox_export_preset.addWidget(lbl_export_preset)
+
+        # Publish: ExportPresets: Change, Default buttons and preset name HBox
+
+        hbox_export_preset = QtWidgets.QHBoxLayout()
+        hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        # Publish: ExportPresets: Change button
+        
+        btn_changePreset = QtWidgets.QPushButton('Change', window)
+        btn_changePreset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_changePreset.setMinimumSize(88, 28)
+        btn_changePreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        hbox_export_preset.addWidget(btn_changePreset)
+
+        # Publish: ExportPresets: Default button and menu
+
+        btn_defaultPreset = QtWidgets.QPushButton('Default', window)
+        btn_defaultPreset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_defaultPreset.setMinimumSize(88, 28)
+        btn_defaultPreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_defaultPreset_menu = QtWidgets.QMenu()
+        btn_defaultPreset_menu.addAction('Default EXR Export Preset')
+        btn_defaultPreset_menu.addAction('Default DPX Export Preset')
+        btn_defaultPreset_menu.addAction('Default MOV Export Preset')
+        btn_defaultPreset_menu.addAction('Default MXF Export Preset')
+        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
+        hbox_export_preset.addWidget(btn_defaultPreset)
+
+        # Publish: ExportPresets: Format Preset name
+
+        presetLabel = QtWidgets.QLabel('Format Preset: ', window)
+        hbox_export_preset.addWidget(presetLabel, alignment = QtCore.Qt.AlignLeft)
+
+        # Publish: ExportPresets: Export Preset name
+
+        presetName = QtWidgets.QLabel('Export Preset Name')
+        presetName_boldFont = QtGui.QFont()
+        presetName_boldFont.setBold(True)
+        presetName.setFont(presetName_boldFont)
+        hbox_export_preset.addWidget(presetName)
+        
+        # Publish: ExportPresets: End of Change, Default buttons and preset name HBox
+        vbox_export_preset.addLayout(hbox_export_preset)
+
+        # Publish: ExportPresets: Exoprt preset details
+        
+        presetDetails = QtWidgets.QLabel('Some preset details goes here\n\n',window)
+        presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
+
+        vbox_export_preset.addWidget(presetDetails)
+
+        # Publish: ExportPresets: End of Export Preset section
+        hbox_storage_root.addLayout(vbox_export_preset)
+
+        # Publish: End of upper storage root and export preset section
+        vbox_publish.addLayout(hbox_storage_root)
+
+        # Publish: Templates: start of section
+        vbox_templates = QtWidgets.QVBoxLayout()
+        vbox_templates.setAlignment(QtCore.Qt.AlignTop)
+
+        # Publish: Templates: label
+
+        lbl_templates = QtWidgets.QLabel('Publishing Templates', window)
+        lbl_templates.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_templates.setMinimumSize(800, 28)
+        lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
+        vbox_templates.addWidget(lbl_templates)
+
+        # Publish: Templates: Shot/Asset Publish template
+        # Publish: Templates: hbox for Shot/Asset Publish template
+
+        hbox_shot_publish = QtWidgets.QHBoxLayout()
+        hbox_shot_publish.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Publish: Templates: Entity toggle button
+
+        btn_Entity = QtWidgets.QPushButton('Shot', window)
+        btn_Entity.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Entity.setMinimumSize(88, 28)
+        btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_Entity_menu = QtWidgets.QMenu()
+        btn_Entity_menu.addAction('Shot')
+        btn_Entity_menu.addAction('Asset')
+        btn_Entity.setMenu(btn_Entity_menu)
+
+        hbox_shot_publish.addWidget(btn_Entity)
+
+        # Publish: Templates: Shot Publish default button
+
+        btn_shotDefault = QtWidgets.QPushButton('Default', window)
+        btn_shotDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotDefault.setMinimumSize(88, 28)
+        btn_shotDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        hbox_shot_publish.addWidget(btn_shotDefault)
+        
+        # Publish: Templates: Shot Publish template field
+
+        txt_shot = QtWidgets.QLineEdit('TEST')
+        txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shot.setMinimumSize(400, 28)
+        txt_shot.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        hbox_shot_publish.addWidget(txt_shot)
+
+        btn_shotFields = QtWidgets.QPushButton('Fields', window)
+        btn_shotFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotFields.setMinimumSize(88, 28)
+        btn_shotFields_menu = QtWidgets.QMenu()
+        btn_shotFields_menu.addAction('Field 1')
+        btn_shotFields_menu.addAction('Field 2')
+        btn_shotFields.setMenu(btn_shotFields_menu)
+        hbox_shot_publish.addWidget(btn_shotFields)
+
+        vbox_templates.addLayout(hbox_shot_publish)
+
+        # Publish: Templates: Shot/Asset .batch Publish template
+        # Publish: Templates: hbox for Shot/Asset .batch Publish template
+
+        hbox_batch_publish = QtWidgets.QHBoxLayout()
+        hbox_batch_publish.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        # Publish: Templates: Batch template label
+
+        lbl_batch_template = QtWidgets.QLabel('Shot Batch', window)
+        lbl_batch_template.setStyleSheet('QFrame {color: #989898}')
+        lbl_batch_template.setMinimumSize(88, 28)
+        lbl_batch_template.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        hbox_batch_publish.addWidget(lbl_batch_template)
+
+        # Publish: Templates: Batch template default button
+
+        btn_batchDefault = QtWidgets.QPushButton('Default', window)
+        btn_batchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchDefault.setMinimumSize(88, 28)
+        btn_batchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        hbox_batch_publish.addWidget(btn_batchDefault)
+        
+        # Publish: Templates: Batch template text field
+
+        txt_batch = QtWidgets.QLineEdit('TEST')
+        txt_batch.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_batch.setMinimumSize(400, 28)
+        txt_batch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        hbox_batch_publish.addWidget(txt_batch)
+
+        # Publish: Templates: Batch template fields button
+
+        btn_batchFields = QtWidgets.QPushButton('Fields', window)
+        btn_batchFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_batchFields.setMinimumSize(88, 28)
+        btn_batchFields_menu = QtWidgets.QMenu()
+        btn_batchFields_menu.addAction('Field 1')
+        btn_batchFields_menu.addAction('Field 2')
+        btn_batchFields.setMenu(btn_batchFields_menu)
+        hbox_batch_publish.addWidget(btn_batchFields)
+
+        vbox_templates.addLayout(hbox_batch_publish)
+
+        # Publish: Templates: Shot/Asset Version Publish template
+        # Publish: Templates: hbox for Shot/Asset Version Publish template
+
+        hbox_version_publish = QtWidgets.QHBoxLayout()
+        hbox_version_publish.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Publish: Templates: Shot/Asset Version template label
+
+        lbl_version_template = QtWidgets.QLabel('Version', window)
+        lbl_version_template.setStyleSheet('QFrame {color: #989898}')
+        lbl_version_template.setMinimumSize(88, 28)
+        lbl_version_template.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        hbox_version_publish.addWidget(lbl_version_template)
+
+        # Publish: Templates: Shot/Asset Version Publish default button
+
+        btn_versionDefault = QtWidgets.QPushButton('Default', window)
+        btn_versionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_versionDefault.setMinimumSize(88, 28)
+        btn_versionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        hbox_version_publish.addWidget(btn_versionDefault)
+
+        # Publish: Templates: Batch template text field
+
+        txt_version = QtWidgets.QLineEdit('TEST')
+        txt_version.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_version.setMinimumSize(400, 28)
+        txt_version.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        hbox_version_publish.addWidget(txt_version)
+
+        # Publish: Templates: Version template fields button
+
+        btn_versionFields = QtWidgets.QPushButton('Fields', window)
+        btn_versionFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_versionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_versionFields.setMinimumSize(88, 28)
+        btn_versionFields_menu = QtWidgets.QMenu()
+        btn_versionFields_menu.addAction('Field 5')
+        btn_versionFields_menu.addAction('Field 6')
+        btn_versionFields.setMenu(btn_batchFields_menu)
+        hbox_version_publish.addWidget(btn_versionFields)
+
+        lbl_version_spacer = QtWidgets.QLabel('', window)
+        lbl_version_spacer.setMinimumSize(200, 28)
+        hbox_version_publish.addWidget(lbl_version_spacer)
+
+        vbox_templates.addLayout(hbox_version_publish)    
+        vbox_publish.addLayout(vbox_templates)
+
+        hbox_main.addLayout(vbox_publish, alignment = QtCore.Qt.AlignLeft)
 
         #dummy = QtWidgets.QLabel('Not yet implemented', window)
         #dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         #dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
 
-        vertical_sep = QtWidgets.QLabel('', window)
-        vertical_sep.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
         #vertical_sep_01 = QtWidgets.QLabel('', window)
         #vertical_sep_01.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
 
 
         close_btn = QtWidgets.QPushButton('Close', window)
         close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        close_btn.setMinimumSize(88, 24)
+        close_btn.setMinimumSize(88, 28)
         close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         close_btn.clicked.connect(window.accept)
 
-        hbox1 = QtWidgets.QHBoxLayout()
-        hbox1.setAlignment(QtCore.Qt.AlignLeft)
-        hbox1.addLayout(vbox_apps)
-        hbox1.addWidget(vertical_sep)
-        #hbox1.addWidget(dummy)
-        #hbox1.addWidget(vertical_sep_01)
-        hbox1.addLayout(vbox1, alignment = QtCore.Qt.AlignLeft)
 
         vbox = QtWidgets.QVBoxLayout()
         vbox.setMargin(20)
-        vbox.addLayout(hbox1)
+        vbox.addLayout(hbox_main)
         vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
 
         window.setLayout(vbox)
@@ -2877,17 +3224,21 @@ apps = []
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
     if apps:
-        if app_framework:
-            print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
+        if DEBUG:
+            print ('[DEBUG %s] unloading apps:\n%s' % ('flameMenuSG', pformat(apps)))
+        while len(apps):
+            app = apps.pop()
             if DEBUG:
-                print ('[DEBUG %s] unloading apps: %s' % (app_framework.bundle_name, pformat(apps)))
-    while len(apps):
-        app = apps.pop()
+                print ('[DEBUG %s] unloading: %s' % ('flameMenuSG', app.name))
+            del app        
         del apps
+
     if shotgunConnector:
         shotgunConnector.terminate_loops()
         del shotgunConnector
+
     if app_framework:
+        print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
         app_framework.save_prefs()
         del app_framework
 
@@ -2941,7 +3292,8 @@ def get_main_menu_custom_ui_actions():
             flameMenuProjectconnectApp = app
     if flameMenuProjectconnectApp:
         menu.append(flameMenuProjectconnectApp.build_menu())
-        # flameMenuProjectconnectApp.refresh()
+    if menu:
+        menu[0]['actions'].append({'name': __version__, 'isEnabled': False})
     return menu
 
 def get_media_panel_custom_ui_actions():
