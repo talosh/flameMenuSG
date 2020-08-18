@@ -22,7 +22,7 @@ menu_group_name = 'Menu(SG)'
 
 DEBUG = True
 
-__version__ = 'v0.0.4'
+__version__ = 'v0.0.5'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -69,6 +69,7 @@ class flameAppFramework(object):
 
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
+        self.apps = []
 
     def log(self, message):
         if self.debug:
@@ -742,11 +743,13 @@ class flameMenuProjectconnect(flameMenuApp):
     def sign_in(self, *args, **kwargs):
         self.connector.prefs_global['user signed out'] = False
         self.connector.get_user()
+        self.framework.save_prefs()
         self.rescan()
 
     def sign_out(self, *args, **kwargs):
         self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
+        self.framework.save_prefs()
         self.rescan()
 
     def preferences_window(self, *args, **kwargs):
@@ -754,9 +757,10 @@ class flameMenuProjectconnect(flameMenuApp):
         
         # storage root section
         self.connector.update_sg_storage_root()
+
         def update_sg_storage_root_widget():
             self.connector.get_storage_root_dialog()
-            storage_root.setText(self.connector.sg_storage_root.get('code'))
+            storage_root.setText(self.connector.sg_storage_root.get('code', 'not selected'))
             storage_root_paths.setText(
             'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
             '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
@@ -764,14 +768,73 @@ class flameMenuProjectconnect(flameMenuApp):
 
         window = None
         window = QtWidgets.QDialog()
-        window.setMinimumSize(800, 280)
+        window.setMinimumSize(800, 260)
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        window.setStyleSheet('background-color: #313131')
+        window.setStyleSheet('background-color: #2e2e2e')
 
         screen_res = QtWidgets.QDesktopWidget().screenGeometry()
         window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
+
+        # apps selector preferences module
+
+        vbox_apps = QtWidgets.QVBoxLayout()
+        vbox_apps.setAlignment(QtCore.Qt.AlignTop)
+
+        lbl_modules = QtWidgets.QLabel('Modules', window)
+        lbl_modules.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_modules.setMinimumSize(100, 28)
+        lbl_modules.setAlignment(QtCore.Qt.AlignCenter)
+
+        hbox_BatchBlessing = QtWidgets.QHBoxLayout()
+        btn_BatchBlessing = QtWidgets.QPushButton('Batch Linking', window)
+        btn_BatchBlessing.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_BatchBlessing.setMinimumSize(120, 24)
+        btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        btn_BatchBlessing.setCheckable(True)
+        btn_BatchBlessing.setChecked(True)
+        btn_BatchBlessing_light = QtWidgets.QLabel('', window)
+        btn_BatchBlessing_light.setMinimumSize(10, 24)
+        btn_BatchBlessing_light.setMaximumSize(10, 24)
+        btn_BatchBlessing_light.setStyleSheet('background-color: #647db2')
+        hbox_BatchBlessing.addWidget(btn_BatchBlessing)
+        hbox_BatchBlessing.addWidget(btn_BatchBlessing_light)
+
+        hbox_BatchLoader = QtWidgets.QHBoxLayout()
+        hbox_BatchLoader.setAlignment(QtCore.Qt.AlignLeft)
+        btn_BatchLoader = QtWidgets.QPushButton('Batch Loader', window)
+        btn_BatchLoader.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_BatchLoader.setMinimumSize(120, 24)
+        btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        # btn_BatchLoader.setStyleSheet('QPushButton {color: #ffffff; background-color: #9a9a9a; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                        'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_BatchLoader.setCheckable(True)                 
+        btn_BatchLoader.setChecked(True)
+        btn_BatchLoader_light = QtWidgets.QLabel('', window)
+        btn_BatchLoader_light.setMinimumSize(10, 24)
+        btn_BatchLoader_light.setMaximumSize(10, 24)
+        btn_BatchLoader_light.setStyleSheet('background-color: #647db2')
+        hbox_BatchLoader.addWidget(btn_BatchLoader)
+        hbox_BatchLoader.addWidget(btn_BatchLoader_light)
+
+        chkbox_NewBatch = QtWidgets.QCheckBox('New Batch', window)
+        chkbox_Publisher = QtWidgets.QCheckBox('Menu Publish', window)
+        chkbox_CreateAsset = QtWidgets.QCheckBox('Create Asset', window)
+        chkbox_CreateShot = QtWidgets.QCheckBox('Create Shot', window)
+        chkbox_Superclips = QtWidgets.QCheckBox('Superclips', window)
+        
+        vbox_apps.addWidget(lbl_modules)
+        vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
+        vbox_apps.addLayout(hbox_BatchLoader, alignment = QtCore.Qt.AlignLeft)
+        vbox_apps.addWidget(chkbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
+        vbox_apps.addWidget(chkbox_Publisher, alignment = QtCore.Qt.AlignLeft)
+        vbox_apps.addWidget(chkbox_CreateAsset, alignment = QtCore.Qt.AlignLeft)
+        vbox_apps.addWidget(chkbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
+        vbox_apps.addWidget(chkbox_Superclips, alignment = QtCore.Qt.AlignLeft)
+
 
         hbox_storage = QtWidgets.QHBoxLayout()
         storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
@@ -785,7 +848,7 @@ class flameMenuProjectconnect(flameMenuApp):
         storage_name = QtWidgets.QLabel('Current storage:', window)
         hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
 
-        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
+        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code', 'not selected'), window)
         boldFont = QtGui.QFont()
         boldFont.setBold(True)
         storage_root.setFont(boldFont)
@@ -801,12 +864,18 @@ class flameMenuProjectconnect(flameMenuApp):
             '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
             window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
         vbox1.addWidget(storage_root_paths)
 
-        dummy = QtWidgets.QLabel('Not yet implemented', window)
-        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        #dummy = QtWidgets.QLabel('Not yet implemented', window)
+        #dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        #dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+
+        vertical_sep = QtWidgets.QLabel('', window)
+        vertical_sep.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
+        #vertical_sep_01 = QtWidgets.QLabel('', window)
+        #vertical_sep_01.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
+
 
         close_btn = QtWidgets.QPushButton('Close', window)
         close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -816,8 +885,12 @@ class flameMenuProjectconnect(flameMenuApp):
         close_btn.clicked.connect(window.accept)
 
         hbox1 = QtWidgets.QHBoxLayout()
-        hbox1.addLayout(vbox1)
-        hbox1.addWidget(dummy)
+        hbox1.setAlignment(QtCore.Qt.AlignLeft)
+        hbox1.addLayout(vbox_apps)
+        hbox1.addWidget(vertical_sep)
+        #hbox1.addWidget(dummy)
+        #hbox1.addWidget(vertical_sep_01)
+        hbox1.addLayout(vbox1, alignment = QtCore.Qt.AlignLeft)
 
         vbox = QtWidgets.QVBoxLayout()
         vbox.setMargin(20)
@@ -2810,7 +2883,7 @@ def cleanup(apps, app_framework, shotgunConnector):
                 print ('[DEBUG %s] unloading apps: %s' % (app_framework.bundle_name, pformat(apps)))
     while len(apps):
         app = apps.pop()
-        del app
+        del apps
     if shotgunConnector:
         shotgunConnector.terminate_loops()
         del shotgunConnector
@@ -2826,6 +2899,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     apps.append(flameMenuPublisher(app_framework, shotgunConnector))
+    app_framework.apps = apps
     if DEBUG:
         print ('[DEBUG %s] loaded:\n%s' % (app_framework.bundle_name, pformat(apps)))
 
