@@ -19,10 +19,9 @@ import sgtk
 from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-
 DEBUG = True
 
-__version__ = 'v0.0.4'
+__version__ = 'v0.0.5'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -69,6 +68,7 @@ class flameAppFramework(object):
 
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
+        self.apps = []
 
     def log(self, message):
         if self.debug:
@@ -262,6 +262,7 @@ class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
         self.framework = framework
+        self.connector = self
         self.log('waking up')
 
         self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
@@ -480,6 +481,68 @@ class flameShotgunConnector(object):
 
         return True
 
+    def get_pipeline_configurations(self):
+        if not self.sg_user:
+            return []
+        if not self.sg_linked_project_id:
+            return []
+
+        pipeline_configurations = self.sg.find(
+            'PipelineConfiguration', 
+            [['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
+            []
+            )
+        return pipeline_configurations
+
+    def get_tank_name(self, strict = False):
+        if not self.sg_user:
+            return 'unknown_project'
+        if not self.sg_linked_project_id:
+            return 'unknown_project'
+
+        project = self.sg.find_one(
+            'Project', 
+            [['id', 'is', self.sg_linked_project_id]], 
+            ['name', 'tank_name']
+            )
+        if not project:
+            return 'unknown_project'
+        if strict:
+            return project.get('tank_name', '')
+        else:
+            if not project.get('tank_name'):
+                name = project.get('name')
+                if not name:
+                    return 'unknown_project'
+                return self.sanitize_name(name)
+
+        return project.get('tank_name')
+
+    def update_tank_name(self, tank_name):
+        if not self.sg_user:
+            return False
+        if not self.sg_linked_project_id:
+            return False
+        try:
+            return self.sg.update('Project', self.sg_linked_project_id, {'tank_name': tank_name})
+        except:
+            return False
+
+    def sanitize_name(self, name):
+        if name is None:
+            return None
+        
+        name = name.strip()
+        exp = re.compile(u'[^\w\.-]', re.UNICODE)
+
+        if isinstance(name, unicode):
+            result = exp.sub('_', value)
+        else:
+            decoded = name.decode('utf-8')
+            result = exp.sub('_', decoded).encode('utf-8')
+
+        return re.sub('_\_+', '_', result)
+
     # shotgun storage root related methods
 
     @property
@@ -512,13 +575,13 @@ class flameShotgunConnector(object):
             return None
         return path_cache_storage.get(platform_path_field)
 
-    def get_storage_root_dialog(self):
+    def set_storage_root_dialog(self):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
         sg_storage_data = self.get_local_file_storages()
         self.sg_storage_index = 0
-        return_value = False
+        self.txt_tankName_text = self.connector.get_tank_name()
 
         if not sg_storage_data:
             message = '<p align = "center">'
@@ -529,18 +592,47 @@ class flameShotgunConnector(object):
             mbox.setText(message)
             mbox.exec_()
             return False
+        
+        if not self.connector.sg_linked_project_id:
+            message = 'Please link Flame project to Shotgun first'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+
+        def calculate_project_path():
+            self.txt_tankName_text  = self.connector.get_tank_name() 
+            linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
+            mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
+            win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
+            msg = 'Linux path: '
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            
+            return msg
 
         def combobox_changed(index):
             self.sg_storage_index = index
-            storage_root_paths.setText(
-                'Linux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
-                '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
-                '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path'))
-            )
-            
+            storage_root_paths.setText(calculate_project_path())
+        
         window = QtWidgets.QDialog()
-        window.setMinimumSize(300, 180)
-        window.setWindowTitle('Select Local File Storage')
+        window.setMinimumSize(400, 180)
+        window.setWindowTitle('Set Project Location')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         window.setStyleSheet('background-color: #313131')
@@ -549,32 +641,75 @@ class flameShotgunConnector(object):
         window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
         
         vbox1 = QtWidgets.QVBoxLayout()
+
+        msg = 'Pipeline Configurations found for this project.\n'
+        msg += 'Please check Shotgun Pipeline Toolkit documentation\n'
+        msg += 'in order to change project location'
+        lbl_ToolkitWarning = QtWidgets.QLabel(msg,
+                        window)
+        lbl_ToolkitWarning.setStyleSheet('QFrame {color: #888888}')
+        vbox1.addWidget(lbl_ToolkitWarning)
+
+        
+        # Storage Roots Label
+
+        lbl_sgLocalFileStorage = QtWidgets.QLabel('Shotgun Local File Storage', window)
+        lbl_sgLocalFileStorage.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgLocalFileStorage.setMinimumHeight(28)
+        lbl_sgLocalFileStorage.setMaximumHeight(28)
+        lbl_sgLocalFileStorage.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgLocalFileStorage)
+
         storage_list = QtWidgets.QComboBox(window)
         for storage in sg_storage_data:
             storage_list.addItem(storage.get('code'))
+        
+        storage_list.setMinimumHeight(28)
+        # storage_list.setStyleSheet('QComboBox {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                            'QComboBox::down-arrow {image: url(/opt/Autodesk/lib64/2020.2/qml/QtQuick/Controls/Styles/Base/images/arrow-down.png); border: 0px;}'
+        #                            'QComboBox::drop-down {border: 0px;}'')
         storage_list.setCurrentIndex(self.sg_storage_index)
         storage_list.currentIndexChanged.connect(combobox_changed)
         vbox1.addWidget(storage_list)
 
-        storage_root_paths = QtWidgets.QLabel(
-            'Linux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
-            '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
-            '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path')), 
-            window)
+        lbl_sgProjectFolder = QtWidgets.QLabel('Project Folder Name', window)
+        lbl_sgProjectFolder.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgProjectFolder.setMinimumHeight(28)
+        lbl_sgProjectFolder.setMaximumHeight(28)
+        lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgProjectFolder)
+
+        lbl_tankName = QtWidgets.QLabel(self.txt_tankName_text, window)
+        lbl_tankName.setFocusPolicy(QtCore.Qt.NoFocus)
+        lbl_tankName.setMinimumHeight(28)
+        lbl_tankName.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
+        lbl_tankName.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        vbox1.addWidget(lbl_tankName)
+
+        lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
+        lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color:  #373737}')
+        lbl_ProjectPath.setMinimumHeight(28)
+        lbl_ProjectPath.setMaximumHeight(28)
+        lbl_ProjectPath.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_ProjectPath)
+
+        project_path_info = calculate_project_path()
+
+        storage_root_paths = QtWidgets.QLabel(calculate_project_path(), window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
         vbox1.addWidget(storage_root_paths)
 
         select_btn = QtWidgets.QPushButton('Select', window)
         select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        select_btn.setMinimumSize(100, 24)
+        select_btn.setMinimumSize(100, 28)
         select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         select_btn.clicked.connect(window.accept)
 
         cancel_btn = QtWidgets.QPushButton('Cancel', window)
         cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        cancel_btn.setMinimumSize(100, 24)
+        cancel_btn.setMinimumSize(100, 28)
         cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         cancel_btn.clicked.connect(window.reject)
@@ -591,7 +726,154 @@ class flameShotgunConnector(object):
         window.setLayout(vbox)
         if window.exec_():
             self.sg_storage_root = sg_storage_data[self.sg_storage_index]
+        return self.sg_storage_root
+
+    def set_project_location_dialog(self):
+        from PySide2 import QtWidgets, QtCore
+        window = None
+        storage_root_paths = None
+        sg_storage_data = self.get_local_file_storages()
+        self.sg_storage_index = 0
+        self.txt_tankName_text = self.connector.get_tank_name()
+
+        if not sg_storage_data:
+            message = '<p align = "center">'
+            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
+            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
         
+        if not self.connector.sg_linked_project_id:
+            message = 'Please link Flame project to Shotgun first'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+
+        def calculate_project_path():
+            linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
+            mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
+            win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
+            msg = 'Linux path: '
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            
+            return msg
+
+        def combobox_changed(index):
+            self.sg_storage_index = index
+            storage_root_paths.setText(calculate_project_path())
+
+        def txt_tankName_textChanged():
+            self.txt_tankName_text = txt_tankName.text()
+            storage_root_paths.setText(calculate_project_path())
+
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(400, 180)
+        window.setWindowTitle('Set Project Location')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
+        
+        vbox1 = QtWidgets.QVBoxLayout()
+        
+        # Storage Roots Label
+
+        lbl_sgLocalFileStorage = QtWidgets.QLabel('Shotgun Local File Storage', window)
+        lbl_sgLocalFileStorage.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgLocalFileStorage.setMinimumHeight(28)
+        lbl_sgLocalFileStorage.setMaximumHeight(28)
+        lbl_sgLocalFileStorage.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgLocalFileStorage)
+
+        storage_list = QtWidgets.QComboBox(window)
+        for storage in sg_storage_data:
+            storage_list.addItem(storage.get('code'))
+        
+        storage_list.setMinimumHeight(28)
+        # storage_list.setStyleSheet('QComboBox {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                            'QComboBox::down-arrow {image: url(/opt/Autodesk/lib64/2020.2/qml/QtQuick/Controls/Styles/Base/images/arrow-down.png); border: 0px;}'
+        #                            'QComboBox::drop-down {border: 0px;}'')
+        storage_list.setCurrentIndex(self.sg_storage_index)
+        storage_list.currentIndexChanged.connect(combobox_changed)
+        vbox1.addWidget(storage_list)
+
+        lbl_sgProjectFolder = QtWidgets.QLabel('Project Folder Name', window)
+        lbl_sgProjectFolder.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgProjectFolder.setMinimumHeight(28)
+        lbl_sgProjectFolder.setMaximumHeight(28)
+        lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgProjectFolder)
+        
+        txt_tankName = QtWidgets.QLineEdit(self.txt_tankName_text, window)
+        txt_tankName.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_tankName.setMinimumHeight(28)
+        txt_tankName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        txt_tankName.textChanged.connect(txt_tankName_textChanged)
+        vbox1.addWidget(txt_tankName)
+
+        lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
+        lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_ProjectPath.setMinimumHeight(28)
+        lbl_ProjectPath.setMaximumHeight(28)
+        lbl_ProjectPath.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_ProjectPath)
+
+        project_path_info = calculate_project_path()
+
+        storage_root_paths = QtWidgets.QLabel(calculate_project_path(), window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox1.addWidget(storage_root_paths)
+
+        select_btn = QtWidgets.QPushButton('Select', window)
+        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        select_btn.setMinimumSize(100, 28)
+        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        select_btn.clicked.connect(window.accept)
+
+        cancel_btn = QtWidgets.QPushButton('Cancel', window)
+        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        cancel_btn.setMinimumSize(100, 28)
+        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        cancel_btn.clicked.connect(window.reject)
+
+        hbox2 = QtWidgets.QHBoxLayout()
+        hbox2.addWidget(cancel_btn)
+        hbox2.addWidget(select_btn)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(vbox1)
+        vbox.addLayout(hbox2)
+
+        window.setLayout(vbox)
+        if window.exec_():
+            self.sg_storage_root = sg_storage_data[self.sg_storage_index]
+            self.connector.update_tank_name(self.txt_tankName_text)
         return self.sg_storage_root
 
     def get_local_file_storages(self):
@@ -612,7 +894,6 @@ class flameShotgunConnector(object):
 
         self.sg_storage_root = {}
         return False
-
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -742,91 +1023,656 @@ class flameMenuProjectconnect(flameMenuApp):
     def sign_in(self, *args, **kwargs):
         self.connector.prefs_global['user signed out'] = False
         self.connector.get_user()
+        self.framework.save_prefs()
         self.rescan()
 
     def sign_out(self, *args, **kwargs):
         self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
+        self.framework.save_prefs()
         self.rescan()
 
     def preferences_window(self, *args, **kwargs):
+
+        # The first attemt to draft preferences window in one function
+        # became a bit monstrous
+        # Probably need to put it in subclass instead
+
         from PySide2 import QtWidgets, QtCore, QtGui
         
         # storage root section
         self.connector.update_sg_storage_root()
-        def update_sg_storage_root_widget():
-            self.connector.get_storage_root_dialog()
-            storage_root.setText(self.connector.sg_storage_root.get('code'))
-            storage_root_paths.setText(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
+
+
+        def compose_project_path_messge(tank_name):
+            self.connector.update_sg_storage_root()
+
+            if not self.connector.sg_storage_root:
+                # no storage selected
+                return 'Linux path: no storage selected\nMac path: no storage selected\nWindows path: no storage selected'
+            
+            linux_path = str(self.connector.sg_storage_root.get('linux_path', ''))
+            mac_path = str(self.connector.sg_storage_root.get('mac_path', ''))
+            win_path = str(self.connector.sg_storage_root.get('windows_path', ''))
+            msg = 'Linux path: '
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, tank_name)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, tank_name)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, tank_name)
+            else:
+                msg += 'None'
+
+            return msg
+
+        def update_project_path_info():
+            tank_name = self.connector.get_tank_name() 
+            storage_root_paths.setText(compose_project_path_messge(tank_name))
+
+        def update_pipeline_config_info():
+            if self.connector.get_pipeline_configurations():
+                pipeline_config_info.setText('Found')
+            else:
+                pipeline_config_info.setText('Clear')
+
+        def change_storage_root_dialog():
+            if self.connector.get_pipeline_configurations():
+                self.connector.set_storage_root_dialog()
+            else:
+                self.connector.set_project_location_dialog()
+
+            update_pipeline_config_info()
+            update_project_path_info()
+
+        def set_export_preset_type(item):
+            pprint (item)
+
+        def changeExportPreset():
+            print ('file dialog')
+            dialog = QtWidgets.QFileDialog()
+            dialog.setWindowTitle('Select Format Preset')
+            dialog.setNameFilter('XML files (*.xml)')
+            dialog.setDirectory(os.path.expanduser('~'))
+            dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                file_full_path = str(dialog.selectedFiles()[0])
+                pprint (file_full_path)
+
+        # Prefs window functions
+
+        def pressGeneral():
+            btn_General.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            
+            paneGeneral.setVisible(False)
+            panePublish.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneGeneral.setVisible(True)
+
+        def pressPublish():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+            paneGeneral.setVisible(False)
+            panePublish.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            panePublish.setVisible(True)
+
+        def pressSuperclips():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+
+            paneGeneral.setVisible(False)
+            panePublish.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneSuperclips.setVisible(True)
+
+
 
         window = None
         window = QtWidgets.QDialog()
-        window.setMinimumSize(800, 280)
+        window.setFixedSize(1028, 328)
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        window.setStyleSheet('background-color: #313131')
+        window.setStyleSheet('background-color: #2e2e2e')
 
         screen_res = QtWidgets.QDesktopWidget().screenGeometry()
         window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
 
+        # Prefs Pane widgets
+        
+        paneTabs = QtWidgets.QWidget(window)
+        paneGeneral = QtWidgets.QWidget(window)
+        panePublish = QtWidgets.QWidget(window)
+        paneSuperclips = QtWidgets.QWidget(window)
+
+        # Main window HBox
+
+        hbox_main = QtWidgets.QHBoxLayout()
+        hbox_main.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Modules: apps selector preferences block
+        # Modules: apps are hardcoded at the moment
+
+        # Modules: Button functions
+
+        vbox_apps = QtWidgets.QVBoxLayout()
+        vbox_apps.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+
+        # Modules: Label
+
+        lbl_modules = QtWidgets.QLabel('Modules', window)
+        lbl_modules.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_modules.setMinimumSize(128, 28)
+        lbl_modules.setAlignment(QtCore.Qt.AlignCenter)
+        lbl_modules.setVisible(False)
+        # vbox_apps.addWidget(lbl_modules)
+
+        # Modules: Selection buttons
+
+        # Modules: General preferences button
+
+        hbox_General = QtWidgets.QHBoxLayout()
+        hbox_General.setAlignment(QtCore.Qt.AlignLeft)
+        btn_General = QtWidgets.QPushButton('General', window)
+        btn_General.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_General.setMinimumSize(128, 28)
+        btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_General.pressed.connect(pressGeneral)
+        hbox_General.addWidget(btn_General)
+        vbox_apps.addLayout(hbox_General, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameMenuPublisher button
+
+        hbox_Publish = QtWidgets.QHBoxLayout()
+        hbox_Publish.setAlignment(QtCore.Qt.AlignLeft)
+        btn_Publish = QtWidgets.QPushButton('Menu Publish', window)
+        btn_Publish.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Publish.setMinimumSize(128, 28)
+        btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Publish.pressed.connect(pressPublish)
+        hbox_Publish.addWidget(btn_Publish)
+        vbox_apps.addLayout(hbox_Publish, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameSuperclips button
+
+        hbox_Superclips = QtWidgets.QHBoxLayout()
+        hbox_Superclips.setAlignment(QtCore.Qt.AlignLeft)
+        btn_Superclips = QtWidgets.QPushButton('Superclips', window)
+        btn_Superclips.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Superclips.setMinimumSize(128, 28)
+        btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Superclips.pressed.connect(pressSuperclips)
+        hbox_Superclips.addWidget(btn_Superclips)
+        vbox_apps.addLayout(hbox_Superclips, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: End of Modules section
+        hbox_main.addLayout(vbox_apps)
+
+        # Vertical separation line
+        
+        vertical_sep_01 = QtWidgets.QLabel('', window)
+        vertical_sep_01.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
+        vertical_sep_01.setStyleSheet('QFrame {color: #444444}')
+        hbox_main.addWidget(vertical_sep_01)
+        paneTabs.setLayout(hbox_main)
+        paneTabs.move(10, 10)
+
+        # Publish section:
+        # Publish: main VBox
+        vbox_publish = QtWidgets.QVBoxLayout()
+        vbox_publish.setAlignment(QtCore.Qt.AlignTop)
+
+        # Publish: hbox for storage root and export presets
+        hbox_storage_root = QtWidgets.QHBoxLayout()
+        hbox_storage_root.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Publish: StorageRoot section
+
+        vbox_storage_root = QtWidgets.QVBoxLayout()
+        vbox_storage_root.setAlignment(QtCore.Qt.AlignTop)
+        
+        # Publish: StorageRoot: label
+
+        lbl_storage_root = QtWidgets.QLabel('Project Location', window)
+        lbl_storage_root.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_storage_root.setMinimumSize(200, 28)
+        lbl_storage_root.setAlignment(QtCore.Qt.AlignCenter)
+
+        vbox_storage_root.addWidget(lbl_storage_root)
+
+        # Publish: StorageRoot: button and storage root name block
+
         hbox_storage = QtWidgets.QHBoxLayout()
-        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
+        storage_root_btn = QtWidgets.QPushButton(window)
+        if self.connector.get_pipeline_configurations():
+            if self.connector.sg_storage_root:
+                storage_root_btn.setText('Change Local File Storage')
+            else:
+                storage_root_btn.setText('Select Local File Storage')
+        else:
+            storage_root_btn.setText('Change Project Location')
+        
         storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        storage_root_btn.setMinimumSize(199, 24)
+        storage_root_btn.setMinimumSize(199, 28)
         storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
+        storage_root_btn.clicked.connect(change_storage_root_dialog)
         hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
 
-        storage_name = QtWidgets.QLabel('Current storage:', window)
+        storage_name = QtWidgets.QLabel('Pipeline configuration:', window)
         hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
 
-        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
+        pipeline_config_info = QtWidgets.QLabel(window)
         boldFont = QtGui.QFont()
         boldFont.setBold(True)
-        storage_root.setFont(boldFont)
-        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
+        pipeline_config_info.setFont(boldFont)
 
-        vbox1 = QtWidgets.QVBoxLayout()
-        vbox1.setAlignment(QtCore.Qt.AlignTop)
-        vbox1.addLayout(hbox_storage)
+        update_pipeline_config_info()        
+        hbox_storage.addWidget(pipeline_config_info, alignment = QtCore.Qt.AlignRight)
+        vbox_storage_root.addLayout(hbox_storage)
 
-        storage_root_paths = QtWidgets.QLabel(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
-            window)
+        # Publish: StorageRoot: Paths info label
+        storage_root_paths = QtWidgets.QLabel(window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-        vbox1.addWidget(storage_root_paths)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
+        
+        update_project_path_info()
 
-        dummy = QtWidgets.QLabel('Not yet implemented', window)
-        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox_storage_root.addWidget(storage_root_paths)
+        hbox_storage_root.addLayout(vbox_storage_root)
+
+        # Publish: StorageRoot: end of section
+
+        # Publish: ExportPresets section
+
+        vbox_export_preset = QtWidgets.QVBoxLayout()
+        vbox_export_preset.setAlignment(QtCore.Qt.AlignTop)
+
+        # Publish: ExportPresets: label
+
+        lbl_export_preset = QtWidgets.QLabel('Export Format Presets', window)
+        lbl_export_preset.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_export_preset.setMinimumSize(440, 28)
+        lbl_export_preset.setAlignment(QtCore.Qt.AlignCenter)
+        vbox_export_preset.addWidget(lbl_export_preset)
+
+        # Publish: ExportPresets: Change, Default buttons and preset name HBox
+
+        hbox_export_preset = QtWidgets.QHBoxLayout()
+        hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        # Publish: ExportPresets: Preset typ selector
+
+        btn_presetType = QtWidgets.QPushButton('Publish', window)
+        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_presetType.setMinimumSize(88, 28)
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_presetType_menu = QtWidgets.QMenu()
+        btn_presetType_menu.addAction('Publish', presetType_setPublish)
+        btn_presetType_menu.addAction('Preview', presetType_Preview)
+        btn_presetType_menu.addAction('Thumbnail', presetType_setThumbnail)
+        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
+        hbox_export_preset.addWidget(btn_defaultPreset)
+
+        # Publish: ExportPresets: Export preset selector
+
+        btn_Preset = QtWidgets.QPushButton('Publish', window)
+        btn_defaultPreset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_defaultPreset.setMinimumSize(88, 28)
+        btn_defaultPreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_another_menu = QtWidgets.QMenu()
+        btn_another_menu.addAction('Another action')
+        btn_another_menu.setTitle('Submenu')
+        btn_defaultPreset_menu = QtWidgets.QMenu()
+        btn_defaultPreset_menu.addAction('Publish')
+        btn_defaultPreset_menu.addAction('Preview')
+        btn_defaultPreset_menu.addAction('Thumbnail')
+        btn_defaultPreset_menu.addMenu(btn_another_menu)
+        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
+        hbox_export_preset.addWidget(btn_defaultPreset)
+
+
+        # Publish: ExportPresets: Change button
+        
+        btn_changePreset = QtWidgets.QPushButton('Load', window)
+        btn_changePreset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_changePreset.setMinimumSize(88, 28)
+        btn_changePreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_changePreset.clicked.connect(changeExportPreset)
+        hbox_export_preset.addWidget(btn_changePreset, alignment = QtCore.Qt.AlignLeft)
+        
+        # Publish: ExportPresets: End of Change, Default buttons and preset name HBox
+        vbox_export_preset.addLayout(hbox_export_preset)
+
+        # Publish: ExportPresets: Exoprt preset details
+        
+        presetDetails = QtWidgets.QLabel('Publish: \nPreview: \nThumbnail: ', window)
+        presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
+
+        vbox_export_preset.addWidget(presetDetails)
+
+        # Publish: ExportPresets: End of Export Preset section
+        hbox_storage_root.addLayout(vbox_export_preset)
+
+        # Publish: End of upper storage root and export preset section
+        vbox_publish.addLayout(hbox_storage_root)
+        
+        ### PUBLISH::TEMPLATES ###
+        # Publish::Tempates actions
+
+        def action_showShot():
+            btn_Entity.setText('Shot')
+            paneAssetTemplates.setVisible(False)
+            paneShotTemplates.setVisible(True)
+
+        def action_showAsset():
+            btn_Entity.setText('Asset')
+            paneShotTemplates.setVisible(False)
+            paneAssetTemplates.setVisible(True)
+
+        # Publish::Tempates general widget
+        # It holds Shot / Asset buttons and labels for Batch and Version template fields
+
+        paneTemplates = QtWidgets.QWidget(panePublish)
+        paneTemplates.setFixedSize(840, 142)
+
+        # Publish::Tempates: label
+
+        lbl_templates = QtWidgets.QLabel('Publishing Templates', paneTemplates)
+        lbl_templates.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_templates.setFixedSize(840, 28)
+        lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
+
+        # Publish::Tempates: Entity toggle button
+
+        btn_Entity = QtWidgets.QPushButton('Shot', paneTemplates)
+        btn_Entity.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Entity.setFixedSize(88, 28)
+        btn_Entity.move(0, 34)
+        btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_Entity_menu = QtWidgets.QMenu()
+        btn_Entity_menu.addAction('Show Templates for Shots', action_showShot)
+        btn_Entity_menu.addAction('Show Templates for Assets', action_showAsset)
+        btn_Entity.setMenu(btn_Entity_menu)
+
+        # Publish::Tempates: Batch Template label
+        lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
+        lbl_batchTemplate.setFixedSize(88, 28)
+        lbl_batchTemplate.move(0, 68)
+
+        # Publish::Tempates: Version Template label
+        lbl_batchTemplate = QtWidgets.QLabel('Version', paneTemplates)
+        lbl_batchTemplate.setFixedSize(88, 28)
+        lbl_batchTemplate.move(0, 102)
+
+        # Publish::Templates::ShotPane: Show and hide
+        # depending on an Entity toggle
+        
+        paneShotTemplates = QtWidgets.QWidget(paneTemplates)
+        paneShotTemplates.setFixedSize(744, 142)
+        paneShotTemplates.move(96, 0)
+
+        # Publish::Templates::ShotPane: Publish default button
+
+        btn_shotDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
+        btn_shotDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotDefault.setFixedSize(88, 28)
+        btn_shotDefault.move(0, 34)
+        btn_shotDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::ShotPane: Publish template text field
+
+        txt_shot = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr', paneShotTemplates)
+        txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shot.setFixedSize(556, 28)
+        txt_shot.move (94, 34)
+        txt_shot.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::ShotPane: Publish template fields button
+
+        btn_shotFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotFields.setFixedSize(88, 28)
+        btn_shotFields.move(656, 34)
+        btn_shotFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotFields_menu = QtWidgets.QMenu()
+        btn_shotFields_menu.addAction('Field 1')
+        btn_shotFields_menu.addAction('Field 2')
+        btn_shotFields.setMenu(btn_shotFields_menu)
+
+        # Publish::Templates::ShotPane: Batch template default button
+
+        btn_shotBatchDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
+        btn_shotBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotBatchDefault.setFixedSize(88, 28)
+        btn_shotBatchDefault.move(0, 68)
+        btn_shotBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::ShotPane: Batch template text field
+
+        txt_shotBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch', paneShotTemplates)
+        txt_shotBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shotBatch.setMinimumSize(556, 28)
+        txt_shotBatch.move(94, 68)
+        txt_shotBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::ShotPane: Batch template fields button
+
+        btn_shotBatchFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotBatchFields.setMinimumSize(88, 28)
+        btn_shotBatchFields.move(656, 68)
+        btn_shotBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotBatchFields_menu = QtWidgets.QMenu()
+        btn_shotBatchFields_menu.addAction('Field 1')
+        btn_shotBatchFields_menu.addAction('Field 2')
+        btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
+
+        # Publish::Templates::ShotPane: Version template default button
+
+        btn_shotVersionDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
+        btn_shotVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotVersionDefault.setMinimumSize(88, 28)
+        btn_shotVersionDefault.move(0, 102)
+        btn_shotVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::ShotPane: Vesrion template text field
+
+        txt_shotVersion = QtWidgets.QLineEdit('{Shot}_{name}_v{version}', paneShotTemplates)
+        txt_shotVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shotVersion.setMinimumSize(256, 28)
+        txt_shotVersion.move(94, 102)
+        txt_shotVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::ShotPane: Version template fields button
+
+        btn_shotVersionFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotVersionFields.setMinimumSize(88, 28)
+        btn_shotVersionFields.move(356, 102)
+        btn_shotVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotVersionFields_menu = QtWidgets.QMenu()
+        btn_shotVersionFields_menu.addAction('Field 5')
+        btn_shotVersionFields_menu.addAction('Field 6')
+        btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
+
+        # Publish::Templates::ShotPane: END OF SECTION
+        # Publish::Templates::AssetPane: Show and hide
+        # depending on an Entity toggle
+        
+        paneAssetTemplates = QtWidgets.QWidget(paneTemplates)
+        paneAssetTemplates.setFixedSize(744, 142)
+        paneAssetTemplates.move(96, 0)
+
+        # Publish::Templates::AssetPane: Publish default button
+
+        btn_assetDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
+        btn_assetDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetDefault.setFixedSize(88, 28)
+        btn_assetDefault.move(0, 34)
+        btn_assetDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::AssetPane: Publish template text field
+
+        txt_asset = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr', paneAssetTemplates)
+        txt_asset.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_asset.setFixedSize(556, 28)
+        txt_asset.move (94, 34)
+        txt_asset.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::AssetPane: Publish template fields button
+
+        btn_assetFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetFields.setFixedSize(88, 28)
+        btn_assetFields.move(656, 34)
+        btn_assetFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetFields_menu = QtWidgets.QMenu()
+        btn_assetFields_menu.addAction('Field 1')
+        btn_assetFields_menu.addAction('Field 2')
+        btn_assetFields.setMenu(btn_assetFields_menu)
+
+        # Publish::Templates::AssetPane: Batch template default button
+
+        btn_assetBatchDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
+        btn_assetBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetBatchDefault.setFixedSize(88, 28)
+        btn_assetBatchDefault.move(0, 68)
+        btn_assetBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::AssetPane: Batch template text field
+
+        txt_assetBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch', paneAssetTemplates)
+        txt_assetBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_assetBatch.setMinimumSize(556, 28)
+        txt_assetBatch.move(94, 68)
+        txt_assetBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::AssetPane: Batch template fields button
+
+        btn_assetBatchFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetBatchFields.setMinimumSize(88, 28)
+        btn_assetBatchFields.move(656, 68)
+        btn_assetBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetBatchFields_menu = QtWidgets.QMenu()
+        btn_assetBatchFields_menu.addAction('Field 1')
+        btn_assetBatchFields_menu.addAction('Field 2')
+        btn_assetBatchFields.setMenu(btn_assetBatchFields_menu)
+
+        # Publish::Templates::AssetPane: Version template default button
+
+        btn_assetVersionDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
+        btn_assetVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetVersionDefault.setMinimumSize(88, 28)
+        btn_assetVersionDefault.move(0, 102)
+        btn_assetVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::AssetPane: Vesrion template text field
+
+        txt_assetVersion = QtWidgets.QLineEdit('{Asset}_{name}_v{version}', paneAssetTemplates)
+        txt_assetVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_assetVersion.setMinimumSize(256, 28)
+        txt_assetVersion.move(94, 102)
+        txt_assetVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::AssetPane: Version template fields button
+
+        btn_assetVersionFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetVersionFields.setMinimumSize(88, 28)
+        btn_assetVersionFields.move(356, 102)
+        btn_assetVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetVersionFields_menu = QtWidgets.QMenu()
+        btn_assetVersionFields_menu.addAction('Field 5')
+        btn_assetVersionFields_menu.addAction('Field 6')
+        btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
+
+        # Publish::Templates::AssetPane: END OF SECTION
+
+
+        vbox_publish.addWidget(paneTemplates)
+        panePublish.setLayout(vbox_publish)
+        panePublish.setFixedSize(860, 280)
+        panePublish.move(160, 10)
+        panePublish.setVisible(False)
+
+        # General
+
+        paneGeneral.setFixedSize(840, 264)
+        paneGeneral.move(172, 20)
+        paneGeneral.setVisible(False)
+        lbl_General = QtWidgets.QLabel('General', paneGeneral)
+        lbl_General.setStyleSheet('QFrame {color: #989898}')
+        lbl_General.setAlignment(QtCore.Qt.AlignCenter)
+        lbl_General.setFixedSize(840, 264)
+        lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # Superclips
+
+        paneSuperclips.setFixedSize(840, 264)
+        paneSuperclips.move(172, 20)
+        paneSuperclips.setVisible(False)
+        lbl_paneSuperclips = QtWidgets.QLabel('Superclis', paneSuperclips)
+        lbl_paneSuperclips.setStyleSheet('QFrame {color: #989898}')
+        lbl_paneSuperclips.setFixedSize(840, 264)
+        lbl_paneSuperclips.setAlignment(QtCore.Qt.AlignCenter)
+        lbl_paneSuperclips.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # Close button
+
+        def close_prefs_dialog():
+            self.framework.save_prefs()
+            window.accept()
 
         close_btn = QtWidgets.QPushButton('Close', window)
         close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        close_btn.setMinimumSize(88, 24)
+        close_btn.setFixedSize(88, 28)
+        close_btn.move(924, 292)
         close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        close_btn.clicked.connect(window.accept)
+        close_btn.clicked.connect(close_prefs_dialog)
 
-        hbox1 = QtWidgets.QHBoxLayout()
-        hbox1.addLayout(vbox1)
-        hbox1.addWidget(dummy)
+        # Set default tab and start window
 
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.setMargin(20)
-        vbox.addLayout(hbox1)
-        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
-
-        window.setLayout(vbox)
+        action_showShot()
+        pressPublish()
         window.exec_()
-
 
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
@@ -2700,84 +3546,6 @@ class flameMenuPublisher(flameMenuApp):
                 self.mbox.setText(message)
                 self.mbox.exec_()
         self.prefs['flame_bug_message_shown'] = True
-
-
-        from PySide2 import QtWidgets, QtCore, QtGui
-        
-        # storage root section
-        self.connector.update_sg_storage_root()
-        def update_sg_storage_root_widget():
-            self.connector.get_storage_root_dialog()
-            storage_root.setText(self.connector.sg_storage_root.get('code'))
-            storage_root_paths.setText(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
-
-        window = None
-        window = QtWidgets.QDialog()
-        window.setMinimumSize(800, 280)
-        window.setWindowTitle(self.framework.bundle_name + ' Preferences')
-        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
-        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        window.setStyleSheet('background-color: #313131')
-
-        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
-        window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
-
-        hbox_storage = QtWidgets.QHBoxLayout()
-        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
-        storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        storage_root_btn.setMinimumSize(199, 24)
-        storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
-        hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
-
-        storage_name = QtWidgets.QLabel('Current storage:', window)
-        hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
-
-        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
-        boldFont = QtGui.QFont()
-        boldFont.setBold(True)
-        storage_root.setFont(boldFont)
-        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
-
-        vbox1 = QtWidgets.QVBoxLayout()
-        vbox1.setAlignment(QtCore.Qt.AlignTop)
-        vbox1.addLayout(hbox_storage)
-
-        storage_root_paths = QtWidgets.QLabel(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
-            window)
-        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-        vbox1.addWidget(storage_root_paths)
-
-        dummy = QtWidgets.QLabel('Not yet implemented', window)
-        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-
-        close_btn = QtWidgets.QPushButton('Close', window)
-        close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        close_btn.setMinimumSize(88, 24)
-        close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        close_btn.clicked.connect(window.accept)
-
-        hbox1 = QtWidgets.QHBoxLayout()
-        hbox1.addLayout(vbox1)
-        hbox1.addWidget(dummy)
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.setMargin(20)
-        vbox.addLayout(hbox1)
-        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
-
-        window.setLayout(vbox)
-        window.exec_()
     
 
 # --- FLAME STARTUP SEQUENCE ---
@@ -2804,17 +3572,21 @@ apps = []
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
     if apps:
-        if app_framework:
-            print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
+        if DEBUG:
+            print ('[DEBUG %s] unloading apps:\n%s' % ('flameMenuSG', pformat(apps)))
+        while len(apps):
+            app = apps.pop()
             if DEBUG:
-                print ('[DEBUG %s] unloading apps: %s' % (app_framework.bundle_name, pformat(apps)))
-    while len(apps):
-        app = apps.pop()
-        del app
+                print ('[DEBUG %s] unloading: %s' % ('flameMenuSG', app.name))
+            del app        
+        del apps
+
     if shotgunConnector:
         shotgunConnector.terminate_loops()
         del shotgunConnector
+
     if app_framework:
+        print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
         app_framework.save_prefs()
         del app_framework
 
@@ -2826,6 +3598,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     apps.append(flameMenuPublisher(app_framework, shotgunConnector))
+    app_framework.apps = apps
     if DEBUG:
         print ('[DEBUG %s] loaded:\n%s' % (app_framework.bundle_name, pformat(apps)))
 
@@ -2867,7 +3640,8 @@ def get_main_menu_custom_ui_actions():
             flameMenuProjectconnectApp = app
     if flameMenuProjectconnectApp:
         menu.append(flameMenuProjectconnectApp.build_menu())
-        # flameMenuProjectconnectApp.refresh()
+    if menu:
+        menu[0]['actions'].append({'name': __version__, 'isEnabled': False})
     return menu
 
 def get_media_panel_custom_ui_actions():
