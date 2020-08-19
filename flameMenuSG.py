@@ -752,6 +752,11 @@ class flameMenuProjectconnect(flameMenuApp):
         self.rescan()
 
     def preferences_window(self, *args, **kwargs):
+
+        # The first attemt to draft preferences window in one function
+        # became a bit monstrous
+        # Probably need to put it in subclass instead
+
         from PySide2 import QtWidgets, QtCore, QtGui
         
         # storage root section
@@ -947,7 +952,8 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_modules.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_modules.setMinimumSize(128, 28)
         lbl_modules.setAlignment(QtCore.Qt.AlignCenter)
-        vbox_apps.addWidget(lbl_modules)
+        lbl_modules.setVisible(False)
+        # vbox_apps.addWidget(lbl_modules)
 
         # Modules: Selection buttons
 
@@ -971,8 +977,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_BatchBlessing.setMinimumSize(128, 28)
         btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
         btn_BatchBlessing.pressed.connect(pressBatchBlessing)
+        btn_BatchBlessing.setVisible(False)
         hbox_BatchBlessing.addWidget(btn_BatchBlessing)
-        vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
+        # vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
 
         # Modules: flameMenuBatchLoader button
         
@@ -983,8 +990,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_BatchLoader.setMinimumSize(128, 28)
         btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
         btn_BatchLoader.pressed.connect(pressBatchLoader)
+        btn_BatchLoader.setVisible(False)
         hbox_BatchLoader.addWidget(btn_BatchLoader)
-        vbox_apps.addLayout(hbox_BatchLoader, alignment = QtCore.Qt.AlignLeft)
+        # vbox_apps.addLayout(hbox_BatchLoader, alignment = QtCore.Qt.AlignLeft)
 
 
         # Modules: flameMenuNewBatch button
@@ -996,8 +1004,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_NewBatch.setMinimumSize(128, 28)
         btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
         btn_NewBatch.pressed.connect(pressNewBatch)
+        btn_NewBatch.setVisible(False)
         hbox_NewBatch.addWidget(btn_NewBatch)
-        vbox_apps.addLayout(hbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
+        # vbox_apps.addLayout(hbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
 
         # Modules: flameMenuPublisher button
 
@@ -1020,8 +1029,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_CreateShot.setMinimumSize(128, 28)
         btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
         btn_CreateShot.pressed.connect(pressCreateShot)
+        btn_CreateShot.setVisible(False)
         hbox_CreateShot.addWidget(btn_CreateShot)
-        vbox_apps.addLayout(hbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
+        # vbox_apps.addLayout(hbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
 
 
         # Modules: flameSuperclips button
@@ -1177,170 +1187,255 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: End of upper storage root and export preset section
         vbox_publish.addLayout(hbox_storage_root)
+        
+        ### PUBLISH::TEMPLATES ###
+        # Publish::Tempates actions
 
-        # Publish: Templates: start of section
-        vbox_templates = QtWidgets.QVBoxLayout()
-        vbox_templates.setAlignment(QtCore.Qt.AlignTop)
+        def action_showShot():
+            btn_Entity.setText('Shot')
+            paneAssetTemplates.setVisible(False)
+            paneShotTemplates.setVisible(True)
 
-        # Publish: Templates: label
+        def action_showAsset():
+            btn_Entity.setText('Asset')
+            paneShotTemplates.setVisible(False)
+            paneAssetTemplates.setVisible(True)
 
-        lbl_templates = QtWidgets.QLabel('Publishing Templates', window)
+        # Publish::Tempates general widget
+        # It holds Shot / Asset buttons and labels for Batch and Version template fields
+
+        paneTemplates = QtWidgets.QWidget(panePublish)
+        paneTemplates.setFixedSize(840, 142)
+
+        # Publish::Tempates: label
+
+        lbl_templates = QtWidgets.QLabel('Publishing Templates', paneTemplates)
         lbl_templates.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_templates.setMinimumSize(440, 28)
+        lbl_templates.setFixedSize(840, 28)
         lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
-        vbox_templates.addWidget(lbl_templates)
 
-        # Publish: Templates: Shot/Asset Publish template
-        # Publish: Templates: hbox for Shot/Asset Publish template
+        # Publish::Tempates: Entity toggle button
 
-        hbox_shot_publish = QtWidgets.QHBoxLayout()
-        hbox_shot_publish.setAlignment(QtCore.Qt.AlignLeft)
-
-        # Publish: Templates: Entity toggle button
-
-        btn_Entity = QtWidgets.QPushButton('Shot', window)
+        btn_Entity = QtWidgets.QPushButton('Shot', paneTemplates)
         btn_Entity.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_Entity.setMinimumSize(88, 28)
+        btn_Entity.setFixedSize(88, 28)
+        btn_Entity.move(0, 34)
         btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_Entity_menu = QtWidgets.QMenu()
-        btn_Entity_menu.addAction('Shot')
-        btn_Entity_menu.addAction('Asset')
+        btn_Entity_menu.addAction('Show Templates for Shots', action_showShot)
+        btn_Entity_menu.addAction('Show Templates for Assets', action_showAsset)
         btn_Entity.setMenu(btn_Entity_menu)
 
-        hbox_shot_publish.addWidget(btn_Entity)
+        # Publish::Tempates: Batch Template label
+        lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
+        lbl_batchTemplate.setFixedSize(88, 28)
+        lbl_batchTemplate.move(0, 68)
 
-        # Publish: Templates: Shot Publish default button
+        # Publish::Tempates: Version Template label
+        lbl_batchTemplate = QtWidgets.QLabel('Version', paneTemplates)
+        lbl_batchTemplate.setFixedSize(88, 28)
+        lbl_batchTemplate.move(0, 102)
 
-        btn_shotDefault = QtWidgets.QPushButton('Default', window)
+        # Publish::Templates::ShotPane: Show and hide
+        # depending on an Entity toggle
+        
+        paneShotTemplates = QtWidgets.QWidget(paneTemplates)
+        paneShotTemplates.setFixedSize(744, 142)
+        paneShotTemplates.move(96, 0)
+
+        # Publish::Templates::ShotPane: Publish default button
+
+        btn_shotDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotDefault.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_shotDefault.setMinimumSize(88, 28)
+        btn_shotDefault.setFixedSize(88, 28)
+        btn_shotDefault.move(0, 34)
         btn_shotDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
 
-        hbox_shot_publish.addWidget(btn_shotDefault)
-        
-        # Publish: Templates: Shot Publish template field
+        # Publish::Templates::ShotPane: Publish template text field
 
-        txt_shot = QtWidgets.QLineEdit('TEST')
+        txt_shot = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr', paneShotTemplates)
         txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_shot.setMinimumSize(400, 28)
+        txt_shot.setFixedSize(556, 28)
+        txt_shot.move (94, 34)
         txt_shot.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
-        hbox_shot_publish.addWidget(txt_shot)
 
-        btn_shotFields = QtWidgets.QPushButton('Fields', window)
+        # Publish::Templates::ShotPane: Publish template fields button
+
+        btn_shotFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotFields.setFixedSize(88, 28)
+        btn_shotFields.move(656, 34)
         btn_shotFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        btn_shotFields.setMinimumSize(88, 28)
         btn_shotFields_menu = QtWidgets.QMenu()
         btn_shotFields_menu.addAction('Field 1')
         btn_shotFields_menu.addAction('Field 2')
         btn_shotFields.setMenu(btn_shotFields_menu)
-        hbox_shot_publish.addWidget(btn_shotFields)
 
-        vbox_templates.addLayout(hbox_shot_publish)
+        # Publish::Templates::ShotPane: Batch template default button
 
-        # Publish: Templates: Shot/Asset .batch Publish template
-        # Publish: Templates: hbox for Shot/Asset .batch Publish template
-
-        hbox_batch_publish = QtWidgets.QHBoxLayout()
-        hbox_batch_publish.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-
-        # Publish: Templates: Batch template label
-
-        lbl_batch_template = QtWidgets.QLabel('Shot Batch', window)
-        lbl_batch_template.setStyleSheet('QFrame {color: #989898}')
-        lbl_batch_template.setMinimumSize(88, 28)
-        lbl_batch_template.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-
-        hbox_batch_publish.addWidget(lbl_batch_template)
-
-        # Publish: Templates: Batch template default button
-
-        btn_batchDefault = QtWidgets.QPushButton('Default', window)
-        btn_batchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_batchDefault.setMinimumSize(88, 28)
-        btn_batchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        btn_shotBatchDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
+        btn_shotBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotBatchDefault.setFixedSize(88, 28)
+        btn_shotBatchDefault.move(0, 68)
+        btn_shotBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
 
-        hbox_batch_publish.addWidget(btn_batchDefault)
+        # Publish::Templates::ShotPane: Batch template text field
+
+        txt_shotBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch', paneShotTemplates)
+        txt_shotBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shotBatch.setMinimumSize(556, 28)
+        txt_shotBatch.move(94, 68)
+        txt_shotBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::ShotPane: Batch template fields button
+
+        btn_shotBatchFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotBatchFields.setMinimumSize(88, 28)
+        btn_shotBatchFields.move(656, 68)
+        btn_shotBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotBatchFields_menu = QtWidgets.QMenu()
+        btn_shotBatchFields_menu.addAction('Field 1')
+        btn_shotBatchFields_menu.addAction('Field 2')
+        btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
+
+        # Publish::Templates::ShotPane: Version template default button
+
+        btn_shotVersionDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
+        btn_shotVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotVersionDefault.setMinimumSize(88, 28)
+        btn_shotVersionDefault.move(0, 102)
+        btn_shotVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::ShotPane: Vesrion template text field
+
+        txt_shotVersion = QtWidgets.QLineEdit('{Shot}_{name}_v{version}', paneShotTemplates)
+        txt_shotVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shotVersion.setMinimumSize(256, 28)
+        txt_shotVersion.move(94, 102)
+        txt_shotVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::ShotPane: Version template fields button
+
+        btn_shotVersionFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotVersionFields.setMinimumSize(88, 28)
+        btn_shotVersionFields.move(356, 102)
+        btn_shotVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotVersionFields_menu = QtWidgets.QMenu()
+        btn_shotVersionFields_menu.addAction('Field 5')
+        btn_shotVersionFields_menu.addAction('Field 6')
+        btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
+
+        # Publish::Templates::ShotPane: END OF SECTION
+        # Publish::Templates::AssetPane: Show and hide
+        # depending on an Entity toggle
         
-        # Publish: Templates: Batch template text field
+        paneAssetTemplates = QtWidgets.QWidget(paneTemplates)
+        paneAssetTemplates.setFixedSize(744, 142)
+        paneAssetTemplates.move(96, 0)
 
-        txt_batch = QtWidgets.QLineEdit('TEST')
-        txt_batch.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_batch.setMinimumSize(400, 28)
-        txt_batch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
-        hbox_batch_publish.addWidget(txt_batch)
+        # Publish::Templates::AssetPane: Publish default button
 
-        # Publish: Templates: Batch template fields button
-
-        btn_batchFields = QtWidgets.QPushButton('Fields', window)
-        btn_batchFields.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_batchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        btn_batchFields.setMinimumSize(88, 28)
-        btn_batchFields_menu = QtWidgets.QMenu()
-        btn_batchFields_menu.addAction('Field 1')
-        btn_batchFields_menu.addAction('Field 2')
-        btn_batchFields.setMenu(btn_batchFields_menu)
-        hbox_batch_publish.addWidget(btn_batchFields)
-
-        vbox_templates.addLayout(hbox_batch_publish)
-
-        # Publish: Templates: Shot/Asset Version Publish template
-        # Publish: Templates: hbox for Shot/Asset Version Publish template
-
-        hbox_version_publish = QtWidgets.QHBoxLayout()
-        hbox_version_publish.setAlignment(QtCore.Qt.AlignLeft)
-
-        # Publish: Templates: Shot/Asset Version template label
-
-        lbl_version_template = QtWidgets.QLabel('Version', window)
-        lbl_version_template.setStyleSheet('QFrame {color: #989898}')
-        lbl_version_template.setMinimumSize(88, 28)
-        lbl_version_template.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-
-        hbox_version_publish.addWidget(lbl_version_template)
-
-        # Publish: Templates: Shot/Asset Version Publish default button
-
-        btn_versionDefault = QtWidgets.QPushButton('Default', window)
-        btn_versionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_versionDefault.setMinimumSize(88, 28)
-        btn_versionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        btn_assetDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
+        btn_assetDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetDefault.setFixedSize(88, 28)
+        btn_assetDefault.move(0, 34)
+        btn_assetDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
 
-        hbox_version_publish.addWidget(btn_versionDefault)
+        # Publish::Templates::AssetPane: Publish template text field
 
-        # Publish: Templates: Batch template text field
+        txt_asset = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr', paneAssetTemplates)
+        txt_asset.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_asset.setFixedSize(556, 28)
+        txt_asset.move (94, 34)
+        txt_asset.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
-        txt_version = QtWidgets.QLineEdit('TEST')
-        txt_version.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_version.setMinimumSize(100, 28)
-        txt_version.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
-        hbox_version_publish.addWidget(txt_version)
+        # Publish::Templates::AssetPane: Publish template fields button
 
-        # Publish: Templates: Version template fields button
-
-        btn_versionFields = QtWidgets.QPushButton('Fields', window)
-        btn_versionFields.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_versionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        btn_assetFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetFields.setFixedSize(88, 28)
+        btn_assetFields.move(656, 34)
+        btn_assetFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        btn_versionFields.setMinimumSize(88, 28)
-        btn_versionFields_menu = QtWidgets.QMenu()
-        btn_versionFields_menu.addAction('Field 5')
-        btn_versionFields_menu.addAction('Field 6')
-        btn_versionFields.setMenu(btn_batchFields_menu)
-        hbox_version_publish.addWidget(btn_versionFields)
+        btn_assetFields_menu = QtWidgets.QMenu()
+        btn_assetFields_menu.addAction('Field 1')
+        btn_assetFields_menu.addAction('Field 2')
+        btn_assetFields.setMenu(btn_assetFields_menu)
 
-        lbl_version_spacer = QtWidgets.QLabel('', window)
-        lbl_version_spacer.setMinimumSize(180, 28)
-        hbox_version_publish.addWidget(lbl_version_spacer)
+        # Publish::Templates::AssetPane: Batch template default button
 
-        vbox_templates.addLayout(hbox_version_publish)    
-        vbox_publish.addLayout(vbox_templates)
+        btn_assetBatchDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
+        btn_assetBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetBatchDefault.setFixedSize(88, 28)
+        btn_assetBatchDefault.move(0, 68)
+        btn_assetBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::AssetPane: Batch template text field
+
+        txt_assetBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch', paneAssetTemplates)
+        txt_assetBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_assetBatch.setMinimumSize(556, 28)
+        txt_assetBatch.move(94, 68)
+        txt_assetBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::AssetPane: Batch template fields button
+
+        btn_assetBatchFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetBatchFields.setMinimumSize(88, 28)
+        btn_assetBatchFields.move(656, 68)
+        btn_assetBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetBatchFields_menu = QtWidgets.QMenu()
+        btn_assetBatchFields_menu.addAction('Field 1')
+        btn_assetBatchFields_menu.addAction('Field 2')
+        btn_assetBatchFields.setMenu(btn_assetBatchFields_menu)
+
+        # Publish::Templates::AssetPane: Version template default button
+
+        btn_assetVersionDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
+        btn_assetVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetVersionDefault.setMinimumSize(88, 28)
+        btn_assetVersionDefault.move(0, 102)
+        btn_assetVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # Publish::Templates::AssetPane: Vesrion template text field
+
+        txt_assetVersion = QtWidgets.QLineEdit('{Asset}_{name}_v{version}', paneAssetTemplates)
+        txt_assetVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_assetVersion.setMinimumSize(256, 28)
+        txt_assetVersion.move(94, 102)
+        txt_assetVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+
+        # Publish::Templates::AssetPane: Version template fields button
+
+        btn_assetVersionFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetVersionFields.setMinimumSize(88, 28)
+        btn_assetVersionFields.move(356, 102)
+        btn_assetVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetVersionFields_menu = QtWidgets.QMenu()
+        btn_assetVersionFields_menu.addAction('Field 5')
+        btn_assetVersionFields_menu.addAction('Field 6')
+        btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
+
+        # Publish::Templates::AssetPane: END OF SECTION
+
+
+        vbox_publish.addWidget(paneTemplates)
         panePublish.setLayout(vbox_publish)
         panePublish.setFixedSize(860, 280)
         panePublish.move(160, 10)
@@ -1353,6 +1448,7 @@ class flameMenuProjectconnect(flameMenuApp):
         paneGeneral.setVisible(False)
         lbl_General = QtWidgets.QLabel('General', paneGeneral)
         lbl_General.setStyleSheet('QFrame {color: #989898}')
+        lbl_General.setAlignment(QtCore.Qt.AlignCenter)
         lbl_General.setFixedSize(840, 264)
         lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
 
@@ -1405,21 +1501,14 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_paneSuperclips = QtWidgets.QLabel('Superclis', paneSuperclips)
         lbl_paneSuperclips.setStyleSheet('QFrame {color: #989898}')
         lbl_paneSuperclips.setFixedSize(840, 264)
+        lbl_paneSuperclips.setAlignment(QtCore.Qt.AlignCenter)
         lbl_paneSuperclips.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
 
-        # paneWidget.setLayout(vbox_General)
-        # hbox_main.addWidget(paneWidget, alignment = QtCore.Qt.AlignLeft)
-        # hbox_main.addWidget(paneWidget)
+        # Close button
 
-
-
-        #dummy = QtWidgets.QLabel('Not yet implemented', window)
-        #dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        #dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-
-        #vertical_sep_01 = QtWidgets.QLabel('', window)
-        #vertical_sep_01.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
-
+        def close_prefs_dialog():
+            self.framework.save_prefs()
+            window.accept()
 
         close_btn = QtWidgets.QPushButton('Close', window)
         close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -1427,14 +1516,9 @@ class flameMenuProjectconnect(flameMenuApp):
         close_btn.move(924, 292)
         close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        close_btn.clicked.connect(window.accept)
+        close_btn.clicked.connect(close_prefs_dialog)
 
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.setMargin(20)
-        vbox.addLayout(hbox_main)
-        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
-
+        # Set default tab and start window
         
         pressPublish()
         window.exec_()
