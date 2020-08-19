@@ -262,6 +262,7 @@ class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
         self.framework = framework
+        self.connector = self
         self.log('waking up')
 
         self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
@@ -480,6 +481,68 @@ class flameShotgunConnector(object):
 
         return True
 
+    def get_pipeline_configurations(self):
+        if not self.sg_user:
+            return []
+        if not self.sg_linked_project_id:
+            return []
+
+        pipeline_configurations = self.sg.find(
+            'PipelineConfiguration', 
+            [['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
+            []
+            )
+        return pipeline_configurations
+
+    def get_tank_name(self, strict = False):
+        if not self.sg_user:
+            return 'unknown_project'
+        if not self.sg_linked_project_id:
+            return 'unknown_project'
+
+        project = self.sg.find_one(
+            'Project', 
+            [['id', 'is', self.sg_linked_project_id]], 
+            ['name', 'tank_name']
+            )
+        if not project:
+            return 'unknown_project'
+        if strict:
+            return project.get('tank_name', '')
+        else:
+            if not project.get('tank_name'):
+                name = project.get('name')
+                if not name:
+                    return 'unknown_project'
+                return self.sanitize_name(name)
+
+        return project.get('tank_name')
+
+    def update_tank_name(self, tank_name):
+        if not self.sg_user:
+            return False
+        if not self.sg_linked_project_id:
+            return False
+        try:
+            return self.sg.update('Project', self.sg_linked_project_id, {'tank_name': tank_name})
+        except:
+            return False
+
+    def sanitize_name(self, name):
+        if name is None:
+            return None
+        
+        name = name.strip()
+        exp = re.compile(u'[^\w\.-]', re.UNICODE)
+
+        if isinstance(name, unicode):
+            result = exp.sub('_', value)
+        else:
+            decoded = name.decode('utf-8')
+            result = exp.sub('_', decoded).encode('utf-8')
+
+        return re.sub('_\_+', '_', result)
+
     # shotgun storage root related methods
 
     @property
@@ -512,13 +575,13 @@ class flameShotgunConnector(object):
             return None
         return path_cache_storage.get(platform_path_field)
 
-    def get_storage_root_dialog(self):
+    def set_storage_root_dialog(self):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
         sg_storage_data = self.get_local_file_storages()
         self.sg_storage_index = 0
-        return_value = False
+        self.txt_tankName_text = self.connector.get_tank_name()
 
         if not sg_storage_data:
             message = '<p align = "center">'
@@ -529,18 +592,47 @@ class flameShotgunConnector(object):
             mbox.setText(message)
             mbox.exec_()
             return False
+        
+        if not self.connector.sg_linked_project_id:
+            message = 'Please link Flame project to Shotgun first'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+
+        def calculate_project_path():
+            self.txt_tankName_text  = self.connector.get_tank_name() 
+            linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
+            mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
+            win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
+            msg = 'Linux path: '
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            
+            return msg
 
         def combobox_changed(index):
             self.sg_storage_index = index
-            storage_root_paths.setText(
-                'Linux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
-                '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
-                '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path'))
-            )
-            
+            storage_root_paths.setText(calculate_project_path())
+        
         window = QtWidgets.QDialog()
-        window.setMinimumSize(300, 180)
-        window.setWindowTitle('Select Local File Storage')
+        window.setMinimumSize(400, 180)
+        window.setWindowTitle('Set Project Location')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         window.setStyleSheet('background-color: #313131')
@@ -549,18 +641,61 @@ class flameShotgunConnector(object):
         window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
         
         vbox1 = QtWidgets.QVBoxLayout()
+
+        msg = 'Pipeline Configurations found for this project.\n'
+        msg += 'Please check Shotgun Pipeline Toolkit documentation\n'
+        msg += 'in order to change project location'
+        lbl_ToolkitWarning = QtWidgets.QLabel(msg,
+                        window)
+        lbl_ToolkitWarning.setStyleSheet('QFrame {color: #888888}')
+        vbox1.addWidget(lbl_ToolkitWarning)
+
+        
+        # Storage Roots Label
+
+        lbl_sgLocalFileStorage = QtWidgets.QLabel('Shotgun Local File Storage', window)
+        lbl_sgLocalFileStorage.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgLocalFileStorage.setMinimumHeight(28)
+        lbl_sgLocalFileStorage.setMaximumHeight(28)
+        lbl_sgLocalFileStorage.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgLocalFileStorage)
+
         storage_list = QtWidgets.QComboBox(window)
         for storage in sg_storage_data:
             storage_list.addItem(storage.get('code'))
+        
+        storage_list.setMinimumHeight(28)
+        # storage_list.setStyleSheet('QComboBox {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                            'QComboBox::down-arrow {image: url(/opt/Autodesk/lib64/2020.2/qml/QtQuick/Controls/Styles/Base/images/arrow-down.png); border: 0px;}'
+        #                            'QComboBox::drop-down {border: 0px;}'')
         storage_list.setCurrentIndex(self.sg_storage_index)
         storage_list.currentIndexChanged.connect(combobox_changed)
         vbox1.addWidget(storage_list)
 
-        storage_root_paths = QtWidgets.QLabel(
-            'Linux path: ' + str(sg_storage_data[self.sg_storage_index].get('linux_path')) + 
-            '\nMac path: ' + str(sg_storage_data[self.sg_storage_index].get('mac_path')) +
-            '\nWindows path: ' + str(sg_storage_data[self.sg_storage_index].get('windows_path')), 
-            window)
+        lbl_sgProjectFolder = QtWidgets.QLabel('Project Folder Name', window)
+        lbl_sgProjectFolder.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgProjectFolder.setMinimumHeight(28)
+        lbl_sgProjectFolder.setMaximumHeight(28)
+        lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgProjectFolder)
+
+        lbl_tankName = QtWidgets.QLabel(self.txt_tankName_text, window)
+        lbl_tankName.setFocusPolicy(QtCore.Qt.NoFocus)
+        lbl_tankName.setMinimumHeight(28)
+        lbl_tankName.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
+        lbl_tankName.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        vbox1.addWidget(lbl_tankName)
+
+        lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
+        lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color:  #373737}')
+        lbl_ProjectPath.setMinimumHeight(28)
+        lbl_ProjectPath.setMaximumHeight(28)
+        lbl_ProjectPath.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_ProjectPath)
+
+        project_path_info = calculate_project_path()
+
+        storage_root_paths = QtWidgets.QLabel(calculate_project_path(), window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
         vbox1.addWidget(storage_root_paths)
@@ -591,7 +726,154 @@ class flameShotgunConnector(object):
         window.setLayout(vbox)
         if window.exec_():
             self.sg_storage_root = sg_storage_data[self.sg_storage_index]
+        return self.sg_storage_root
+
+    def set_project_location_dialog(self):
+        from PySide2 import QtWidgets, QtCore
+        window = None
+        storage_root_paths = None
+        sg_storage_data = self.get_local_file_storages()
+        self.sg_storage_index = 0
+        self.txt_tankName_text = self.connector.get_tank_name()
+
+        if not sg_storage_data:
+            message = '<p align = "center">'
+            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
+            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
         
+        if not self.connector.sg_linked_project_id:
+            message = 'Please link Flame project to Shotgun first'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+
+        def calculate_project_path():
+            linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
+            mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
+            win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
+            msg = 'Linux path: '
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, self.txt_tankName_text)
+            else:
+                msg += 'None'
+            
+            return msg
+
+        def combobox_changed(index):
+            self.sg_storage_index = index
+            storage_root_paths.setText(calculate_project_path())
+
+        def txt_tankName_textChanged():
+            self.txt_tankName_text = txt_tankName.text()
+            storage_root_paths.setText(calculate_project_path())
+
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(400, 180)
+        window.setWindowTitle('Set Project Location')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
+        
+        vbox1 = QtWidgets.QVBoxLayout()
+        
+        # Storage Roots Label
+
+        lbl_sgLocalFileStorage = QtWidgets.QLabel('Shotgun Local File Storage', window)
+        lbl_sgLocalFileStorage.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgLocalFileStorage.setMinimumHeight(28)
+        lbl_sgLocalFileStorage.setMaximumHeight(28)
+        lbl_sgLocalFileStorage.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgLocalFileStorage)
+
+        storage_list = QtWidgets.QComboBox(window)
+        for storage in sg_storage_data:
+            storage_list.addItem(storage.get('code'))
+        
+        storage_list.setMinimumHeight(28)
+        # storage_list.setStyleSheet('QComboBox {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                            'QComboBox::down-arrow {image: url(/opt/Autodesk/lib64/2020.2/qml/QtQuick/Controls/Styles/Base/images/arrow-down.png); border: 0px;}'
+        #                            'QComboBox::drop-down {border: 0px;}'')
+        storage_list.setCurrentIndex(self.sg_storage_index)
+        storage_list.currentIndexChanged.connect(combobox_changed)
+        vbox1.addWidget(storage_list)
+
+        lbl_sgProjectFolder = QtWidgets.QLabel('Project Folder Name', window)
+        lbl_sgProjectFolder.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgProjectFolder.setMinimumHeight(28)
+        lbl_sgProjectFolder.setMaximumHeight(28)
+        lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgProjectFolder)
+        
+        txt_tankName = QtWidgets.QLineEdit(self.txt_tankName_text, window)
+        txt_tankName.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_tankName.setMinimumHeight(28)
+        txt_tankName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        txt_tankName.textChanged.connect(txt_tankName_textChanged)
+        vbox1.addWidget(txt_tankName)
+
+        lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
+        lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_ProjectPath.setMinimumHeight(28)
+        lbl_ProjectPath.setMaximumHeight(28)
+        lbl_ProjectPath.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_ProjectPath)
+
+        project_path_info = calculate_project_path()
+
+        storage_root_paths = QtWidgets.QLabel(calculate_project_path(), window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox1.addWidget(storage_root_paths)
+
+        select_btn = QtWidgets.QPushButton('Select', window)
+        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        select_btn.setMinimumSize(100, 28)
+        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        select_btn.clicked.connect(window.accept)
+
+        cancel_btn = QtWidgets.QPushButton('Cancel', window)
+        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        cancel_btn.setMinimumSize(100, 28)
+        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        cancel_btn.clicked.connect(window.reject)
+
+        hbox2 = QtWidgets.QHBoxLayout()
+        hbox2.addWidget(cancel_btn)
+        hbox2.addWidget(select_btn)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(vbox1)
+        vbox.addLayout(hbox2)
+
+        window.setLayout(vbox)
+        if window.exec_():
+            self.sg_storage_root = sg_storage_data[self.sg_storage_index]
+            self.connector.update_tank_name(self.txt_tankName_text)
         return self.sg_storage_root
 
     def get_local_file_storages(self):
@@ -612,7 +894,6 @@ class flameShotgunConnector(object):
 
         self.sg_storage_root = {}
         return False
-
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -762,149 +1043,102 @@ class flameMenuProjectconnect(flameMenuApp):
         # storage root section
         self.connector.update_sg_storage_root()
 
-        def update_sg_storage_root_widget():
-            self.connector.get_storage_root_dialog()
-            storage_root.setText(self.connector.sg_storage_root.get('code', 'not selected'))
-            storage_root_paths.setText(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
+
+        def compose_project_path_messge(tank_name):
+            self.connector.update_sg_storage_root()
+
+            if not self.connector.sg_storage_root:
+                # no storage selected
+                return 'Linux path: no storage selected\nMac path: no storage selected\nWindows path: no storage selected'
+            
+            linux_path = str(self.connector.sg_storage_root.get('linux_path', ''))
+            mac_path = str(self.connector.sg_storage_root.get('mac_path', ''))
+            win_path = str(self.connector.sg_storage_root.get('windows_path', ''))
+            msg = 'Linux path: '
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, tank_name)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, tank_name)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, tank_name)
+            else:
+                msg += 'None'
+
+            return msg
+
+        def update_project_path_info():
+            tank_name = self.connector.get_tank_name() 
+            storage_root_paths.setText(compose_project_path_messge(tank_name))
+
+        def update_pipeline_config_info():
+            if self.connector.get_pipeline_configurations():
+                pipeline_config_info.setText('Found')
+            else:
+                pipeline_config_info.setText('Clear')
+
+        def change_storage_root_dialog():
+            if self.connector.get_pipeline_configurations():
+                self.connector.set_storage_root_dialog()
+            else:
+                self.connector.set_project_location_dialog()
+
+            update_pipeline_config_info()
+            update_project_path_info()
+
+        def set_export_preset_type(item):
+            pprint (item)
+
+        def changeExportPreset():
+            print ('file dialog')
+            dialog = QtWidgets.QFileDialog()
+            dialog.setWindowTitle('Select Format Preset')
+            dialog.setNameFilter('XML files (*.xml)')
+            dialog.setDirectory(os.path.expanduser('~'))
+            dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                file_full_path = str(dialog.selectedFiles()[0])
+                pprint (file_full_path)
 
         # Prefs window functions
 
         def pressGeneral():
             btn_General.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             
             paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
             panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
             paneSuperclips.setVisible(False)
 
             paneGeneral.setVisible(True)
 
-
-        def pressBatchBlessing():
-            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-
-            paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
-            panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
-            paneSuperclips.setVisible(False)
-
-            paneBatchBlessing.setVisible(True)
-
-
-        def pressBatchLoader():
-            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchLoader.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-
-            paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
-            panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
-            paneSuperclips.setVisible(False)
-
-            paneBatchLoader.setVisible(True)
-
-
-        def pressNewBatch():
-            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_NewBatch.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-
-            paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
-            panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
-            paneSuperclips.setVisible(False)
-
-            paneNewBatch.setVisible(True)
-
-
         def pressPublish():
             btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Publish.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
 
             paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
             panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
             paneSuperclips.setVisible(False)
 
             panePublish.setVisible(True)
 
-        def pressCreateShot():
-            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_CreateShot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-
-            paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
-            panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
-            paneSuperclips.setVisible(False)
-
-            paneCreateShot.setVisible(True)
-
         def pressSuperclips():
             btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Superclips.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
 
             paneGeneral.setVisible(False)
-            paneBatchBlessing.setVisible(False)
-            paneBatchLoader.setVisible(False)
-            paneNewBatch.setVisible(False)
             panePublish.setVisible(False)
-            paneCreateShot.setVisible(False)
             paneSuperclips.setVisible(False)
 
             paneSuperclips.setVisible(True)
@@ -926,11 +1160,7 @@ class flameMenuProjectconnect(flameMenuApp):
         
         paneTabs = QtWidgets.QWidget(window)
         paneGeneral = QtWidgets.QWidget(window)
-        paneBatchBlessing = QtWidgets.QWidget(window)
-        paneBatchLoader = QtWidgets.QWidget(window)
-        paneNewBatch = QtWidgets.QWidget(window)
         panePublish = QtWidgets.QWidget(window)
-        paneCreateShot = QtWidgets.QWidget(window)
         paneSuperclips = QtWidgets.QWidget(window)
 
         # Main window HBox
@@ -969,45 +1199,6 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_General.addWidget(btn_General)
         vbox_apps.addLayout(hbox_General, alignment = QtCore.Qt.AlignLeft)
 
-        # Modules: flameMenuBatchBlessing button
-
-        hbox_BatchBlessing = QtWidgets.QHBoxLayout()
-        btn_BatchBlessing = QtWidgets.QPushButton('Batch Linking', window)
-        btn_BatchBlessing.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_BatchBlessing.setMinimumSize(128, 28)
-        btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-        btn_BatchBlessing.pressed.connect(pressBatchBlessing)
-        btn_BatchBlessing.setVisible(False)
-        hbox_BatchBlessing.addWidget(btn_BatchBlessing)
-        # vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
-
-        # Modules: flameMenuBatchLoader button
-        
-        hbox_BatchLoader = QtWidgets.QHBoxLayout()
-        hbox_BatchLoader.setAlignment(QtCore.Qt.AlignLeft)
-        btn_BatchLoader = QtWidgets.QPushButton('Batch Loader', window)
-        btn_BatchLoader.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_BatchLoader.setMinimumSize(128, 28)
-        btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-        btn_BatchLoader.pressed.connect(pressBatchLoader)
-        btn_BatchLoader.setVisible(False)
-        hbox_BatchLoader.addWidget(btn_BatchLoader)
-        # vbox_apps.addLayout(hbox_BatchLoader, alignment = QtCore.Qt.AlignLeft)
-
-
-        # Modules: flameMenuNewBatch button
-
-        hbox_NewBatch = QtWidgets.QHBoxLayout()
-        hbox_NewBatch.setAlignment(QtCore.Qt.AlignLeft)
-        btn_NewBatch = QtWidgets.QPushButton('New Batch', window)
-        btn_NewBatch.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_NewBatch.setMinimumSize(128, 28)
-        btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-        btn_NewBatch.pressed.connect(pressNewBatch)
-        btn_NewBatch.setVisible(False)
-        hbox_NewBatch.addWidget(btn_NewBatch)
-        # vbox_apps.addLayout(hbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
-
         # Modules: flameMenuPublisher button
 
         hbox_Publish = QtWidgets.QHBoxLayout()
@@ -1019,20 +1210,6 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_Publish.pressed.connect(pressPublish)
         hbox_Publish.addWidget(btn_Publish)
         vbox_apps.addLayout(hbox_Publish, alignment = QtCore.Qt.AlignLeft)
-
-        # Modules: flameMenuCreate button
-
-        hbox_CreateShot = QtWidgets.QHBoxLayout()
-        hbox_CreateShot.setAlignment(QtCore.Qt.AlignLeft)
-        btn_CreateShot = QtWidgets.QPushButton('Create', window)
-        btn_CreateShot.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_CreateShot.setMinimumSize(128, 28)
-        btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-        btn_CreateShot.pressed.connect(pressCreateShot)
-        btn_CreateShot.setVisible(False)
-        hbox_CreateShot.addWidget(btn_CreateShot)
-        # vbox_apps.addLayout(hbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
-
 
         # Modules: flameSuperclips button
 
@@ -1074,7 +1251,7 @@ class flameMenuProjectconnect(flameMenuApp):
         
         # Publish: StorageRoot: label
 
-        lbl_storage_root = QtWidgets.QLabel('Local File Storage', window)
+        lbl_storage_root = QtWidgets.QLabel('Project Location', window)
         lbl_storage_root.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_storage_root.setMinimumSize(200, 28)
         lbl_storage_root.setAlignment(QtCore.Qt.AlignCenter)
@@ -1084,33 +1261,41 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish: StorageRoot: button and storage root name block
 
         hbox_storage = QtWidgets.QHBoxLayout()
-        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
+        storage_root_btn = QtWidgets.QPushButton(window)
+        if self.connector.get_pipeline_configurations():
+            if self.connector.sg_storage_root:
+                storage_root_btn.setText('Change Local File Storage')
+            else:
+                storage_root_btn.setText('Select Local File Storage')
+        else:
+            storage_root_btn.setText('Change Project Location')
+        
         storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
         storage_root_btn.setMinimumSize(199, 28)
         storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
+        storage_root_btn.clicked.connect(change_storage_root_dialog)
         hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
 
-        storage_name = QtWidgets.QLabel('Current storage:', window)
+        storage_name = QtWidgets.QLabel('Pipeline configuration:', window)
         hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
 
-        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code', 'not selected'), window)
+        pipeline_config_info = QtWidgets.QLabel(window)
         boldFont = QtGui.QFont()
         boldFont.setBold(True)
-        storage_root.setFont(boldFont)
-        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
+        pipeline_config_info.setFont(boldFont)
+
+        update_pipeline_config_info()        
+        hbox_storage.addWidget(pipeline_config_info, alignment = QtCore.Qt.AlignRight)
         vbox_storage_root.addLayout(hbox_storage)
 
         # Publish: StorageRoot: Paths info label
-
-        storage_root_paths = QtWidgets.QLabel(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
-            window)
+        storage_root_paths = QtWidgets.QLabel(window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
+        
+        update_project_path_info()
+
         vbox_storage_root.addWidget(storage_root_paths)
         hbox_storage_root.addLayout(vbox_storage_root)
 
@@ -1123,7 +1308,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: ExportPresets: label
 
-        lbl_export_preset = QtWidgets.QLabel('Export Preset', window)
+        lbl_export_preset = QtWidgets.QLabel('Export Format Presets', window)
         lbl_export_preset.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_export_preset.setMinimumSize(440, 28)
         lbl_export_preset.setAlignment(QtCore.Qt.AlignCenter)
@@ -1134,49 +1319,55 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_export_preset = QtWidgets.QHBoxLayout()
         hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
-        # Publish: ExportPresets: Change button
-        
-        btn_changePreset = QtWidgets.QPushButton('Change', window)
-        btn_changePreset.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_changePreset.setMinimumSize(88, 28)
-        btn_changePreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        # Publish: ExportPresets: Preset typ selector
+
+        btn_presetType = QtWidgets.QPushButton('Publish', window)
+        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_presetType.setMinimumSize(88, 28)
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        hbox_export_preset.addWidget(btn_changePreset)
+        btn_presetType_menu = QtWidgets.QMenu()
+        btn_presetType_menu.addAction('Publish', presetType_setPublish)
+        btn_presetType_menu.addAction('Preview', presetType_Preview)
+        btn_presetType_menu.addAction('Thumbnail', presetType_setThumbnail)
+        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
+        hbox_export_preset.addWidget(btn_defaultPreset)
 
-        # Publish: ExportPresets: Default button and menu
+        # Publish: ExportPresets: Export preset selector
 
-        btn_defaultPreset = QtWidgets.QPushButton('Default', window)
+        btn_Preset = QtWidgets.QPushButton('Publish', window)
         btn_defaultPreset.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_defaultPreset.setMinimumSize(88, 28)
         btn_defaultPreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_another_menu = QtWidgets.QMenu()
+        btn_another_menu.addAction('Another action')
+        btn_another_menu.setTitle('Submenu')
         btn_defaultPreset_menu = QtWidgets.QMenu()
-        btn_defaultPreset_menu.addAction('Default EXR Export Preset')
-        btn_defaultPreset_menu.addAction('Default DPX Export Preset')
-        btn_defaultPreset_menu.addAction('Default MOV Export Preset')
-        btn_defaultPreset_menu.addAction('Default MXF Export Preset')
+        btn_defaultPreset_menu.addAction('Publish')
+        btn_defaultPreset_menu.addAction('Preview')
+        btn_defaultPreset_menu.addAction('Thumbnail')
+        btn_defaultPreset_menu.addMenu(btn_another_menu)
         btn_defaultPreset.setMenu(btn_defaultPreset_menu)
         hbox_export_preset.addWidget(btn_defaultPreset)
 
-        # Publish: ExportPresets: Format Preset name
 
-        presetLabel = QtWidgets.QLabel('Format Preset: ', window)
-        hbox_export_preset.addWidget(presetLabel, alignment = QtCore.Qt.AlignLeft)
-
-        # Publish: ExportPresets: Export Preset name
-
-        presetName = QtWidgets.QLabel('Export Preset Name')
-        presetName_boldFont = QtGui.QFont()
-        presetName_boldFont.setBold(True)
-        presetName.setFont(presetName_boldFont)
-        hbox_export_preset.addWidget(presetName)
+        # Publish: ExportPresets: Change button
+        
+        btn_changePreset = QtWidgets.QPushButton('Load', window)
+        btn_changePreset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_changePreset.setMinimumSize(88, 28)
+        btn_changePreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_changePreset.clicked.connect(changeExportPreset)
+        hbox_export_preset.addWidget(btn_changePreset, alignment = QtCore.Qt.AlignLeft)
         
         # Publish: ExportPresets: End of Change, Default buttons and preset name HBox
         vbox_export_preset.addLayout(hbox_export_preset)
 
         # Publish: ExportPresets: Exoprt preset details
         
-        presetDetails = QtWidgets.QLabel('Some preset details goes here\n\n',window)
+        presetDetails = QtWidgets.QLabel('Publish: \nPreview: \nThumbnail: ', window)
         presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
 
@@ -1452,47 +1643,6 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_General.setFixedSize(840, 264)
         lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
 
-        # BatchBlessing
-
-        paneBatchBlessing.setFixedSize(840, 264)
-        paneBatchBlessing.move(172, 20)
-        paneBatchBlessing.setVisible(False)
-        lbl_BatchBlessing = QtWidgets.QLabel('Batch Linking Preferences', paneBatchBlessing)
-        lbl_BatchBlessing.setStyleSheet('QFrame {color: #989898}')
-        lbl_BatchBlessing.setFixedSize(840, 264)
-        lbl_BatchBlessing.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-
-        # BatchLoader
-
-        paneBatchLoader.setFixedSize(840, 264)
-        paneBatchLoader.move(172, 20)
-        paneBatchLoader.setVisible(False)
-        lbl_BatchLoader = QtWidgets.QLabel('Batch Loader Preferences', paneBatchLoader)
-        lbl_BatchLoader.setStyleSheet('QFrame {color: #989898}')
-        lbl_BatchLoader.setFixedSize(840, 264)
-        lbl_BatchLoader.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-
-
-        # NewBatch
-
-        paneNewBatch.setFixedSize(840, 264)
-        paneNewBatch.move(172, 20)
-        paneNewBatch.setVisible(False)
-        lbl_NewBatch = QtWidgets.QLabel('New Batch', paneNewBatch)
-        lbl_NewBatch.setStyleSheet('QFrame {color: #989898}')
-        lbl_NewBatch.setFixedSize(840, 264)
-        lbl_NewBatch.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-
-        # CreateShot
-
-        paneCreateShot.setFixedSize(840, 264)
-        paneCreateShot.move(172, 20)
-        paneCreateShot.setVisible(False)
-        lbl_paneCreateShot = QtWidgets.QLabel('Create Shot / Asset', paneCreateShot)
-        lbl_paneCreateShot.setStyleSheet('QFrame {color: #989898}')
-        lbl_paneCreateShot.setFixedSize(840, 264)
-        lbl_paneCreateShot.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-
         # Superclips
 
         paneSuperclips.setFixedSize(840, 264)
@@ -1519,10 +1669,10 @@ class flameMenuProjectconnect(flameMenuApp):
         close_btn.clicked.connect(close_prefs_dialog)
 
         # Set default tab and start window
-        
+
+        action_showShot()
         pressPublish()
         window.exec_()
-
 
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
@@ -3396,84 +3546,6 @@ class flameMenuPublisher(flameMenuApp):
                 self.mbox.setText(message)
                 self.mbox.exec_()
         self.prefs['flame_bug_message_shown'] = True
-
-
-        from PySide2 import QtWidgets, QtCore, QtGui
-        
-        # storage root section
-        self.connector.update_sg_storage_root()
-        def update_sg_storage_root_widget():
-            self.connector.get_storage_root_dialog()
-            storage_root.setText(self.connector.sg_storage_root.get('code'))
-            storage_root_paths.setText(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
-
-        window = None
-        window = QtWidgets.QDialog()
-        window.setMinimumSize(800, 280)
-        window.setWindowTitle(self.framework.bundle_name + ' Preferences')
-        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
-        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        window.setStyleSheet('background-color: #313131')
-
-        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
-        window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
-
-        hbox_storage = QtWidgets.QHBoxLayout()
-        storage_root_btn = QtWidgets.QPushButton('Change Local File Storage', window)
-        storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        storage_root_btn.setMinimumSize(199, 24)
-        storage_root_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        storage_root_btn.clicked.connect(update_sg_storage_root_widget)
-        hbox_storage.addWidget(storage_root_btn, alignment = QtCore.Qt.AlignLeft)
-
-        storage_name = QtWidgets.QLabel('Current storage:', window)
-        hbox_storage.addWidget(storage_name, alignment = QtCore.Qt.AlignLeft)
-
-        storage_root = QtWidgets.QLabel(self.connector.sg_storage_root.get('code'), window)
-        boldFont = QtGui.QFont()
-        boldFont.setBold(True)
-        storage_root.setFont(boldFont)
-        hbox_storage.addWidget(storage_root, alignment = QtCore.Qt.AlignRight)
-
-        vbox1 = QtWidgets.QVBoxLayout()
-        vbox1.setAlignment(QtCore.Qt.AlignTop)
-        vbox1.addLayout(hbox_storage)
-
-        storage_root_paths = QtWidgets.QLabel(
-            'Linux path: ' + str(self.connector.sg_storage_root.get('linux_path')) + 
-            '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
-            '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')), 
-            window)
-        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-        vbox1.addWidget(storage_root_paths)
-
-        dummy = QtWidgets.QLabel('Not yet implemented', window)
-        dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        dummy.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-
-        close_btn = QtWidgets.QPushButton('Close', window)
-        close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        close_btn.setMinimumSize(88, 24)
-        close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        close_btn.clicked.connect(window.accept)
-
-        hbox1 = QtWidgets.QHBoxLayout()
-        hbox1.addLayout(vbox1)
-        hbox1.addWidget(dummy)
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.setMargin(20)
-        vbox.addLayout(hbox1)
-        vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
-
-        window.setLayout(vbox)
-        window.exec_()
     
 
 # --- FLAME STARTUP SEQUENCE ---
