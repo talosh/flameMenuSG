@@ -567,14 +567,14 @@ class flameShotgunConnector(object):
 
         select_btn = QtWidgets.QPushButton('Select', window)
         select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        select_btn.setMinimumSize(100, 24)
+        select_btn.setMinimumSize(100, 28)
         select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         select_btn.clicked.connect(window.accept)
 
         cancel_btn = QtWidgets.QPushButton('Cancel', window)
         cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        cancel_btn.setMinimumSize(100, 24)
+        cancel_btn.setMinimumSize(100, 28)
         cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         cancel_btn.clicked.connect(window.reject)
@@ -765,9 +765,150 @@ class flameMenuProjectconnect(flameMenuApp):
             '\nMac path: ' + str(self.connector.sg_storage_root.get('mac_path')) +
             '\nWindows path: ' + str(self.connector.sg_storage_root.get('windows_path')))
 
+        # Prefs window functions
+
+        def pressGeneral():
+            btn_General.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneGeneral.setVisible(True)
+
+
+        def pressBatchBlessing():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneBatchBlessing.setVisible(True)
+
+
+        def pressBatchLoader():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchLoader.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneBatchLoader.setVisible(True)
+
+
+        def pressNewBatch():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_NewBatch.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneNewBatch.setVisible(True)
+
+
+        def pressPublish():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            panePublish.setVisible(True)
+
+        def pressCreateShot():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_CreateShot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneCreateShot.setVisible(True)
+
+        def pressSuperclips():
+            btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Superclips.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+
+            paneGeneral.setVisible(False)
+            paneBatchBlessing.setVisible(False)
+            paneBatchLoader.setVisible(False)
+            paneNewBatch.setVisible(False)
+            panePublish.setVisible(False)
+            paneCreateShot.setVisible(False)
+            paneSuperclips.setVisible(False)
+
+            paneSuperclips.setVisible(True)
+
+
+
         window = None
         window = QtWidgets.QDialog()
-        window.setMinimumSize(1024, 260)
+        window.setFixedSize(1028, 328)
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
@@ -776,7 +917,18 @@ class flameMenuProjectconnect(flameMenuApp):
         screen_res = QtWidgets.QDesktopWidget().screenGeometry()
         window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
 
-        # Main Preferences window HBox
+        # Prefs Pane widgets
+        
+        paneTabs = QtWidgets.QWidget(window)
+        paneGeneral = QtWidgets.QWidget(window)
+        paneBatchBlessing = QtWidgets.QWidget(window)
+        paneBatchLoader = QtWidgets.QWidget(window)
+        paneNewBatch = QtWidgets.QWidget(window)
+        panePublish = QtWidgets.QWidget(window)
+        paneCreateShot = QtWidgets.QWidget(window)
+        paneSuperclips = QtWidgets.QWidget(window)
+
+        # Main window HBox
 
         hbox_main = QtWidgets.QHBoxLayout()
         hbox_main.setAlignment(QtCore.Qt.AlignLeft)
@@ -793,7 +945,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         lbl_modules = QtWidgets.QLabel('Modules', window)
         lbl_modules.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_modules.setMinimumSize(168, 28)
+        lbl_modules.setMinimumSize(128, 28)
         lbl_modules.setAlignment(QtCore.Qt.AlignCenter)
         vbox_apps.addWidget(lbl_modules)
 
@@ -805,43 +957,21 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_General.setAlignment(QtCore.Qt.AlignLeft)
         btn_General = QtWidgets.QPushButton('General', window)
         btn_General.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_General.setMinimumSize(168, 28)
+        btn_General.setMinimumSize(128, 28)
         btn_General.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_General.pressed.connect(pressGeneral)
         hbox_General.addWidget(btn_General)
         vbox_apps.addLayout(hbox_General, alignment = QtCore.Qt.AlignLeft)
-
-        # Modules: flameMenuCreate button
-
-        hbox_CreateShot = QtWidgets.QHBoxLayout()
-        hbox_CreateShot.setAlignment(QtCore.Qt.AlignLeft)
-        btn_CreateShot = QtWidgets.QPushButton('Create Shot / Asset', window)
-        btn_CreateShot.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_CreateShot.setMinimumSize(168, 28)
-        btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-        btn_CreateShot_light = QtWidgets.QLabel('', window)
-        btn_CreateShot_light.setMinimumSize(10, 28)
-        btn_CreateShot_light.setMaximumSize(10, 28)
-        btn_CreateShot_light.setStyleSheet('background-color: #647db2')
-        hbox_CreateShot.addWidget(btn_CreateShot)
-        hbox_CreateShot.addWidget(btn_CreateShot_light)
-        vbox_apps.addLayout(hbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
 
         # Modules: flameMenuBatchBlessing button
 
         hbox_BatchBlessing = QtWidgets.QHBoxLayout()
         btn_BatchBlessing = QtWidgets.QPushButton('Batch Linking', window)
         btn_BatchBlessing.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_BatchBlessing.setMinimumSize(168, 28)
-        btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-        btn_BatchBlessing.setCheckable(True)
-        btn_BatchBlessing.setChecked(True)
-        btn_BatchBlessing_light = QtWidgets.QLabel('', window)
-        btn_BatchBlessing_light.setMinimumSize(10, 28)
-        btn_BatchBlessing_light.setMaximumSize(10, 28)
-        btn_BatchBlessing_light.setStyleSheet('background-color: #647db2')
+        btn_BatchBlessing.setMinimumSize(128, 28)
+        btn_BatchBlessing.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_BatchBlessing.pressed.connect(pressBatchBlessing)
         hbox_BatchBlessing.addWidget(btn_BatchBlessing)
-        hbox_BatchBlessing.addWidget(btn_BatchBlessing_light)
         vbox_apps.addLayout(hbox_BatchBlessing, alignment = QtCore.Qt.AlignLeft)
 
         # Modules: flameMenuBatchLoader button
@@ -850,16 +980,10 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_BatchLoader.setAlignment(QtCore.Qt.AlignLeft)
         btn_BatchLoader = QtWidgets.QPushButton('Batch Loader', window)
         btn_BatchLoader.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_BatchLoader.setMinimumSize(168, 28)
-        btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-        btn_BatchLoader.setCheckable(True)                 
-        btn_BatchLoader_light = QtWidgets.QLabel('', window)
-        btn_BatchLoader_light.setMinimumSize(10, 28)
-        btn_BatchLoader_light.setMaximumSize(10, 28)
-        btn_BatchLoader_light.setStyleSheet('background-color: #647db2')
+        btn_BatchLoader.setMinimumSize(128, 28)
+        btn_BatchLoader.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_BatchLoader.pressed.connect(pressBatchLoader)
         hbox_BatchLoader.addWidget(btn_BatchLoader)
-        hbox_BatchLoader.addWidget(btn_BatchLoader_light)
         vbox_apps.addLayout(hbox_BatchLoader, alignment = QtCore.Qt.AlignLeft)
 
 
@@ -869,16 +993,10 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_NewBatch.setAlignment(QtCore.Qt.AlignLeft)
         btn_NewBatch = QtWidgets.QPushButton('New Batch', window)
         btn_NewBatch.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_NewBatch.setMinimumSize(168, 28)
-        btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-        btn_NewBatch.setCheckable(True)                 
-        btn_NewBatch_light = QtWidgets.QLabel('', window)
-        btn_NewBatch_light.setMinimumSize(10, 28)
-        btn_NewBatch_light.setMaximumSize(10, 28)
-        btn_NewBatch_light.setStyleSheet('background-color: #647db2')
+        btn_NewBatch.setMinimumSize(128, 28)
+        btn_NewBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_NewBatch.pressed.connect(pressNewBatch)
         hbox_NewBatch.addWidget(btn_NewBatch)
-        hbox_NewBatch.addWidget(btn_NewBatch_light)
         vbox_apps.addLayout(hbox_NewBatch, alignment = QtCore.Qt.AlignLeft)
 
         # Modules: flameMenuPublisher button
@@ -887,16 +1005,24 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_Publish.setAlignment(QtCore.Qt.AlignLeft)
         btn_Publish = QtWidgets.QPushButton('Menu Publish', window)
         btn_Publish.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_Publish.setMinimumSize(168, 28)
+        btn_Publish.setMinimumSize(128, 28)
         btn_Publish.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-        #    'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-        btn_Publish_light = QtWidgets.QLabel('', window)
-        btn_Publish_light.setMinimumSize(10, 28)
-        btn_Publish_light.setMaximumSize(10, 28)
-        btn_Publish_light.setStyleSheet('background-color: #647db2')
+        btn_Publish.pressed.connect(pressPublish)
         hbox_Publish.addWidget(btn_Publish)
-        hbox_Publish.addWidget(btn_Publish_light)
         vbox_apps.addLayout(hbox_Publish, alignment = QtCore.Qt.AlignLeft)
+
+        # Modules: flameMenuCreate button
+
+        hbox_CreateShot = QtWidgets.QHBoxLayout()
+        hbox_CreateShot.setAlignment(QtCore.Qt.AlignLeft)
+        btn_CreateShot = QtWidgets.QPushButton('Create', window)
+        btn_CreateShot.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_CreateShot.setMinimumSize(128, 28)
+        btn_CreateShot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_CreateShot.pressed.connect(pressCreateShot)
+        hbox_CreateShot.addWidget(btn_CreateShot)
+        vbox_apps.addLayout(hbox_CreateShot, alignment = QtCore.Qt.AlignLeft)
+
 
         # Modules: flameSuperclips button
 
@@ -904,17 +1030,10 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_Superclips.setAlignment(QtCore.Qt.AlignLeft)
         btn_Superclips = QtWidgets.QPushButton('Superclips', window)
         btn_Superclips.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_Superclips.setMinimumSize(168, 28)
-        btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-            'QPushButton:checked {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
-        btn_Superclips.setCheckable(True)                 
-        btn_Superclips.setChecked(True)
-        btn_Superclips_light = QtWidgets.QLabel('', window)
-        btn_Superclips_light.setMinimumSize(10, 28)
-        btn_Superclips_light.setMaximumSize(10, 28)
-        btn_Superclips_light.setStyleSheet('background-color: #647db2')
+        btn_Superclips.setMinimumSize(128, 28)
+        btn_Superclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Superclips.pressed.connect(pressSuperclips)
         hbox_Superclips.addWidget(btn_Superclips)
-        hbox_Superclips.addWidget(btn_Superclips_light)
         vbox_apps.addLayout(hbox_Superclips, alignment = QtCore.Qt.AlignLeft)
 
         # Modules: End of Modules section
@@ -926,6 +1045,8 @@ class flameMenuProjectconnect(flameMenuApp):
         vertical_sep_01.setFrameStyle(QtWidgets.QFrame.VLine | QtWidgets.QFrame.Plain)
         vertical_sep_01.setStyleSheet('QFrame {color: #444444}')
         hbox_main.addWidget(vertical_sep_01)
+        paneTabs.setLayout(hbox_main)
+        paneTabs.move(10, 10)
 
         # Publish section:
         # Publish: main VBox
@@ -945,7 +1066,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         lbl_storage_root = QtWidgets.QLabel('Local File Storage', window)
         lbl_storage_root.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_storage_root.setMinimumSize(100, 28)
+        lbl_storage_root.setMinimumSize(200, 28)
         lbl_storage_root.setAlignment(QtCore.Qt.AlignCenter)
 
         vbox_storage_root.addWidget(lbl_storage_root)
@@ -994,7 +1115,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         lbl_export_preset = QtWidgets.QLabel('Export Preset', window)
         lbl_export_preset.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_export_preset.setMinimumSize(600, 28)
+        lbl_export_preset.setMinimumSize(440, 28)
         lbl_export_preset.setAlignment(QtCore.Qt.AlignCenter)
         vbox_export_preset.addWidget(lbl_export_preset)
 
@@ -1065,7 +1186,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         lbl_templates = QtWidgets.QLabel('Publishing Templates', window)
         lbl_templates.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_templates.setMinimumSize(800, 28)
+        lbl_templates.setMinimumSize(440, 28)
         lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
         vbox_templates.addWidget(lbl_templates)
 
@@ -1197,7 +1318,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         txt_version = QtWidgets.QLineEdit('TEST')
         txt_version.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_version.setMinimumSize(400, 28)
+        txt_version.setMinimumSize(100, 28)
         txt_version.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
         hbox_version_publish.addWidget(txt_version)
 
@@ -1215,13 +1336,82 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_version_publish.addWidget(btn_versionFields)
 
         lbl_version_spacer = QtWidgets.QLabel('', window)
-        lbl_version_spacer.setMinimumSize(200, 28)
+        lbl_version_spacer.setMinimumSize(180, 28)
         hbox_version_publish.addWidget(lbl_version_spacer)
 
         vbox_templates.addLayout(hbox_version_publish)    
         vbox_publish.addLayout(vbox_templates)
+        panePublish.setLayout(vbox_publish)
+        panePublish.setFixedSize(860, 280)
+        panePublish.move(160, 10)
+        panePublish.setVisible(False)
 
-        hbox_main.addLayout(vbox_publish, alignment = QtCore.Qt.AlignLeft)
+        # General
+
+        paneGeneral.setFixedSize(840, 264)
+        paneGeneral.move(172, 20)
+        paneGeneral.setVisible(False)
+        lbl_General = QtWidgets.QLabel('General', paneGeneral)
+        lbl_General.setStyleSheet('QFrame {color: #989898}')
+        lbl_General.setFixedSize(840, 264)
+        lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # BatchBlessing
+
+        paneBatchBlessing.setFixedSize(840, 264)
+        paneBatchBlessing.move(172, 20)
+        paneBatchBlessing.setVisible(False)
+        lbl_BatchBlessing = QtWidgets.QLabel('Batch Linking Preferences', paneBatchBlessing)
+        lbl_BatchBlessing.setStyleSheet('QFrame {color: #989898}')
+        lbl_BatchBlessing.setFixedSize(840, 264)
+        lbl_BatchBlessing.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # BatchLoader
+
+        paneBatchLoader.setFixedSize(840, 264)
+        paneBatchLoader.move(172, 20)
+        paneBatchLoader.setVisible(False)
+        lbl_BatchLoader = QtWidgets.QLabel('Batch Loader Preferences', paneBatchLoader)
+        lbl_BatchLoader.setStyleSheet('QFrame {color: #989898}')
+        lbl_BatchLoader.setFixedSize(840, 264)
+        lbl_BatchLoader.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+
+        # NewBatch
+
+        paneNewBatch.setFixedSize(840, 264)
+        paneNewBatch.move(172, 20)
+        paneNewBatch.setVisible(False)
+        lbl_NewBatch = QtWidgets.QLabel('New Batch', paneNewBatch)
+        lbl_NewBatch.setStyleSheet('QFrame {color: #989898}')
+        lbl_NewBatch.setFixedSize(840, 264)
+        lbl_NewBatch.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # CreateShot
+
+        paneCreateShot.setFixedSize(840, 264)
+        paneCreateShot.move(172, 20)
+        paneCreateShot.setVisible(False)
+        lbl_paneCreateShot = QtWidgets.QLabel('Create Shot / Asset', paneCreateShot)
+        lbl_paneCreateShot.setStyleSheet('QFrame {color: #989898}')
+        lbl_paneCreateShot.setFixedSize(840, 264)
+        lbl_paneCreateShot.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # Superclips
+
+        paneSuperclips.setFixedSize(840, 264)
+        paneSuperclips.move(172, 20)
+        paneSuperclips.setVisible(False)
+        lbl_paneSuperclips = QtWidgets.QLabel('Superclis', paneSuperclips)
+        lbl_paneSuperclips.setStyleSheet('QFrame {color: #989898}')
+        lbl_paneSuperclips.setFixedSize(840, 264)
+        lbl_paneSuperclips.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # paneWidget.setLayout(vbox_General)
+        # hbox_main.addWidget(paneWidget, alignment = QtCore.Qt.AlignLeft)
+        # hbox_main.addWidget(paneWidget)
+
+
 
         #dummy = QtWidgets.QLabel('Not yet implemented', window)
         #dummy.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
@@ -1233,7 +1423,8 @@ class flameMenuProjectconnect(flameMenuApp):
 
         close_btn = QtWidgets.QPushButton('Close', window)
         close_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        close_btn.setMinimumSize(88, 28)
+        close_btn.setFixedSize(88, 28)
+        close_btn.move(924, 292)
         close_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                 'QPushButton:pressed {font:italic; color: #d9d9d9}')
         close_btn.clicked.connect(window.accept)
@@ -1244,7 +1435,8 @@ class flameMenuProjectconnect(flameMenuApp):
         vbox.addLayout(hbox_main)
         vbox.addWidget(close_btn, alignment = QtCore.Qt.AlignRight)
 
-        window.setLayout(vbox)
+        
+        pressPublish()
         window.exec_()
 
 
