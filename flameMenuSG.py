@@ -21,7 +21,7 @@ from sgtk.platform.qt import QtGui
 menu_group_name = 'Menu(SG)'
 DEBUG = True
 
-__version__ = 'v0.0.5'
+__version__ = 'v0.0.6'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -3568,6 +3568,18 @@ class flameMenuPublisher(flameMenuApp):
 app_framework = None
 shotgunConnector = None
 apps = []
+
+# Exception handler
+def exeption_handler(exctype, value, tb):
+    import traceback
+    msg = 'flameMenuSG:\n'
+    msg += pformat(traceback.format_exception(exctype, value, tb))
+    mbox = QtGui.QMessageBox()
+    mbox.setText(msg)
+    mbox.exec_()
+    sys.__excepthook__(exctype, value, tb)
+
+sys.excepthook = exeption_handler
 
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
