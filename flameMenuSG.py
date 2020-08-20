@@ -20,6 +20,60 @@ from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
 DEBUG = True
+default_templates = {
+# Resolved fields are:
+# {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
+# {name} and {version} (or {version_four}) are taken from the clip name or from Batch name and number of Batch itertations as a fallback.
+# EXAMPLE: There are 9 batch iterations in batch group.
+# Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
+# Would give us "mycomp" as a {name} and 009 as {version}
+# Version number padding are default to 3 at the moment, ### style padding is not yet implemented
+# Publishing into asset will just replace {Shot} fied with asset name
+'Shot': {
+    'flame_render': {
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'PublishedFileType': 'Flame Render'
+        },
+    'flame_batch': {
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'PublishedFileType': 'Flame Batch File'                  
+        },
+    'version_name': {
+        'default': '{Shot}_{name}_v{version}',
+        'value': '{Shot}_{name}_v{version}',
+    },
+    'fields': ['{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{frame}', '{ext}']
+},
+'Asset':{
+    'flame_render': {
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'PublishedFileType': 'Flame Render'
+        },
+    'flame_batch': {
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'PublishedFileType': 'Flame Batch File'                  
+        },
+    'version_name': {
+        'default': '{Shot}_{name}_v{version}',
+        'value': '{Shot}_{name}_v{version}',
+    },
+    'fields': ['{Sequence}', '{sg_asset_type}', '{Asset}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
+}}
+
+default_flame_export_presets = {
+    'Publish': {'PresetVisibility': 'Autodesk', 'PresetType': 'Image_Sequence', 'PresetFile': 'OpenEXR/OpenEXR (16-bit fp PIZ).xml'},
+    'Preview': {'PresetVisibility': 'Shotgun', 'PresetType': 'Movie', 'PresetFile': 'Generate Preview.xml'},
+    'Thumbnail': {'PresetVisibility': 'Shotgun', 'PresetType': 'Image_Sequence', 'PresetFile': 'Generate Thumbnail.xml'}
+}
+
+loader_PublishedFileTypes_base = {
+    'include': [],
+    'exclude': []
+}
 
 __version__ = 'v0.0.6'
 
@@ -160,57 +214,60 @@ class flameAppFramework(object):
         # subclass of a dict() in order to directly link it 
         # to main framework prefs dictionaries
         # when accessed directly it will operate on a dictionary under a 'name'
-        # key in master_dict dictionary.
-        # master_dict = {}
-        # p = prefs(master_dict, 'app_name')
+        # key in master dictionary.
+        # master = {}
+        # p = prefs(master, 'app_name')
         # p['key'] = 'value'
-        # master_dict - {'app_name': {'key', 'value'}}
+        # master - {'app_name': {'key', 'value'}}
             
-        def __init__(self, master_dict, name, **kwargs):
+        def __init__(self, master, name, **kwargs):
             self.name = name
-            self.master_dict = master_dict
-            if not self.master_dict.get(self.name):
-                self.master_dict[self.name] = {}
-            self.master_dict[self.name].__init__()
+            self.master = master
+            if not self.master.get(self.name):
+                self.master[self.name] = {}
+            self.master[self.name].__init__()
 
         def __getitem__(self, k):
-            return self.master_dict[self.name].__getitem__(k)
+            return self.master[self.name].__getitem__(k)
         
         def __setitem__(self, k, v):
-            return self.master_dict[self.name].__setitem__(k, v)
+            return self.master[self.name].__setitem__(k, v)
 
         def __delitem__(self, k):
-            return self.master_dict[self.name].__delitem__(k)
+            return self.master[self.name].__delitem__(k)
         
         def get(self, k, default=None):
-            return self.master_dict[self.name].get(k, default)
+            return self.master[self.name].get(k, default)
         
         def setdefault(self, k, default=None):
-            return self.master_dict[self.name].setdefault(k, default)
+            return self.master[self.name].setdefault(k, default)
 
         def pop(self, k, v=object()):
             if v is object():
-                return self.master_dict[self.name].pop(k)
-            return self.master_dict[self.name].pop(k, v)
+                return self.master[self.name].pop(k)
+            return self.master[self.name].pop(k, v)
         
         def update(self, mapping=(), **kwargs):
-            self.master_dict[self.name].update(mapping, **kwargs)
+            self.master[self.name].update(mapping, **kwargs)
         
         def __contains__(self, k):
-            return self.master_dict[self.name].__contains__(k)
+            return self.master[self.name].__contains__(k)
 
         def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
             return type(self)(self)
         
         def keys(self):
-            return self.master_dict[self.name].keys()
+            return self.master[self.name].keys()
 
         @classmethod
         def fromkeys(cls, keys, v=None):
-            return self.master_dict[self.name].fromkeys(keys, v)
+            return self.master[self.name].fromkeys(keys, v)
         
         def __repr__(self):
-            return '{0}({1})'.format(type(self).__name__, self.master_dict[self.name].__repr__())
+            return '{0}({1})'.format(type(self).__name__, self.master[self.name].__repr__())
+
+        def master_keys(self):
+            return self.master.keys()
 
 
 class flameMenuApp(object):
@@ -2702,9 +2759,9 @@ class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
-        
+
         # app defaults
-        if not self.framework.prefs['flameMenuPublisher']:
+        if not self.prefs.master.get(self.name):
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
