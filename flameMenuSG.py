@@ -174,7 +174,7 @@ class flameAppFramework(object):
             self.master_dict[self.name].__init__()
 
         def __getitem__(self, k):
-            return self.master_dict[self.name].__getitem__()
+            return self.master_dict[self.name].__getitem__(k)
         
         def __setitem__(self, k, v):
             return self.master_dict[self.name].__setitem__(k, v)
@@ -1033,7 +1033,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.rescan()
 
     def preferences_window(self, *args, **kwargs):
-
+        
         # The first attemt to draft preferences window in one function
         # became a bit monstrous
         # Probably need to put it in subclass instead
@@ -1094,8 +1094,14 @@ class flameMenuProjectconnect(flameMenuApp):
             update_pipeline_config_info()
             update_project_path_info()
 
-        def set_export_preset_type(item):
-            pprint (item)
+        def set_presetTypePublish():
+            btn_presetType.setText('Publish')
+        
+        def set_presetTypePreview():
+            btn_presetType.setText('Preview')
+
+        def set_presetTypeThumbnail():
+            btn_presetType.setText('Thumbnail')
 
         def changeExportPreset():
             print ('file dialog')
@@ -1324,21 +1330,22 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_presetType = QtWidgets.QPushButton('Publish', window)
         btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_presetType.setMinimumSize(88, 28)
-        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
         btn_presetType_menu = QtWidgets.QMenu()
-        btn_presetType_menu.addAction('Publish', presetType_setPublish)
-        btn_presetType_menu.addAction('Preview', presetType_Preview)
-        btn_presetType_menu.addAction('Thumbnail', presetType_setThumbnail)
-        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
-        hbox_export_preset.addWidget(btn_defaultPreset)
+        btn_presetType_menu.addAction('Main Publish Export Format Preset', set_presetTypePublish)
+        btn_presetType_menu.addAction('Preview Export Format Preset', set_presetTypePreview)
+        btn_presetType_menu.addAction('Thumbnail Export Format Preset', set_presetTypeThumbnail)
+        btn_presetType.setMenu(btn_presetType_menu)
+        hbox_export_preset.addWidget(btn_presetType)
 
         # Publish: ExportPresets: Export preset selector
 
-        btn_Preset = QtWidgets.QPushButton('Publish', window)
-        btn_defaultPreset.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_defaultPreset.setMinimumSize(88, 28)
-        btn_defaultPreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        btn_PresetSelector = QtWidgets.QPushButton('Publish', window)
+        btn_PresetSelector.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PresetSelector.setMinimumSize(88, 28)
+        btn_PresetSelector.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_another_menu = QtWidgets.QMenu()
         btn_another_menu.addAction('Another action')
@@ -1348,8 +1355,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_defaultPreset_menu.addAction('Preview')
         btn_defaultPreset_menu.addAction('Thumbnail')
         btn_defaultPreset_menu.addMenu(btn_another_menu)
-        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
-        hbox_export_preset.addWidget(btn_defaultPreset)
+        btn_PresetSelector.setMenu(btn_defaultPreset_menu)
+        hbox_export_preset.addWidget(btn_PresetSelector)
 
 
         # Publish: ExportPresets: Change button
@@ -1411,11 +1418,12 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_Entity.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_Entity.setFixedSize(88, 28)
         btn_Entity.move(0, 34)
-        btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
         btn_Entity_menu = QtWidgets.QMenu()
-        btn_Entity_menu.addAction('Show Templates for Shots', action_showShot)
-        btn_Entity_menu.addAction('Show Templates for Assets', action_showAsset)
+        btn_Entity_menu.addAction('Edit Templates for Shots', action_showShot)
+        btn_Entity_menu.addAction('Edit Templates for Assets', action_showAsset)
         btn_Entity.setMenu(btn_Entity_menu)
 
         # Publish::Tempates: Batch Template label
@@ -1436,24 +1444,29 @@ class flameMenuProjectconnect(flameMenuApp):
         paneShotTemplates.move(96, 0)
 
         # Publish::Templates::ShotPane: Publish default button
-
+        def setShotDefault():
+            txt_shot.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('default', ''))
         btn_shotDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotDefault.setFixedSize(88, 28)
         btn_shotDefault.move(0, 34)
         btn_shotDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotDefault.clicked.connect(setShotDefault)
 
         # Publish::Templates::ShotPane: Publish template text field
-
-        txt_shot = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr', paneShotTemplates)
+        
+        txt_shot_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('value', '')
+        txt_shot = QtWidgets.QLineEdit(txt_shot_value, paneShotTemplates)
         txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shot.setFixedSize(556, 28)
         txt_shot.move (94, 34)
         txt_shot.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Publish template fields button
-
+        def addShotField(field):
+            txt_shot.insert(field)
+        shot_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('fields', [])
         btn_shotFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
         btn_shotFields.setFixedSize(88, 28)
         btn_shotFields.move(656, 34)
@@ -1461,22 +1474,26 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotFields_menu = QtWidgets.QMenu()
-        btn_shotFields_menu.addAction('Field 1')
-        btn_shotFields_menu.addAction('Field 2')
+        for field in shot_template_fields:
+            action = btn_shotFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addShotField(field))
         btn_shotFields.setMenu(btn_shotFields_menu)
 
         # Publish::Templates::ShotPane: Batch template default button
-
+        def setShotBatchDefault():
+            txt_shotBatch.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_batch').get('default', ''))
         btn_shotBatchDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchDefault.setFixedSize(88, 28)
         btn_shotBatchDefault.move(0, 68)
         btn_shotBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotBatchDefault.clicked.connect(setShotBatchDefault)
 
         # Publish::Templates::ShotPane: Batch template text field
 
-        txt_shotBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch', paneShotTemplates)
+        txt_shotBatch_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_batch').get('value', '')
+        txt_shotBatch = QtWidgets.QLineEdit(txt_shotBatch_value, paneShotTemplates)
         txt_shotBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shotBatch.setMinimumSize(556, 28)
         txt_shotBatch.move(94, 68)
@@ -1496,17 +1513,20 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
 
         # Publish::Templates::ShotPane: Version template default button
-
+        def setShotVersionDefault():
+            txt_shotVersion.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('version_name').get('default', ''))
         btn_shotVersionDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionDefault.setMinimumSize(88, 28)
         btn_shotVersionDefault.move(0, 102)
         btn_shotVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotVersionDefault.clicked.connect(setShotVersionDefault)
 
         # Publish::Templates::ShotPane: Vesrion template text field
 
-        txt_shotVersion = QtWidgets.QLineEdit('{Shot}_{name}_v{version}', paneShotTemplates)
+        txt_shotVersion_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('version_name').get('value', '')
+        txt_shotVersion = QtWidgets.QLineEdit(txt_shotVersion_value, paneShotTemplates)
         txt_shotVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shotVersion.setMinimumSize(256, 28)
         txt_shotVersion.move(94, 102)
@@ -1657,6 +1677,9 @@ class flameMenuProjectconnect(flameMenuApp):
         # Close button
 
         def close_prefs_dialog():
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_render']['value'] = txt_shot.text().encode('utf-8')
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_batch']['value'] = txt_shotBatch.text().encode('utf-8')
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['version_name']['value'] = txt_shotVersion.text().encode('utf-8')
             self.framework.save_prefs()
             window.accept()
 
@@ -2681,7 +2704,7 @@ class flameMenuPublisher(flameMenuApp):
         self.connector = connector
         
         # app defaults
-        if not self.prefs:
+        if not self.framework.prefs['flameMenuPublisher']:
             self.prefs['show_all'] = False
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
@@ -2695,12 +2718,40 @@ class flameMenuPublisher(flameMenuApp):
             # Would give us "mycomp" as a {name} and 009 as {version}
             # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
             # Publishing into asset will just replace {Shot} fied with asset name
-            # 'flame_image_sequence': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
-            # 'flame_movie': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.mov',
-            'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-            'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-            'version_name': '{Shot}_{name}_v{version}'
-            }
+            'Shot': {
+                'flame_render': {
+                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
+                    },
+                'flame_batch': {
+                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
+                    },
+                'version_name': {
+                    'default': '{Shot}_{name}_v{version}',
+                    'value': '{Shot}_{name}_v{version}',
+                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
+                }
+            },
+            'Asset':{
+                'flame_render': {
+                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
+                    },
+                'flame_batch': {
+                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
+                    },
+                'version_name': {
+                    'default': '{Shot}_{name}_v{version}',
+                    'value': '{Shot}_{name}_v{version}',
+                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
+                }                
+            }}
             self.prefs['flame_render_type'] = 'Flame Render'
             self.prefs['flame_batch_type'] = 'Flame Batch File'
             self.prefs['poster_frame'] = 1
@@ -3035,6 +3086,9 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def publish(self, entity, selection):
+
+        pprint (self.prefs.get('templates'))
+        return False
         
         self.templates = self.prefs.get('templates')
         self.flame_render_type = self.prefs.get('flame_render_type')
