@@ -44,7 +44,7 @@ default_templates = {
         'default': '{Shot}_{name}_v{version}',
         'value': '{Shot}_{name}_v{version}',
     },
-    'fields': ['{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{frame}', '{ext}']
+    'fields': ['{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
 },
 'Asset':{
     'flame_render': {
@@ -70,7 +70,7 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 'Shotgun', 'PresetType': 'Image_Sequence', 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-loader_PublishedFileTypes_base = {
+loader_PublishedFileType_base = {
     'include': [],
     'exclude': []
 }
@@ -329,6 +329,9 @@ class flameShotgunConnector(object):
         # defautl values are set here
         if not 'user signed out' in self.prefs_global.keys():
             self.prefs_global['user signed out'] = False
+        if not 'tank_name_overrides' in self.prefs.keys():
+            # tank_name_overrides are {'project_id': 'overrided_tank_name'}
+            self.prefs['tank_name_overrides'] = {}
         
         self.sg_user = None
         self.sg_human_user = None
@@ -551,11 +554,23 @@ class flameShotgunConnector(object):
             )
         return pipeline_configurations
 
-    def get_tank_name(self, strict = False):
+    def get_tank_name(self, strict = False, custom=True):
+
+        # if strict set to False:
+        # returns user - overrided tank_name if exists, then
+        # returns tank_name field of a project if exists, then
+        # returns sanitized project name
+        # if strict set to True returns tank_name field of a project or none
+        # falls back to 'unknown_project" on other errors
+
         if not self.sg_user:
             return 'unknown_project'
         if not self.sg_linked_project_id:
             return 'unknown_project'
+
+        if custom and self.prefs.get('tank_name_overrides'):
+            if self.sg_linked_project_id in self.prefs.get('tank_name_overrides').keys():
+                return (self.prefs.get('tank_name_overrides').get(self.sg_linked_project_id))
 
         project = self.sg.find_one(
             'Project', 
@@ -609,8 +624,262 @@ class flameShotgunConnector(object):
     def sg_storage_root(self, value):
         self.prefs['sg_storage_root'] = value
 
+    def resolve_project_path(self):
+
+        # returns resoved project location on a file system
+        # or empty string if project location can not be resolved
+
+        # project can not be resolved without shotgun connection
+        # and without shotgun project linked to flame
+
+        if (not sg.user) or (not self.sg_linked_project_id):
+            return ''
+        
+        # check if we have any storage roots defined in shotgun
+        
+        sg_storage_data = self.get_sg_storage_roots()
+
+        if not sg_storage_data:
+            message = '<p align = "center">'
+            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
+            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return ''
+
+        # check if we have storage root already set by user
+        
+        if not self.sg_storage_root:
+
+            # if there's only one storage root defined - use it
+            
+            if len(sg_storage_data) == 1:
+                self.sg_storage_root = sg_storage_data[0]
+            else:
+                self.project_path_dialog()
+            
+            # fail if storage root has not been set in a dialog
+            
+            if not self.sg_storage_root:
+                return ''
+
+        tank_name = self.get_tank_name()
+
+        return os.path.join(
+            self.resolve_storage_root_path(self.sg_storage_root),
+            tank_name)
+        
+    def project_path_dialog(self):
+        from PySide2 import QtWidgets, QtCore
+        window = None
+        storage_root_paths = None
+        sg_storage_data = self.get_sg_storage_roots()
+        self.sg_storage_index = 0
+        self.txt_tankName = self.connector.get_tank_name(custom = False)
+        self.txt_tankName_text = self.connector.get_tank_name()
+        self.btn_UseCustomState = False
+        
+        # set 'Use Custom' button to pressed if there's tank_name override in prefs
+
+        if self.prefs.get('tank_name_overrides'):
+            if self.sg_linked_project_id in self.prefs.get('tank_name_overrides').keys():
+                self.btn_UseCustomState = True
+
+        if not sg_storage_data:
+            message = '<p align = "center">'
+            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
+            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+        
+        if not self.connector.sg_linked_project_id:
+            message = 'Please link Flame project to Shotgun first'
+            mbox = QtGui.QMessageBox()
+            mbox.setText(message)
+            mbox.exec_()
+            return False
+
+        def calculate_project_path():
+            linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
+            mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
+            win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
+            msg = 'Linux path: '
+            if self.btn_UseCustomState:
+                tankName = self.txt_tankName_text
+            else:
+                tankName = self.txt_tankName
+
+            if linux_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(linux_path, tankName)
+            else:
+                msg += 'None'
+            msg += '\nMac path: '
+            if mac_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, tankName)
+            else:
+                msg += 'None'
+            msg += '\nWindows path: '
+            if win_path != 'None':
+                if self.txt_tankName_text:
+                    msg += os.path.join(mac_path, tankName)
+            else:
+                msg += 'None'
+
+            return msg
+
+        def action_UseCustom():
+            self.btn_UseCustomState = not self.btn_UseCustomState
+            calculate_project_path()
+            storage_root_paths.setText(calculate_project_path())
+
+            if self.btn_UseCustomState:
+                btn_UseCustom.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                lbl_tankName.setVisible(False)
+                txt_tankName.setVisible(True)
+            else:
+                btn_UseCustom.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                txt_tankName.setVisible(False)
+                lbl_tankName.setVisible(True)
+
+        def combobox_changed(index):
+            self.sg_storage_index = index
+            storage_root_paths.setText(calculate_project_path())
+
+        def txt_tankName_textChanged():
+            self.txt_tankName_text = txt_tankName.text()
+            storage_root_paths.setText(calculate_project_path())
+
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(450, 180)
+        window.setWindowTitle('Set Project Location')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
+        
+        vbox1 = QtWidgets.QVBoxLayout()
+        
+        # Storage Roots Label
+
+        lbl_sgLocalFileStorage = QtWidgets.QLabel('Shotgun Local File Storage', window)
+        lbl_sgLocalFileStorage.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgLocalFileStorage.setMinimumHeight(28)
+        lbl_sgLocalFileStorage.setMaximumHeight(28)
+        lbl_sgLocalFileStorage.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgLocalFileStorage)
+
+        storage_list = QtWidgets.QComboBox(window)
+        for storage in sg_storage_data:
+            storage_list.addItem(storage.get('code'))
+        
+        storage_list.setMinimumHeight(28)
+        # storage_list.setStyleSheet('QComboBox {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                            'QComboBox::down-arrow {image: url(/opt/Autodesk/lib64/2020.2/qml/QtQuick/Controls/Styles/Base/images/arrow-down.png); border: 0px;}'
+        #                            'QComboBox::drop-down {border: 0px;}'')
+        storage_list.setCurrentIndex(self.sg_storage_index)
+        storage_list.currentIndexChanged.connect(combobox_changed)
+        vbox1.addWidget(storage_list)
+
+        lbl_sgProjectFolder = QtWidgets.QLabel('Project Folder Name', window)
+        lbl_sgProjectFolder.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_sgProjectFolder.setMinimumHeight(28)
+        lbl_sgProjectFolder.setMaximumHeight(28)
+        lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_sgProjectFolder)
+
+        # Button and Label/Text widget switch
+        wgt_tankName = QtWidgets.QWidget(window)
+        wgt_tankName.setMinimumHeight(28)
+
+        btn_UseCustom = QtWidgets.QPushButton('Use Custom', wgt_tankName)
+        btn_UseCustom.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_UseCustom.setFixedSize(120, 28)
+        btn_UseCustom.pressed.connect(action_UseCustom)
+
+        lbl_tankName = QtWidgets.QLabel(self.txt_tankName, wgt_tankName)
+        lbl_tankName.setFocusPolicy(QtCore.Qt.NoFocus)
+        lbl_tankName.setMinimumSize(280, 28)
+        lbl_tankName.move(128,0)
+        lbl_tankName.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
+        lbl_tankName.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        lbl_tankName.setVisible(False)
+        
+        txt_tankName = QtWidgets.QLineEdit(self.txt_tankName_text, wgt_tankName)
+        txt_tankName.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_tankName.setMinimumSize(280, 28)
+        txt_tankName.move(128,0)
+        txt_tankName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        txt_tankName.textChanged.connect(txt_tankName_textChanged)
+        txt_tankName.setVisible(False)
+
+        if self.btn_UseCustomState:
+            btn_UseCustom.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            txt_tankName.setVisible(True)
+        else:
+            btn_UseCustom.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            lbl_tankName.setVisible(True)
+
+        vbox1.addWidget(wgt_tankName)
+
+        lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
+        lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_ProjectPath.setMinimumHeight(28)
+        lbl_ProjectPath.setMaximumHeight(28)
+        lbl_ProjectPath.setAlignment(QtCore.Qt.AlignCenter)
+        vbox1.addWidget(lbl_ProjectPath)
+
+        project_path_info = calculate_project_path()
+
+        storage_root_paths = QtWidgets.QLabel(calculate_project_path(), window)
+        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
+        vbox1.addWidget(storage_root_paths)
+
+        select_btn = QtWidgets.QPushButton('Select', window)
+        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        select_btn.setMinimumSize(100, 28)
+        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        select_btn.clicked.connect(window.accept)
+
+        cancel_btn = QtWidgets.QPushButton('Cancel', window)
+        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        cancel_btn.setMinimumSize(100, 28)
+        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        cancel_btn.clicked.connect(window.reject)
+
+        hbox2 = QtWidgets.QHBoxLayout()
+        hbox2.addWidget(cancel_btn)
+        hbox2.addWidget(select_btn)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setMargin(20)
+        vbox.addLayout(vbox1)
+        vbox.addLayout(hbox2)
+
+        window.setLayout(vbox)
+        if window.exec_():
+            self.sg_storage_root = sg_storage_data[self.sg_storage_index]
+            if self.btn_UseCustomState:
+                self.prefs['tank_name_overrides'][self.sg_linked_project_id] = self.txt_tankName_text
+            else:
+                if self.prefs['tank_name_overrides']:
+                    if self.sg_linked_project_id in self.prefs.get('tank_name_overrides').keys():
+                        del self.prefs['tank_name_overrides'][self.sg_linked_project_id]
+            self.framework.save_prefs()
+        return self.sg_storage_root
+
     def resolve_storage_root(self, path_cache_storage):
-        local_file_storages = self.get_local_file_storages()
+        local_file_storages = self.get_sg_storage_roots()
         for local_file_storage in local_file_storages:
             if local_file_storage.get('id') == path_cache_storage.get('id'):
                 return self.resolve_storage_root_path(local_file_storage)
@@ -636,7 +905,7 @@ class flameShotgunConnector(object):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
-        sg_storage_data = self.get_local_file_storages()
+        sg_storage_data = self.get_sg_storage_roots()
         self.sg_storage_index = 0
         self.txt_tankName_text = self.connector.get_tank_name()
 
@@ -789,7 +1058,7 @@ class flameShotgunConnector(object):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
-        sg_storage_data = self.get_local_file_storages()
+        sg_storage_data = self.get_sg_storage_roots()
         self.sg_storage_index = 0
         self.txt_tankName_text = self.connector.get_tank_name()
 
@@ -930,11 +1199,10 @@ class flameShotgunConnector(object):
         window.setLayout(vbox)
         if window.exec_():
             self.sg_storage_root = sg_storage_data[self.sg_storage_index]
-            self.connector.update_tank_name(self.txt_tankName_text)
         return self.sg_storage_root
 
-    def get_local_file_storages(self):
-        if not self.sg_user:
+    def get_sg_storage_roots(self):
+        if (not self.sg_user) or (not self.sg_linked_project_id):
             return []
         return self.sg.find(
             'LocalStorage',
@@ -943,7 +1211,7 @@ class flameShotgunConnector(object):
         )
 
     def update_sg_storage_root(self):
-        sg_storage_data = self.get_local_file_storages()
+        sg_storage_data = self.get_sg_storage_roots()
         for storage in sg_storage_data:
             if storage.get('id') == self.sg_storage_root.get('id'):
                 self.sg_storage_root = storage
@@ -951,6 +1219,7 @@ class flameShotgunConnector(object):
 
         self.sg_storage_root = {}
         return False
+
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -1090,7 +1359,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.rescan()
 
     def preferences_window(self, *args, **kwargs):
-        
+
         # The first attemt to draft preferences window in one function
         # became a bit monstrous
         # Probably need to put it in subclass instead
@@ -1143,10 +1412,7 @@ class flameMenuProjectconnect(flameMenuApp):
                 pipeline_config_info.setText('Clear')
 
         def change_storage_root_dialog():
-            if self.connector.get_pipeline_configurations():
-                self.connector.set_storage_root_dialog()
-            else:
-                self.connector.set_project_location_dialog()
+            self.connector.project_path_dialog()
 
             update_pipeline_config_info()
             update_project_path_info()
@@ -1325,13 +1591,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         hbox_storage = QtWidgets.QHBoxLayout()
         storage_root_btn = QtWidgets.QPushButton(window)
-        if self.connector.get_pipeline_configurations():
-            if self.connector.sg_storage_root:
-                storage_root_btn.setText('Change Local File Storage')
-            else:
-                storage_root_btn.setText('Select Local File Storage')
-        else:
-            storage_root_btn.setText('Change Project Location')
+        storage_root_btn.setText('Set Project Location')
         
         storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
         storage_root_btn.setMinimumSize(199, 28)
@@ -1523,7 +1783,7 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish::Templates::ShotPane: Publish template fields button
         def addShotField(field):
             txt_shot.insert(field)
-        shot_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('fields', [])
+        shot_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('fields', [])
         btn_shotFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
         btn_shotFields.setFixedSize(88, 28)
         btn_shotFields.move(656, 34)
@@ -1753,6 +2013,7 @@ class flameMenuProjectconnect(flameMenuApp):
         action_showShot()
         pressPublish()
         window.exec_()
+
 
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
@@ -2766,51 +3027,8 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
             self.prefs['flame_bug_message_shown'] = False
-            self.prefs['templates'] = {
-            # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
-            # {name} and {version} will be guessed from the clip name and taken from
-            # number of Batch itertations as a fallback.
-            # EXAMPLE: There are 9 batch iterations in batch group.
-            # Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
-            # Would give us "mycomp" as a {name} and 009 as {version}
-            # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
-            # Publishing into asset will just replace {Shot} fied with asset name
-            'Shot': {
-                'flame_render': {
-                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
-                    },
-                'flame_batch': {
-                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
-                    },
-                'version_name': {
-                    'default': '{Shot}_{name}_v{version}',
-                    'value': '{Shot}_{name}_v{version}',
-                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
-                }
-            },
-            'Asset':{
-                'flame_render': {
-                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
-                    },
-                'flame_batch': {
-                    'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-                    'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
-                    },
-                'version_name': {
-                    'default': '{Shot}_{name}_v{version}',
-                    'value': '{Shot}_{name}_v{version}',
-                    'fields': ['{Sequence}', '{Shot}', '{Step}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']                   
-                }                
-            }}
-            self.prefs['flame_render_type'] = 'Flame Render'
-            self.prefs['flame_batch_type'] = 'Flame Batch File'
+            self.prefs['templates'] = default_templates
+            self.prefs['flame_export_presets'] = default_flame_export_presets
             self.prefs['poster_frame'] = 1
 
         self.flame_bug_message = False
@@ -3143,16 +3361,15 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def publish(self, entity, selection):
-
-        pprint (self.prefs.get('templates'))
-        return False
+        # Main publishing function
         
-        self.templates = self.prefs.get('templates')
-        self.flame_render_type = self.prefs.get('flame_render_type')
-        self.flame_batch_type = self.prefs.get('flame_batch_type')
-        self.poster_frame = self.prefs.get('poster_frame')
+        # First,let's check if the project folder is there
+        # and if not - try to create one
+        # connector takes care of storage root check and selection
+        # we're going to get empty path if connector was not able to resolve it
 
-        # shotgun storage root resolution
+        ###### MOVE THAT TO CONNECTOR @@@@@@
+        
         storage_root_path = None
         if not self.connector.sg_storage_root:
             if not self.connector.get_storage_root_dialog():
@@ -3682,10 +3899,11 @@ apps = []
 
 # Exception handler
 def exeption_handler(exctype, value, tb):
+    from PySide2 import QtWidgets
     import traceback
     msg = 'flameMenuSG:\n'
     msg += pformat(traceback.format_exception(exctype, value, tb))
-    mbox = QtGui.QMessageBox()
+    mbox = QtWidgets.QMessageBox()
     mbox.setText(msg)
     mbox.exec_()
     sys.__excepthook__(exctype, value, tb)
