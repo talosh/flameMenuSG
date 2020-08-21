@@ -416,11 +416,13 @@ class flameShotgunConnector(object):
         if not query:
             return False
 
+        sg = self.sg_user.create_sg_connection()
+
         if perform_query:
             entity = query.get('entity')
             filters = query.get('filters')
             fields = query.get('fields')
-            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
         
         return query.get(query_type)
 
@@ -675,7 +677,16 @@ class flameShotgunConnector(object):
         window = None
         storage_root_paths = None
         sg_storage_data = self.get_sg_storage_roots()
+
         self.sg_storage_index = 0
+        if self.sg_storage_root:
+            x = 0
+            for storage in sg_storage_data:
+                if storage.get('id') == self.sg_storage_root.get('id'):
+                    self.sg_storage_index = x
+                    break
+                x += 1
+
         self.txt_tankName = self.connector.get_tank_name(custom = False)
         self.txt_tankName_text = self.connector.get_tank_name()
         self.btn_UseCustomState = False
@@ -1446,6 +1457,7 @@ class flameMenuProjectconnect(flameMenuApp):
             
             paneGeneral.setVisible(False)
             panePublish.setVisible(False)
+            paneTemplatesSelector.setVisible(False)
             paneSuperclips.setVisible(False)
 
             paneGeneral.setVisible(True)
@@ -1457,8 +1469,10 @@ class flameMenuProjectconnect(flameMenuApp):
 
             paneGeneral.setVisible(False)
             panePublish.setVisible(False)
+            paneTemplatesSelector.setVisible(False)
             paneSuperclips.setVisible(False)
 
+            paneTemplatesSelector.setVisible(True)
             panePublish.setVisible(True)
 
         def pressSuperclips():
@@ -1468,6 +1482,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
             paneGeneral.setVisible(False)
             panePublish.setVisible(False)
+            paneTemplatesSelector.setVisible(False)
             paneSuperclips.setVisible(False)
 
             paneSuperclips.setVisible(True)
@@ -1642,21 +1657,6 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_export_preset = QtWidgets.QHBoxLayout()
         hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
-        # Publish: ExportPresets: Preset typ selector
-
-        btn_presetType = QtWidgets.QPushButton('Publish', window)
-        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_presetType.setMinimumSize(88, 28)
-        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
-                                    'QPushButton::menu-indicator {image: none;}')
-        btn_presetType_menu = QtWidgets.QMenu()
-        btn_presetType_menu.addAction('Main Publish Export Format Preset', set_presetTypePublish)
-        btn_presetType_menu.addAction('Preview Export Format Preset', set_presetTypePreview)
-        btn_presetType_menu.addAction('Thumbnail Export Format Preset', set_presetTypeThumbnail)
-        btn_presetType.setMenu(btn_presetType_menu)
-        hbox_export_preset.addWidget(btn_presetType)
-
         # Publish: ExportPresets: Export preset selector
 
         btn_PresetSelector = QtWidgets.QPushButton('Publish', window)
@@ -1675,6 +1675,21 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_PresetSelector.setMenu(btn_defaultPreset_menu)
         hbox_export_preset.addWidget(btn_PresetSelector)
 
+
+        # Publish: ExportPresets: Preset typ selector
+
+        btn_presetType = QtWidgets.QPushButton('Publish', window)
+        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_presetType.setMinimumSize(88, 28)
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_presetType_menu = QtWidgets.QMenu()
+        btn_presetType_menu.addAction('Main Publish Export Format Preset', set_presetTypePublish)
+        btn_presetType_menu.addAction('Preview Export Format Preset', set_presetTypePreview)
+        btn_presetType_menu.addAction('Thumbnail Export Format Preset', set_presetTypeThumbnail)
+        btn_presetType.setMenu(btn_presetType_menu)
+        hbox_export_preset.addWidget(btn_presetType)
 
         # Publish: ExportPresets: Change button
         
@@ -1707,17 +1722,48 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish::Tempates actions
 
         def action_showShot():
-            btn_Entity.setText('Shot')
+            # btn_Entity.setText('Shot')
+            btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            lbl_shotTemplate.setText('Shot Publish')
             paneAssetTemplates.setVisible(False)
             paneShotTemplates.setVisible(True)
 
         def action_showAsset():
-            btn_Entity.setText('Asset')
+            # btn_Entity.setText('Asset')
+            btn_Shot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Asset.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            lbl_shotTemplate.setText('Asset Publish')
             paneShotTemplates.setVisible(False)
             paneAssetTemplates.setVisible(True)
 
-        # Publish::Tempates general widget
-        # It holds Shot / Asset buttons and labels for Batch and Version template fields
+        # Publish::Tempates: Shot / Asset selector
+
+        paneTemplatesSelector = QtWidgets.QWidget(window)
+        paneTemplatesSelector.setFixedSize(158, 142)
+        paneTemplatesSelector.move(0, 143)
+
+        lbl_Entity = QtWidgets.QLabel('Entity', paneTemplatesSelector)
+        lbl_Entity.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_Entity.setFixedSize(128, 28)
+        lbl_Entity.move(20, 0)
+        lbl_Entity.setAlignment(QtCore.Qt.AlignCenter)
+
+        btn_Shot = QtWidgets.QPushButton('Shot', paneTemplatesSelector)
+        btn_Shot.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Shot.setFixedSize(128, 28)
+        btn_Shot.move(20, 34)
+        btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Shot.pressed.connect(action_showShot)
+
+        btn_Asset = QtWidgets.QPushButton('Asset', paneTemplatesSelector)
+        btn_Asset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Asset.setFixedSize(128, 28)
+        btn_Asset.move(20, 68)
+        btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Asset.pressed.connect(action_showAsset)
+
+        # Publish::Tempates pane widget
 
         paneTemplates = QtWidgets.QWidget(panePublish)
         paneTemplates.setFixedSize(840, 142)
@@ -1729,19 +1775,10 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_templates.setFixedSize(840, 28)
         lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
 
-        # Publish::Tempates: Entity toggle button
-
-        btn_Entity = QtWidgets.QPushButton('Shot', paneTemplates)
-        btn_Entity.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_Entity.setFixedSize(88, 28)
-        btn_Entity.move(0, 34)
-        btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
-                                    'QPushButton::menu-indicator {image: none;}')
-        btn_Entity_menu = QtWidgets.QMenu()
-        btn_Entity_menu.addAction('Edit Templates for Shots', action_showShot)
-        btn_Entity_menu.addAction('Edit Templates for Assets', action_showAsset)
-        btn_Entity.setMenu(btn_Entity_menu)
+        # Publish::Tempates: Publish Template label
+        lbl_shotTemplate = QtWidgets.QLabel('Shot Publish', paneTemplates)
+        lbl_shotTemplate.setFixedSize(88, 28)
+        lbl_shotTemplate.move(0, 34)
 
         # Publish::Tempates: Batch Template label
         lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
@@ -1749,9 +1786,9 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_batchTemplate.move(0, 68)
 
         # Publish::Tempates: Version Template label
-        lbl_batchTemplate = QtWidgets.QLabel('Version', paneTemplates)
-        lbl_batchTemplate.setFixedSize(88, 28)
-        lbl_batchTemplate.move(0, 102)
+        lbl_versionTemplate = QtWidgets.QLabel('Version', paneTemplates)
+        lbl_versionTemplate.setFixedSize(88, 28)
+        lbl_versionTemplate.move(0, 102)
 
         # Publish::Templates::ShotPane: Show and hide
         # depending on an Entity toggle
@@ -1784,7 +1821,7 @@ class flameMenuProjectconnect(flameMenuApp):
         def addShotField(field):
             txt_shot.insert(field)
         shot_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('fields', [])
-        btn_shotFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotFields.setFixedSize(88, 28)
         btn_shotFields.move(656, 34)
         btn_shotFields.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -1818,7 +1855,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::ShotPane: Batch template fields button
 
-        btn_shotBatchFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotBatchFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchFields.setMinimumSize(88, 28)
         btn_shotBatchFields.move(656, 68)
@@ -1851,7 +1888,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::ShotPane: Version template fields button
 
-        btn_shotVersionFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotVersionFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionFields.setMinimumSize(88, 28)
         btn_shotVersionFields.move(356, 102)
@@ -1889,7 +1926,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::AssetPane: Publish template fields button
 
-        btn_assetFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetFields.setFixedSize(88, 28)
         btn_assetFields.move(656, 34)
         btn_assetFields.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -1919,7 +1956,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::AssetPane: Batch template fields button
 
-        btn_assetBatchFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetBatchFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchFields.setMinimumSize(88, 28)
         btn_assetBatchFields.move(656, 68)
@@ -1949,7 +1986,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::AssetPane: Version template fields button
 
-        btn_assetVersionFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetVersionFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionFields.setMinimumSize(88, 28)
         btn_assetVersionFields.move(356, 102)
