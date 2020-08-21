@@ -32,42 +32,38 @@ default_templates = {
 'Shot': {
     'flame_render': {
         'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
         'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
         'PublishedFileType': 'Flame Batch File'                  
         },
     'version_name': {
         'default': '{Shot}_{name}_v{version}',
-        'value': '{Shot}_{name}_v{version}',
     },
     'fields': ['{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
 },
 'Asset':{
     'flame_render': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-        'value': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch',
         'PublishedFileType': 'Flame Batch File'                  
         },
     'version_name': {
-        'default': '{Shot}_{name}_v{version}',
-        'value': '{Shot}_{name}_v{version}',
+        'default': '{Asset}_{name}_v{version}',
     },
     'fields': ['{Sequence}', '{sg_asset_type}', '{Asset}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
 }}
 
 default_flame_export_presets = {
-    'Publish': {'PresetVisibility': 'Autodesk', 'PresetType': 'Image_Sequence', 'PresetFile': 'OpenEXR/OpenEXR (16-bit fp PIZ).xml'},
-    'Preview': {'PresetVisibility': 'Shotgun', 'PresetType': 'Movie', 'PresetFile': 'Generate Preview.xml'},
-    'Thumbnail': {'PresetVisibility': 'Shotgun', 'PresetType': 'Image_Sequence', 'PresetFile': 'Generate Thumbnail.xml'}
+    # {0: flame.PresetVisibility.Project, 1: flame.PresetVisibility.Shared, 2: flame.PresetVisibility.Autodesk, 3: flame.PresetVisibility.Shotgun}
+    # {0: flame.PresetType.Image_Sequence, 1: flame.PresetType.Audio, 2: flame.PresetType.Movie, 3: flame.PresetType.Sequence_Publish}
+    'Publish': {'PresetVisibility': 0, 'PresetType': 0, 'PresetFile': 'OpenEXR/OpenEXR (16-bit fp PIZ).xml'},
+    'Preview': {'PresetVisibility': 3, 'PresetType': 2, 'PresetFile': 'Generate Preview.xml'},
+    'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
 loader_PublishedFileType_base = {
@@ -642,7 +638,7 @@ class flameShotgunConnector(object):
         # project can not be resolved without shotgun connection
         # and without shotgun project linked to flame
 
-        if (not sg.user) or (not self.sg_linked_project_id):
+        if (not self.connector.sg_user) or (not self.connector.sg_linked_project_id):
             return ''
         
         # check if we have any storage roots defined in shotgun
@@ -920,7 +916,6 @@ class flameShotgunConnector(object):
             return None
         return path_cache_storage.get(platform_path_field)
 
-    def set_storage_root_dialog(self):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
@@ -1073,7 +1068,6 @@ class flameShotgunConnector(object):
             self.sg_storage_root = sg_storage_data[self.sg_storage_index]
         return self.sg_storage_root
 
-    def set_project_location_dialog(self):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
@@ -2294,7 +2288,7 @@ class flameMenuNewBatch(flameMenuApp):
         self.register_query()
 
         if not self.prefs:
-            self.prefs['show_all'] = False
+            self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
 
@@ -2679,7 +2673,7 @@ class flameMenuBatchLoader(flameMenuApp):
 
         # app defaults
         if not self.prefs:
-            self.prefs['show_all'] = False
+            self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
 
@@ -3068,11 +3062,18 @@ class flameMenuPublisher(flameMenuApp):
 
         # app defaults
         if not self.prefs.master.get(self.name):
-            self.prefs['show_all'] = False
+            self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
             self.prefs['flame_bug_message_shown'] = False
             self.prefs['templates'] = default_templates
+            # init values from default
+            for entity_type in self.prefs['templates'].keys():
+                for template in self.prefs['templates'][entity_type].keys():
+                    if isinstance(self.prefs['templates'][entity_type][template], dict):
+                        if 'default' in self.prefs['templates'][entity_type][template].keys():
+                            self.prefs['templates'][entity_type][template]['value'] = self.prefs['templates'][entity_type][template]['default']
+                        
             self.prefs['flame_export_presets'] = default_flame_export_presets
             self.prefs['poster_frame'] = 1
 
@@ -3268,7 +3269,7 @@ class flameMenuPublisher(flameMenuApp):
         entity_id = entity.get('id')
         if entity_id not in self.prefs.keys():
             self.prefs[entity_id] = {}
-            self.prefs[entity_id]['show_all'] = False
+            self.prefs[entity_id]['show_all'] = True
         prefs = self.prefs.get(entity_id)
         
         tasks = sg.find(
@@ -3280,7 +3281,9 @@ class flameMenuPublisher(flameMenuApp):
                 'step.Step.short_name',
                 'task_assignees',
                 'project.Project.id',
-                'entity'
+                'entity',
+                'entity.Asset.sg_asset_type',
+                'entity.Shot.sg_sequence'
             ]
         )
 
@@ -3406,6 +3409,7 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def publish(self, entity, selection):
+        
         # Main publishing function
         
         # First,let's check if the project folder is there
@@ -3413,87 +3417,49 @@ class flameMenuPublisher(flameMenuApp):
         # connector takes care of storage root check and selection
         # we're going to get empty path if connector was not able to resolve it
 
-        ###### MOVE THAT TO CONNECTOR @@@@@@
-        
-        storage_root_path = None
-        if not self.connector.sg_storage_root:
-            if not self.connector.get_storage_root_dialog():
+        project_path = self.connector.resolve_project_path()
+        if not project_path:
+            message = 'Publishing stopped:\nUnable to resolve project path.'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        # check if the project path is there and try to create if not
+
+        if not os.path.isdir(project_path):
+            try:
+                os.path.makedirs(project_path)
+            except:
+                message = 'Publishing stopped: Unable to create project folder %s' % project_path
+                self.mbox.setText(message)
+                self.mbox.exec_()
                 return False
+
+        # try to publish each of selected clips
         
-        self.connector.update_sg_storage_root()
-        storage_root_path = self.connector.resolve_storage_root_path(self.connector.sg_storage_root)
+        versions = set()
+        for clip in selection:
+            versions.add(self.publish_clip(clip, entity, project_path))
 
-        if not storage_root_path:
-            if sys.platform == 'darwin':
-                message = 'No Mac path '
-            elif sys.startswith('linux'):
-                platform_path_field = 'No Linux path '
-            message += 'specified for Shotgun Local File Storage "'
-            message += self.connector.sg_storage_root.get('code')
-            message += '". Can not continue with publishing.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        if not os.path.isdir(storage_root_path):
-            message = 'Path "' + storage_root_path
-            message += '" specified in Shotgun Local File Storage "'
-            message += self.connector.sg_storage_root.get('code')
-            message += '"  does not exist. Can not continue with publishing.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
+    def publish_clip(self, clip, entity, project_path):
 
         # start of main publishing routine
+
+        # Process info we've got from entity
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
         task_step = task.get('step.Step.code')
+        task_step_code = task.get('step.Step.short_name', task_step.upper())
+        sequence_name = task.get('entity.Shot.sg_sequence', 'DefaultSequence')
+        sg_asset_type = task.get('entity.Asset.sg_asset_type','Default')
         uid = self.create_uid()
-        
-        sg = self.connector.sg_user.create_sg_connection()
-        project_id = entity['task']['project.Project.id']
-        proj = sg.find_one(
-            'Project',
-            [['id', 'is', project_id]],
-            [
-                'name',
-                'tank_name'
-            ]
-        )
-
-        project_folder_name = proj.get('tank_name')
-        if not project_folder_name:
-            project_folder_name = proj.get('name')
-        
-        project_root = os.path.join(storage_root_path, project_folder_name)
-        if not os.path.isdir(project_root):
-            message = 'project folder "'
-            message += project_root
-            message += '" does not exist. '
-            message += 'Please create project folder to publish.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-        
-        # we need to bootstrap toolkit here but
-        # let's do a quick and dirty manual assignments for now
-        # multiple selections are left for later enhancements
-        if len(selection) > 1:
-            message = 'More than one clip selected. '
-            message += 'Multiple selection publish is not yet implemented. '
-            message += 'Please select one clip at time.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        clip = selection[0]
-        
-        # batch file name resolution
+                        
+        # linked .batch file path resolution
         # if the clip consists of several clips with different linked batch setups
-        # fall back to the current batch setup
+        # fall back to the current batch setup (should probably publish all of them?)
         import ast
 
         linked_batch_path = None
@@ -3503,28 +3469,18 @@ class flameMenuPublisher(flameMenuApp):
                 for segment in track.segments:
                     comments.add(segment.comment.get_value())
         if len(comments) == 1:
-            try:
-                linked_batch_path_dict = ast.literal_eval(comments.pop())
-                linked_batch_path = linked_batch_path_dict.get('batch_file')
-            except:
-                pass
-
-        # resolve Sequence name if linked to the shot
-        shot = sg.find_one(
-                'Shot',
-                [['id', 'is', task_entity_id]],
-                ['sg_sequence']
-            )
-            
-        sequence = shot.get('sg_sequence')
-        if not sequence:
-            sequence_name = 'DefaultSequence'
-        else:
-            sequence_name = sequence.get('name')
-            if not sequence_name:
-                sequence_name = 'DefaultSequence'
+            comment = comments.pop()
+            start_index = comment.find("{'batch_file': ")
+            end_index = comment.find("'}", start_index)
+            if (start_index > 0) and (end_index > 0):
+                try:
+                    linked_batch_path_dict = ast.literal_eval(comment[start_index:end_index+2])
+                    linked_batch_path = linked_batch_path_dict.get('batch_file')
+                except:
+                    pass
 
         # basic name/version detection from clip name
+
         batch_group_name = self.flame.batch.name.get_value()
 
         clip_name = clip.name.get_value()
@@ -3553,12 +3509,28 @@ class flameMenuPublisher(flameMenuApp):
         if version_number == -1:
             version_number = len(self.flame.batch.batch_iterations)
             version_padding = 3
+
+        # Find extension from main entity export preset
+
+        export_preset_fields = self.get_export_preset_fields(self.prefs['flame_export_presets'].get('Publish'))
         
+        pprint (export_preset_fields)
+        return False
+
+        # collect known template fields
+        template_fields = {}
+        template_fields['Shot'] = task_entity_name
+        template_fields['Asset'] = task_entity_name
+        template_fields['name'] = clip_name
+        template_fields['Step'] = task_step
+        template_fields['Step_code'] = task_step_code
+        template_fields['Sequence'] = sequence_name
+
         version_name = self.templates.get('version_name')
         version_name = version_name.replace('{Shot}', task_entity_name)
         version_name = version_name.replace('{name}', clip_name)
         version_name = version_name.replace('{Step}', task_step)
-        version_name = version_name.replace('{Sequence}', sequence_name)
+        version_name = version_name.replace('{Sequence}', task_entity.get('entity.Shot.sg_sequence', 'DefaultSequence'))
         version_name = version_name.replace('{version}', '{:03d}'.format(version_number))
         version_name = version_name.replace('{version_four}', '{:04d}'.format(version_number))
 
@@ -3577,7 +3549,7 @@ class flameMenuPublisher(flameMenuApp):
         # build export path
 
         # That's the way they do it on toolkit
-        # template_data = {}
+        # 
         # template_data['Shot'] = task_entity_name
         # template_data['name'] = clip_name
         # template_data['Step'] = task_step
@@ -3772,6 +3744,40 @@ class flameMenuPublisher(flameMenuApp):
         message += '" sucessfully published.'
         self.mbox.setText(message)
         self.mbox.exec_()
+
+    def get_export_preset_fields(self, preset):
+        from xml.dom import minidom
+
+        ext_map = {
+            'Alias': 'als',
+            'Cineon': 'cin',
+            'Dpx': 'dpx',
+            'Jpeg': 'jpg',
+            'Maya': 'iff',
+            'OpenEXR': 'exr',
+            'Pict': 'pict',
+            'Pixar': 'picio',
+            'Sgi': 'sgi',
+            'SoftImage': 'pic',
+            'Targa': 'tga',
+            'Tiff': 'tif',
+            'Wavefront': 'rla',
+            'QuickTime': 'mov',
+            'MXF': 'mxf',
+            'SonyMXF': 'mxf'
+        }
+
+        if os.path.isfile(preset.get('PresetFile', '')):
+            export_preset_path = export_preset.get('PresetFile')
+        else:
+            path_prefix = self.flame.PyExporter.get_presets_dir(
+                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
+                self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
+            )
+
+        pprint (path_prefix)
+        return {}
+
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
