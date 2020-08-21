@@ -426,6 +426,8 @@ class flameShotgunConnector(object):
             fields = query.get('fields')
             self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
         
+        del sg
+        
         return query.get(query_type)
 
     def async_cache_clear(self):
@@ -468,7 +470,11 @@ class flameShotgunConnector(object):
                         fields = query.get('fields')
                         while not self.sg:
                             time.sleep(1)
-                        result = self.sg.find(entity, filters, fields)
+                        
+                        sg = self.sg_user.create_sg_connection()
+                        result = sg.find(entity, filters, fields)
+                        del sg
+
                         self.async_cache[cache_request_uid]['result'] = result
                         results_by_hash[hash(pformat(query))] = result
 
