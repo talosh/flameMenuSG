@@ -416,6 +416,8 @@ class flameShotgunConnector(object):
         if not query:
             return False
 
+        # create separate sgotgun connection for cache
+
         sg = self.sg_user.create_sg_connection()
 
         if perform_query:
