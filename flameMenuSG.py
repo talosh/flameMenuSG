@@ -3193,10 +3193,13 @@ class flameMenuPublisher(flameMenuApp):
                 pb_info_list = pb_published.get(version_name)
                 for pb_info in pb_info_list:
                     detailed_msg += ' '*4 + pb_info.get('version_name') + ':\n'
-                    path_cache = pb_info.get('flame_render', {}).get('path_cache')
-                    detailed_msg += ' '*8 + os.path.basename(path_cache) + ':\n'
+                    if pb_info.get('flame_render', {}).get('flame_path'):
+                        path = pb_info.get('flame_render', {}).get('flame_path')
+                    else:
+                        path = pb_info.get('flame_render', {}).get('path_cache')
+                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
                     path_cache = pb_info.get('flame_batch', {}).get('path_cache')
-                    detailed_msg += ' '*8 + os.path.basename(path_cache) + ':\n'
+                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
         if len(versions_failed) > 0:
             detailed_msg += 'Failed to publish: \n'
             for version_name in sorted(pb_failed.keys()):
@@ -3530,6 +3533,61 @@ class flameMenuPublisher(flameMenuApp):
 
         pb_info['status'] = True
 
+        # check what we've actually exported and get start and end frames from there
+        # this won't work for movie, so check the preset first
+        # this should be moved in a separate function later
+        
+        flame_path = ''
+        flame_render_path_cache = pb_info.get('flame_render', {}).get('path_cache', '')
+        flame_render_export_dir = os.path.join(os.path.dirname(project_path), os.path.dirname(flame_render_path_cache))
+
+        if preset_fields.get('type', 'image') == 'image':
+            import fnmatch
+
+            try:
+                file_names = [f for f in os.listdir(flame_render_export_dir) if os.path.isfile(os.path.join(flame_render_export_dir, f))]
+            except:
+                file_names = []
+                                    
+            frame_pattern = re.compile(r"^(.+?)([0-9#]+|[%]0\dd)$")
+            root, ext = os.path.splitext(os.path.basename(flame_render_path_cache))
+            match = re.search(frame_pattern, root)
+            if match:
+                pattern = os.path.join("%s%s" % (re.sub(match.group(2), "*", root), ext))
+                files = list()
+                for file_name in file_names:
+                    if fnmatch.fnmatch(file_name, pattern):
+                        files.append(os.path.join(export_dir, file_name))
+                
+                if files:
+                    file_roots = [os.path.splitext(f)[0] for f in files]
+                    frame_padding = len(re.search(frame_pattern, file_roots[0]).group(2))
+                    offset = len(match.group(1))
+                    frames = list()
+                    for f in file_roots:
+                        try:
+                            frame = int(os.path.basename(f)[offset:offset+frame_padding])
+                        except:
+                            continue
+                        frames.append(frame)
+                    pprint (frames)
+                    if frames:
+                        min_frame = min(frames)
+                        max_frame = max(frames)
+                        format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
+                        frame_spec = format_str % (min_frame, max_frame)
+                        flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
+                        flame_path = os.path.join(export_dir, flame_file_name)
+
+                        self.connector.sg.update('Version', version.get('id'), {'sg_first_frame': min_frame, 'sg_last_frame': max_frame})
+
+            pb_info['flame_render']['flame_path'] = flame_path
+        
+        elif preset_fields.get('type', 'image') == 'movie':
+            pass
+            # placeholder for movie export
+
+
         # compose batch export path and path_cache filed from template fields
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
@@ -3601,7 +3659,8 @@ class flameMenuPublisher(flameMenuApp):
         # parses Flame Export preset and returns a dict of a parsed values
         # of False on error.
         # Example:
-        # {'fileType': 'OpenEXR',
+        # {'type': 'image',
+        #  'fileType': 'OpenEXR',
         #  'fileExt': 'exr',
         #  'framePadding': 8
         #  'startFrame': 1001
@@ -3654,6 +3713,10 @@ class flameMenuPublisher(flameMenuApp):
             return False
 
         preset_fields['path'] = preset_path
+
+        preset_type = preset_xml_doc.getElementsByTagName('type')
+        if len(preset_type) > 0:
+            preset_fields['type'] = preset_type[0].firstChild.data
 
         video = preset_xml_doc.getElementsByTagName('video')
         if len(video) < 1:
