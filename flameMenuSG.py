@@ -3149,61 +3149,63 @@ class flameMenuPublisher(flameMenuApp):
         
         versions_published = set()
         versions_failed = set()
-        pb_files_published = dict()
-        pb_files_failed = dict()
+        pb_published = dict()
+        pb_failed = dict()
 
         for clip in selection:
             pb_info, is_cancelled = self.publish_clip(clip, entity, project_path, export_preset_fields)
-            pprint (pb_info)
-            pprint (is_cancelled)
-
-        '''
-            if status:
-                version_name = pb_file_data.get('version_name')
+            if pb_info.get('status', False):
+                version_name = pb_info.get('version_name')
                 versions_published.add(version_name)
-                data = pb_files_published.get(version_name, [])
-                data.append(pb_file_data)
-                pb_files_published[version_name] = data
+                data = pb_published.get(version_name, [])
+                data.append(pb_info)
+                pb_published[version_name] = data
             else:
-                version_name = pb_file_data.get('version_name')
+                version_name = pb_info.get('version_name')
                 versions_failed.add(version_name)
-                data = pb_files_failed.get(version_name, [])
-                data.append(pb_file_data)
-                pb_files_failed[version_name] = data
-            if cancel:
+                data = pb_failed.get(version_name, [])
+                data.append(pb_info)
+                pb_failed[version_name] = data
+            if is_cancelled:
                 break
 
         # report user of the status
         
-        if cancel and (len(versions_published) == 0):
+        if is_cancelled and (len(versions_published) == 0):
             return False
-
         elif (len(versions_published) == 0) and (len(versions_failed) > 0):
             msg = 'Failed to publish into %s versions' % len(versions_failed)
         elif (len(versions_published) > 0) and (len(versions_failed) == 0):
             msg = 'Published into %s versions' % len(versions_published)
         else:
-            msg = 'Published into %s versions, %s versions failed'
+            msg = 'Published into %s versions, %s versions failed' % (len(versions_published), len(versions_failed))
 
         mbox = QtGui.QMessageBox()
         mbox.setText('flameMenuSG: ' + msg)
+
         detailed_msg = ''
+
+        pprint (pb_published)
+
         if len(versions_published) > 0:
             detailed_msg += 'Published:\n'
-            for version_name in versions_published:
-                detailed_msg += version_name + ':\n'
-                #for data in pb_files_published.get(version_name, []):
-                #    detailed_msg += '    ' + os.path.basename(data.get('path_cache', ''))
+            for version_name in sorted(pb_published.keys()):
+                pb_info_list = pb_published.get(version_name)
+                for pb_info in pb_info_list:
+                    detailed_msg += ' '*4 + pb_info.get('version_name') + ':\n'
+                    path_cache = pb_info.get('flame_render', {}).get('path_cache')
+                    detailed_msg += ' '*8 + os.path.basename(path_cache) + ':\n'
+                    path_cache = pb_info.get('flame_batch', {}).get('path_cache')
+                    detailed_msg += ' '*8 + os.path.basename(path_cache) + ':\n'
         if len(versions_failed) > 0:
             detailed_msg += 'Failed to publish: \n'
-            for version_name in versions_failed:
-                detailed_msg += version_name + '\n'
-                #for data in pb_files_failed.get(version_name, []):
-                #    detailed_msg += '    ' + os.path.basename(data.get('path_cache', ''))
+            for version_name in sorted(pb_failed.keys()):
+                pb_info_list = pb_failed.get(version_name)
+                for pb_info in pb_info_list:
+                    detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 400px;}')
         mbox.exec_()
-        '''
         
         return True
 
@@ -3509,6 +3511,8 @@ class flameMenuPublisher(flameMenuApp):
         if os.path.isfile(preview_path):
             self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
         
+        # Create 'flame_render' PublishedFile
+
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             version_number = version_number,
@@ -3524,6 +3528,8 @@ class flameMenuPublisher(flameMenuApp):
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
+        pb_info['status'] = True
+
         # compose batch export path and path_cache filed from template fields
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
@@ -3532,6 +3538,9 @@ class flameMenuPublisher(flameMenuApp):
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
+        pb_info['flame_batch']['path_cache'] = path_cache
+        pb_info['flame_batch']['pb_file_name'] = task_entity_name
+        
         # copy flame .batch file linked to the clip or save current one if not resolved from comments
         
         if linked_batch_path:
@@ -3543,11 +3552,18 @@ class flameMenuPublisher(flameMenuApp):
                     call(['cp', '-a', src, dest])
                     call(['cp', '-a', linked_batch_path, export_path])
                 except:
-                    message = 'Can not copy flame batch to "'
-                    message += dest + '"'
-                    self.mbox.setText(message)
-                    self.mbox.exec_()
-                    return False
+                    mbox = QtGui.QMessageBox()
+                    mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
+                    mbox.setDetailedText('Path: ' + export_path)
+                    mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                    btn_Continue.setText('Continue')
+                    mbox.exec_()
+                    if mbox.clickedButton() == btn_Continue:
+                        return (pb_info, False)
+                    else:
+                        return (pb_info, True)
             else:
                 self.flame.batch.save_setup(export_path)
         else:
@@ -3577,7 +3593,7 @@ class flameMenuPublisher(flameMenuApp):
             os.remove(preview_path)
         except:
             pass
-
+        
         return (pb_info, False)
 
     def get_export_preset_fields(self, preset):
