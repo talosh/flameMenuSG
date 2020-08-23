@@ -20,8 +20,58 @@ from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
 DEBUG = True
+default_templates = {
+# Resolved fields are:
+# {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
+# {name} and {version} (or {version_four}) are taken from the clip name or from Batch name and number of Batch itertations as a fallback.
+# EXAMPLE: There are 9 batch iterations in batch group.
+# Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
+# Would give us "mycomp" as a {name} and 009 as {version}
+# Version number padding are default to 3 at the moment, ### style padding is not yet implemented
+# Publishing into asset will just replace {Shot} fied with asset name
+'Shot': {
+    'flame_render': {
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'PublishedFileType': 'Flame Render'
+        },
+    'flame_batch': {
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'PublishedFileType': 'Flame Batch File'                  
+        },
+    'version_name': {
+        'default': '{Shot}_{name}_v{version}',
+    },
+    'fields': ['{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
+},
+'Asset':{
+    'flame_render': {
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr',
+        'PublishedFileType': 'Flame Render'
+        },
+    'flame_batch': {
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch',
+        'PublishedFileType': 'Flame Batch File'                  
+        },
+    'version_name': {
+        'default': '{Asset}_{name}_v{version}',
+    },
+    'fields': ['{Sequence}', '{sg_asset_type}', '{Asset}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}', '{frame}', '{ext}']
+}}
 
-__version__ = 'v0.0.5'
+default_flame_export_presets = {
+    # {0: flame.PresetVisibility.Project, 1: flame.PresetVisibility.Shared, 2: flame.PresetVisibility.Autodesk, 3: flame.PresetVisibility.Shotgun}
+    # {0: flame.PresetType.Image_Sequence, 1: flame.PresetType.Audio, 2: flame.PresetType.Movie, 3: flame.PresetType.Sequence_Publish}
+    'Publish': {'PresetVisibility': 2, 'PresetType': 0, 'PresetFile': 'OpenEXR/OpenEXR (16-bit fp PIZ).xml'},
+    'Preview': {'PresetVisibility': 3, 'PresetType': 2, 'PresetFile': 'Generate Preview.xml'},
+    'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
+}
+
+loader_PublishedFileType_base = {
+    'include': [],
+    'exclude': []
+}
+
+__version__ = 'v0.0.6'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -160,57 +210,60 @@ class flameAppFramework(object):
         # subclass of a dict() in order to directly link it 
         # to main framework prefs dictionaries
         # when accessed directly it will operate on a dictionary under a 'name'
-        # key in master_dict dictionary.
-        # master_dict = {}
-        # p = prefs(master_dict, 'app_name')
+        # key in master dictionary.
+        # master = {}
+        # p = prefs(master, 'app_name')
         # p['key'] = 'value'
-        # master_dict - {'app_name': {'key', 'value'}}
+        # master - {'app_name': {'key', 'value'}}
             
-        def __init__(self, master_dict, name, **kwargs):
+        def __init__(self, master, name, **kwargs):
             self.name = name
-            self.master_dict = master_dict
-            if not self.master_dict.get(self.name):
-                self.master_dict[self.name] = {}
-            self.master_dict[self.name].__init__()
+            self.master = master
+            if not self.master.get(self.name):
+                self.master[self.name] = {}
+            self.master[self.name].__init__()
 
         def __getitem__(self, k):
-            return self.master_dict[self.name].__getitem__()
+            return self.master[self.name].__getitem__(k)
         
         def __setitem__(self, k, v):
-            return self.master_dict[self.name].__setitem__(k, v)
+            return self.master[self.name].__setitem__(k, v)
 
         def __delitem__(self, k):
-            return self.master_dict[self.name].__delitem__(k)
+            return self.master[self.name].__delitem__(k)
         
         def get(self, k, default=None):
-            return self.master_dict[self.name].get(k, default)
+            return self.master[self.name].get(k, default)
         
         def setdefault(self, k, default=None):
-            return self.master_dict[self.name].setdefault(k, default)
+            return self.master[self.name].setdefault(k, default)
 
         def pop(self, k, v=object()):
             if v is object():
-                return self.master_dict[self.name].pop(k)
-            return self.master_dict[self.name].pop(k, v)
+                return self.master[self.name].pop(k)
+            return self.master[self.name].pop(k, v)
         
         def update(self, mapping=(), **kwargs):
-            self.master_dict[self.name].update(mapping, **kwargs)
+            self.master[self.name].update(mapping, **kwargs)
         
         def __contains__(self, k):
-            return self.master_dict[self.name].__contains__(k)
+            return self.master[self.name].__contains__(k)
 
         def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
             return type(self)(self)
         
         def keys(self):
-            return self.master_dict[self.name].keys()
+            return self.master[self.name].keys()
 
         @classmethod
         def fromkeys(cls, keys, v=None):
-            return self.master_dict[self.name].fromkeys(keys, v)
+            return self.master[self.name].fromkeys(keys, v)
         
         def __repr__(self):
-            return '{0}({1})'.format(type(self).__name__, self.master_dict[self.name].__repr__())
+            return '{0}({1})'.format(type(self).__name__, self.master[self.name].__repr__())
+
+        def master_keys(self):
+            return self.master.keys()
 
 
 class flameMenuApp(object):
@@ -272,6 +325,9 @@ class flameShotgunConnector(object):
         # defautl values are set here
         if not 'user signed out' in self.prefs_global.keys():
             self.prefs_global['user signed out'] = False
+        if not 'tank_name_overrides' in self.prefs.keys():
+            # tank_name_overrides are {'project_id': 'overrided_tank_name'}
+            self.prefs['tank_name_overrides'] = {}
         
         self.sg_user = None
         self.sg_human_user = None
@@ -356,11 +412,17 @@ class flameShotgunConnector(object):
         if not query:
             return False
 
+        # create separate sgotgun connection for cache
+
+        sg = self.sg_user.create_sg_connection()
+
         if perform_query:
             entity = query.get('entity')
             filters = query.get('filters')
             fields = query.get('fields')
-            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+        
+        del sg
         
         return query.get(query_type)
 
@@ -404,9 +466,15 @@ class flameShotgunConnector(object):
                         fields = query.get('fields')
                         while not self.sg:
                             time.sleep(1)
-                        result = self.sg.find(entity, filters, fields)
-                        self.async_cache[cache_request_uid]['result'] = result
-                        results_by_hash[hash(pformat(query))] = result
+                        
+                        try:
+                            sg = self.sg_user.create_sg_connection()
+                            result = sg.find(entity, filters, fields)
+                            del sg
+                            self.async_cache[cache_request_uid]['result'] = result
+                            results_by_hash[hash(pformat(query))] = result
+                        except:
+                            pass
 
                 self.async_cache_state_check()
                 self.loop_timeout(timeout, start)
@@ -494,11 +562,23 @@ class flameShotgunConnector(object):
             )
         return pipeline_configurations
 
-    def get_tank_name(self, strict = False):
+    def get_tank_name(self, strict = False, custom=True):
+
+        # if strict set to False:
+        # returns user - overrided tank_name if exists, then
+        # returns tank_name field of a project if exists, then
+        # returns sanitized project name
+        # if strict set to True returns tank_name field of a project or none
+        # falls back to 'unknown_project" on other errors
+
         if not self.sg_user:
             return 'unknown_project'
         if not self.sg_linked_project_id:
             return 'unknown_project'
+
+        if custom and self.prefs.get('tank_name_overrides'):
+            if self.sg_linked_project_id in self.prefs.get('tank_name_overrides').keys():
+                return (self.prefs.get('tank_name_overrides').get(self.sg_linked_project_id))
 
         project = self.sg.find_one(
             'Project', 
@@ -552,36 +632,76 @@ class flameShotgunConnector(object):
     def sg_storage_root(self, value):
         self.prefs['sg_storage_root'] = value
 
-    def resolve_storage_root(self, path_cache_storage):
-        local_file_storages = self.get_local_file_storages()
-        for local_file_storage in local_file_storages:
-            if local_file_storage.get('id') == path_cache_storage.get('id'):
-                return self.resolve_storage_root_path(local_file_storage)
-        return None
+    def resolve_project_path(self):
 
-    def resolve_storage_root_path(self, path_cache_storage):
-        if sys.platform == 'darwin':
-            platform_path_field = 'mac_path'
-        elif sys.startswith('linux'):
-            platform_path_field = 'linux_path'
-        else:
-             message = 'Cannot resolve storage roots - unsupported platform:'
-             message += sys.platform
-             self.mbox.setText(message)
-             self.mbox.exec_()
-             return False
+        # returns resoved project location on a file system
+        # or empty string if project location can not be resolved
+
+        # project can not be resolved without shotgun connection
+        # and without shotgun project linked to flame
+
+        if (not self.connector.sg_user) or (not self.connector.sg_linked_project_id):
+            return ''
         
-        if not path_cache_storage:
-            return None
-        return path_cache_storage.get(platform_path_field)
+        # check if we have any storage roots defined in shotgun
+        
+        sg_storage_data = self.get_sg_storage_roots()
 
-    def set_storage_root_dialog(self):
+        if not sg_storage_data:
+            message = '<p align = "center">'
+            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
+            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return ''
+
+        # check if we have storage root already set by user
+        
+        if not self.sg_storage_root:
+
+            # if there's only one storage root defined - use it
+            
+            if len(sg_storage_data) == 1:
+                self.sg_storage_root = sg_storage_data[0]
+            else:
+                self.project_path_dialog()
+            
+            # fail if storage root has not been set in a dialog
+            
+            if not self.sg_storage_root:
+                return ''
+
+        tank_name = self.get_tank_name()
+
+        return os.path.join(
+            self.resolve_storage_root_path(self.sg_storage_root),
+            tank_name)
+        
+    def project_path_dialog(self):
         from PySide2 import QtWidgets, QtCore
         window = None
         storage_root_paths = None
-        sg_storage_data = self.get_local_file_storages()
+        sg_storage_data = self.get_sg_storage_roots()
+
         self.sg_storage_index = 0
+        if self.sg_storage_root:
+            x = 0
+            for storage in sg_storage_data:
+                if storage.get('id') == self.sg_storage_root.get('id'):
+                    self.sg_storage_index = x
+                    break
+                x += 1
+
+        self.txt_tankName = self.connector.get_tank_name(custom = False)
         self.txt_tankName_text = self.connector.get_tank_name()
+        self.btn_UseCustomState = False
+        
+        # set 'Use Custom' button to pressed if there's tank_name override in prefs
+
+        if self.prefs.get('tank_name_overrides'):
+            if self.sg_linked_project_id in self.prefs.get('tank_name_overrides').keys():
+                self.btn_UseCustomState = True
 
         if not sg_storage_data:
             message = '<p align = "center">'
@@ -601,182 +721,48 @@ class flameShotgunConnector(object):
             return False
 
         def calculate_project_path():
-            self.txt_tankName_text  = self.connector.get_tank_name() 
             linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
             mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
             win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
             msg = 'Linux path: '
+            if self.btn_UseCustomState:
+                tankName = self.txt_tankName_text
+            else:
+                tankName = self.txt_tankName
+
             if linux_path != 'None':
                 if self.txt_tankName_text:
-                    msg += os.path.join(linux_path, self.txt_tankName_text)
+                    msg += os.path.join(linux_path, tankName)
             else:
                 msg += 'None'
             msg += '\nMac path: '
             if mac_path != 'None':
                 if self.txt_tankName_text:
-                    msg += os.path.join(mac_path, self.txt_tankName_text)
+                    msg += os.path.join(mac_path, tankName)
             else:
                 msg += 'None'
             msg += '\nWindows path: '
             if win_path != 'None':
                 if self.txt_tankName_text:
-                    msg += os.path.join(mac_path, self.txt_tankName_text)
+                    msg += os.path.join(mac_path, tankName)
             else:
                 msg += 'None'
-            
+
             return msg
 
-        def combobox_changed(index):
-            self.sg_storage_index = index
+        def action_UseCustom():
+            self.btn_UseCustomState = not self.btn_UseCustomState
+            calculate_project_path()
             storage_root_paths.setText(calculate_project_path())
-        
-        window = QtWidgets.QDialog()
-        window.setMinimumSize(400, 180)
-        window.setWindowTitle('Set Project Location')
-        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
-        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        window.setStyleSheet('background-color: #313131')
 
-        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
-        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
-        
-        vbox1 = QtWidgets.QVBoxLayout()
-
-        msg = 'Pipeline Configurations found for this project.\n'
-        msg += 'Please check Shotgun Pipeline Toolkit documentation\n'
-        msg += 'in order to change project location'
-        lbl_ToolkitWarning = QtWidgets.QLabel(msg,
-                        window)
-        lbl_ToolkitWarning.setStyleSheet('QFrame {color: #888888}')
-        vbox1.addWidget(lbl_ToolkitWarning)
-
-        
-        # Storage Roots Label
-
-        lbl_sgLocalFileStorage = QtWidgets.QLabel('Shotgun Local File Storage', window)
-        lbl_sgLocalFileStorage.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_sgLocalFileStorage.setMinimumHeight(28)
-        lbl_sgLocalFileStorage.setMaximumHeight(28)
-        lbl_sgLocalFileStorage.setAlignment(QtCore.Qt.AlignCenter)
-        vbox1.addWidget(lbl_sgLocalFileStorage)
-
-        storage_list = QtWidgets.QComboBox(window)
-        for storage in sg_storage_data:
-            storage_list.addItem(storage.get('code'))
-        
-        storage_list.setMinimumHeight(28)
-        # storage_list.setStyleSheet('QComboBox {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-        #                            'QComboBox::down-arrow {image: url(/opt/Autodesk/lib64/2020.2/qml/QtQuick/Controls/Styles/Base/images/arrow-down.png); border: 0px;}'
-        #                            'QComboBox::drop-down {border: 0px;}'')
-        storage_list.setCurrentIndex(self.sg_storage_index)
-        storage_list.currentIndexChanged.connect(combobox_changed)
-        vbox1.addWidget(storage_list)
-
-        lbl_sgProjectFolder = QtWidgets.QLabel('Project Folder Name', window)
-        lbl_sgProjectFolder.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
-        lbl_sgProjectFolder.setMinimumHeight(28)
-        lbl_sgProjectFolder.setMaximumHeight(28)
-        lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
-        vbox1.addWidget(lbl_sgProjectFolder)
-
-        lbl_tankName = QtWidgets.QLabel(self.txt_tankName_text, window)
-        lbl_tankName.setFocusPolicy(QtCore.Qt.NoFocus)
-        lbl_tankName.setMinimumHeight(28)
-        lbl_tankName.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
-        lbl_tankName.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        vbox1.addWidget(lbl_tankName)
-
-        lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
-        lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color:  #373737}')
-        lbl_ProjectPath.setMinimumHeight(28)
-        lbl_ProjectPath.setMaximumHeight(28)
-        lbl_ProjectPath.setAlignment(QtCore.Qt.AlignCenter)
-        vbox1.addWidget(lbl_ProjectPath)
-
-        project_path_info = calculate_project_path()
-
-        storage_root_paths = QtWidgets.QLabel(calculate_project_path(), window)
-        storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; border: 1px solid #696969 }')
-        vbox1.addWidget(storage_root_paths)
-
-        select_btn = QtWidgets.QPushButton('Select', window)
-        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        select_btn.setMinimumSize(100, 28)
-        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        select_btn.clicked.connect(window.accept)
-
-        cancel_btn = QtWidgets.QPushButton('Cancel', window)
-        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        cancel_btn.setMinimumSize(100, 28)
-        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        cancel_btn.clicked.connect(window.reject)
-
-        hbox2 = QtWidgets.QHBoxLayout()
-        hbox2.addWidget(cancel_btn)
-        hbox2.addWidget(select_btn)
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.setMargin(20)
-        vbox.addLayout(vbox1)
-        vbox.addLayout(hbox2)
-
-        window.setLayout(vbox)
-        if window.exec_():
-            self.sg_storage_root = sg_storage_data[self.sg_storage_index]
-        return self.sg_storage_root
-
-    def set_project_location_dialog(self):
-        from PySide2 import QtWidgets, QtCore
-        window = None
-        storage_root_paths = None
-        sg_storage_data = self.get_local_file_storages()
-        self.sg_storage_index = 0
-        self.txt_tankName_text = self.connector.get_tank_name()
-
-        if not sg_storage_data:
-            message = '<p align = "center">'
-            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
-            message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
-            message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
-            mbox = QtGui.QMessageBox()
-            mbox.setText(message)
-            mbox.exec_()
-            return False
-        
-        if not self.connector.sg_linked_project_id:
-            message = 'Please link Flame project to Shotgun first'
-            mbox = QtGui.QMessageBox()
-            mbox.setText(message)
-            mbox.exec_()
-            return False
-
-        def calculate_project_path():
-            linux_path = str(sg_storage_data[self.sg_storage_index].get('linux_path'))
-            mac_path = str(sg_storage_data[self.sg_storage_index].get('mac_path'))
-            win_path = str(sg_storage_data[self.sg_storage_index].get('windows_path'))
-            msg = 'Linux path: '
-            if linux_path != 'None':
-                if self.txt_tankName_text:
-                    msg += os.path.join(linux_path, self.txt_tankName_text)
+            if self.btn_UseCustomState:
+                btn_UseCustom.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                lbl_tankName.setVisible(False)
+                txt_tankName.setVisible(True)
             else:
-                msg += 'None'
-            msg += '\nMac path: '
-            if mac_path != 'None':
-                if self.txt_tankName_text:
-                    msg += os.path.join(mac_path, self.txt_tankName_text)
-            else:
-                msg += 'None'
-            msg += '\nWindows path: '
-            if win_path != 'None':
-                if self.txt_tankName_text:
-                    msg += os.path.join(mac_path, self.txt_tankName_text)
-            else:
-                msg += 'None'
-            
-            return msg
+                btn_UseCustom.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                txt_tankName.setVisible(False)
+                lbl_tankName.setVisible(True)
 
         def combobox_changed(index):
             self.sg_storage_index = index
@@ -787,7 +773,7 @@ class flameShotgunConnector(object):
             storage_root_paths.setText(calculate_project_path())
 
         window = QtWidgets.QDialog()
-        window.setMinimumSize(400, 180)
+        window.setMinimumSize(450, 180)
         window.setWindowTitle('Set Project Location')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
@@ -825,13 +811,40 @@ class flameShotgunConnector(object):
         lbl_sgProjectFolder.setMaximumHeight(28)
         lbl_sgProjectFolder.setAlignment(QtCore.Qt.AlignCenter)
         vbox1.addWidget(lbl_sgProjectFolder)
+
+        # Button and Label/Text widget switch
+        wgt_tankName = QtWidgets.QWidget(window)
+        wgt_tankName.setMinimumHeight(28)
+
+        btn_UseCustom = QtWidgets.QPushButton('Use Custom', wgt_tankName)
+        btn_UseCustom.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_UseCustom.setFixedSize(120, 28)
+        btn_UseCustom.pressed.connect(action_UseCustom)
+
+        lbl_tankName = QtWidgets.QLabel(self.txt_tankName, wgt_tankName)
+        lbl_tankName.setFocusPolicy(QtCore.Qt.NoFocus)
+        lbl_tankName.setMinimumSize(280, 28)
+        lbl_tankName.move(128,0)
+        lbl_tankName.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
+        lbl_tankName.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        lbl_tankName.setVisible(False)
         
-        txt_tankName = QtWidgets.QLineEdit(self.txt_tankName_text, window)
+        txt_tankName = QtWidgets.QLineEdit(self.txt_tankName_text, wgt_tankName)
         txt_tankName.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_tankName.setMinimumHeight(28)
+        txt_tankName.setMinimumSize(280, 28)
+        txt_tankName.move(128,0)
         txt_tankName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
         txt_tankName.textChanged.connect(txt_tankName_textChanged)
-        vbox1.addWidget(txt_tankName)
+        txt_tankName.setVisible(False)
+
+        if self.btn_UseCustomState:
+            btn_UseCustom.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+            txt_tankName.setVisible(True)
+        else:
+            btn_UseCustom.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            lbl_tankName.setVisible(True)
+
+        vbox1.addWidget(wgt_tankName)
 
         lbl_ProjectPath = QtWidgets.QLabel('Project Path', window)
         lbl_ProjectPath.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
@@ -873,11 +886,40 @@ class flameShotgunConnector(object):
         window.setLayout(vbox)
         if window.exec_():
             self.sg_storage_root = sg_storage_data[self.sg_storage_index]
-            self.connector.update_tank_name(self.txt_tankName_text)
+            if self.btn_UseCustomState:
+                self.prefs['tank_name_overrides'][self.sg_linked_project_id] = self.txt_tankName_text
+            else:
+                if self.prefs['tank_name_overrides']:
+                    if self.sg_linked_project_id in self.prefs.get('tank_name_overrides').keys():
+                        del self.prefs['tank_name_overrides'][self.sg_linked_project_id]
+            self.framework.save_prefs()
         return self.sg_storage_root
 
-    def get_local_file_storages(self):
-        if not self.sg_user:
+    def resolve_storage_root(self, path_cache_storage):
+        local_file_storages = self.get_sg_storage_roots()
+        for local_file_storage in local_file_storages:
+            if local_file_storage.get('id') == path_cache_storage.get('id'):
+                return self.resolve_storage_root_path(local_file_storage)
+        return None
+
+    def resolve_storage_root_path(self, path_cache_storage):
+        if sys.platform == 'darwin':
+            platform_path_field = 'mac_path'
+        elif sys.startswith('linux'):
+            platform_path_field = 'linux_path'
+        else:
+             message = 'Cannot resolve storage roots - unsupported platform:'
+             message += sys.platform
+             self.mbox.setText(message)
+             self.mbox.exec_()
+             return False
+        
+        if not path_cache_storage:
+            return None
+        return path_cache_storage.get(platform_path_field)
+
+    def get_sg_storage_roots(self):
+        if (not self.sg_user) or (not self.sg_linked_project_id):
             return []
         return self.sg.find(
             'LocalStorage',
@@ -886,7 +928,7 @@ class flameShotgunConnector(object):
         )
 
     def update_sg_storage_root(self):
-        sg_storage_data = self.get_local_file_storages()
+        sg_storage_data = self.get_sg_storage_roots()
         for storage in sg_storage_data:
             if storage.get('id') == self.sg_storage_root.get('id'):
                 self.sg_storage_root = storage
@@ -894,6 +936,7 @@ class flameShotgunConnector(object):
 
         self.sg_storage_root = {}
         return False
+
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -1086,16 +1129,19 @@ class flameMenuProjectconnect(flameMenuApp):
                 pipeline_config_info.setText('Clear')
 
         def change_storage_root_dialog():
-            if self.connector.get_pipeline_configurations():
-                self.connector.set_storage_root_dialog()
-            else:
-                self.connector.set_project_location_dialog()
+            self.connector.project_path_dialog()
 
             update_pipeline_config_info()
             update_project_path_info()
 
-        def set_export_preset_type(item):
-            pprint (item)
+        def set_presetTypePublish():
+            btn_presetType.setText('Publish')
+        
+        def set_presetTypePreview():
+            btn_presetType.setText('Preview')
+
+        def set_presetTypeThumbnail():
+            btn_presetType.setText('Thumbnail')
 
         def changeExportPreset():
             print ('file dialog')
@@ -1117,6 +1163,7 @@ class flameMenuProjectconnect(flameMenuApp):
             
             paneGeneral.setVisible(False)
             panePublish.setVisible(False)
+            paneTemplatesSelector.setVisible(False)
             paneSuperclips.setVisible(False)
 
             paneGeneral.setVisible(True)
@@ -1128,8 +1175,10 @@ class flameMenuProjectconnect(flameMenuApp):
 
             paneGeneral.setVisible(False)
             panePublish.setVisible(False)
+            paneTemplatesSelector.setVisible(False)
             paneSuperclips.setVisible(False)
 
+            paneTemplatesSelector.setVisible(True)
             panePublish.setVisible(True)
 
         def pressSuperclips():
@@ -1139,6 +1188,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
             paneGeneral.setVisible(False)
             panePublish.setVisible(False)
+            paneTemplatesSelector.setVisible(False)
             paneSuperclips.setVisible(False)
 
             paneSuperclips.setVisible(True)
@@ -1262,13 +1312,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         hbox_storage = QtWidgets.QHBoxLayout()
         storage_root_btn = QtWidgets.QPushButton(window)
-        if self.connector.get_pipeline_configurations():
-            if self.connector.sg_storage_root:
-                storage_root_btn.setText('Change Local File Storage')
-            else:
-                storage_root_btn.setText('Select Local File Storage')
-        else:
-            storage_root_btn.setText('Change Project Location')
+        storage_root_btn.setText('Set Project Location')
         
         storage_root_btn.setFocusPolicy(QtCore.Qt.NoFocus)
         storage_root_btn.setMinimumSize(199, 28)
@@ -1319,26 +1363,12 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_export_preset = QtWidgets.QHBoxLayout()
         hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
-        # Publish: ExportPresets: Preset typ selector
-
-        btn_presetType = QtWidgets.QPushButton('Publish', window)
-        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_presetType.setMinimumSize(88, 28)
-        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        btn_presetType_menu = QtWidgets.QMenu()
-        btn_presetType_menu.addAction('Publish', presetType_setPublish)
-        btn_presetType_menu.addAction('Preview', presetType_Preview)
-        btn_presetType_menu.addAction('Thumbnail', presetType_setThumbnail)
-        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
-        hbox_export_preset.addWidget(btn_defaultPreset)
-
         # Publish: ExportPresets: Export preset selector
 
-        btn_Preset = QtWidgets.QPushButton('Publish', window)
-        btn_defaultPreset.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_defaultPreset.setMinimumSize(88, 28)
-        btn_defaultPreset.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        btn_PresetSelector = QtWidgets.QPushButton('Publish', window)
+        btn_PresetSelector.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PresetSelector.setMinimumSize(88, 28)
+        btn_PresetSelector.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_another_menu = QtWidgets.QMenu()
         btn_another_menu.addAction('Another action')
@@ -1348,9 +1378,24 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_defaultPreset_menu.addAction('Preview')
         btn_defaultPreset_menu.addAction('Thumbnail')
         btn_defaultPreset_menu.addMenu(btn_another_menu)
-        btn_defaultPreset.setMenu(btn_defaultPreset_menu)
-        hbox_export_preset.addWidget(btn_defaultPreset)
+        btn_PresetSelector.setMenu(btn_defaultPreset_menu)
+        hbox_export_preset.addWidget(btn_PresetSelector)
 
+
+        # Publish: ExportPresets: Preset typ selector
+
+        btn_presetType = QtWidgets.QPushButton('Publish', window)
+        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_presetType.setMinimumSize(88, 28)
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_presetType_menu = QtWidgets.QMenu()
+        btn_presetType_menu.addAction('Main Publish Export Format Preset', set_presetTypePublish)
+        btn_presetType_menu.addAction('Preview Export Format Preset', set_presetTypePreview)
+        btn_presetType_menu.addAction('Thumbnail Export Format Preset', set_presetTypeThumbnail)
+        btn_presetType.setMenu(btn_presetType_menu)
+        hbox_export_preset.addWidget(btn_presetType)
 
         # Publish: ExportPresets: Change button
         
@@ -1383,17 +1428,48 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish::Tempates actions
 
         def action_showShot():
-            btn_Entity.setText('Shot')
+            # btn_Entity.setText('Shot')
+            btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            lbl_shotTemplate.setText('Shot Publish')
             paneAssetTemplates.setVisible(False)
             paneShotTemplates.setVisible(True)
 
         def action_showAsset():
-            btn_Entity.setText('Asset')
+            # btn_Entity.setText('Asset')
+            btn_Shot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            btn_Asset.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            lbl_shotTemplate.setText('Asset Publish')
             paneShotTemplates.setVisible(False)
             paneAssetTemplates.setVisible(True)
 
-        # Publish::Tempates general widget
-        # It holds Shot / Asset buttons and labels for Batch and Version template fields
+        # Publish::Tempates: Shot / Asset selector
+
+        paneTemplatesSelector = QtWidgets.QWidget(window)
+        paneTemplatesSelector.setFixedSize(158, 142)
+        paneTemplatesSelector.move(0, 143)
+
+        lbl_Entity = QtWidgets.QLabel('Entity', paneTemplatesSelector)
+        lbl_Entity.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_Entity.setFixedSize(128, 28)
+        lbl_Entity.move(20, 0)
+        lbl_Entity.setAlignment(QtCore.Qt.AlignCenter)
+
+        btn_Shot = QtWidgets.QPushButton('Shot', paneTemplatesSelector)
+        btn_Shot.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Shot.setFixedSize(128, 28)
+        btn_Shot.move(20, 34)
+        btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Shot.pressed.connect(action_showShot)
+
+        btn_Asset = QtWidgets.QPushButton('Asset', paneTemplatesSelector)
+        btn_Asset.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Asset.setFixedSize(128, 28)
+        btn_Asset.move(20, 68)
+        btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_Asset.pressed.connect(action_showAsset)
+
+        # Publish::Tempates pane widget
 
         paneTemplates = QtWidgets.QWidget(panePublish)
         paneTemplates.setFixedSize(840, 142)
@@ -1405,18 +1481,10 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_templates.setFixedSize(840, 28)
         lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
 
-        # Publish::Tempates: Entity toggle button
-
-        btn_Entity = QtWidgets.QPushButton('Shot', paneTemplates)
-        btn_Entity.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_Entity.setFixedSize(88, 28)
-        btn_Entity.move(0, 34)
-        btn_Entity.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
-        btn_Entity_menu = QtWidgets.QMenu()
-        btn_Entity_menu.addAction('Show Templates for Shots', action_showShot)
-        btn_Entity_menu.addAction('Show Templates for Assets', action_showAsset)
-        btn_Entity.setMenu(btn_Entity_menu)
+        # Publish::Tempates: Publish Template label
+        lbl_shotTemplate = QtWidgets.QLabel('Shot Publish', paneTemplates)
+        lbl_shotTemplate.setFixedSize(88, 28)
+        lbl_shotTemplate.move(0, 34)
 
         # Publish::Tempates: Batch Template label
         lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
@@ -1424,9 +1492,9 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_batchTemplate.move(0, 68)
 
         # Publish::Tempates: Version Template label
-        lbl_batchTemplate = QtWidgets.QLabel('Version', paneTemplates)
-        lbl_batchTemplate.setFixedSize(88, 28)
-        lbl_batchTemplate.move(0, 102)
+        lbl_versionTemplate = QtWidgets.QLabel('Version', paneTemplates)
+        lbl_versionTemplate.setFixedSize(88, 28)
+        lbl_versionTemplate.move(0, 102)
 
         # Publish::Templates::ShotPane: Show and hide
         # depending on an Entity toggle
@@ -1436,47 +1504,56 @@ class flameMenuProjectconnect(flameMenuApp):
         paneShotTemplates.move(96, 0)
 
         # Publish::Templates::ShotPane: Publish default button
-
+        def setShotDefault():
+            txt_shot.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('default', ''))
         btn_shotDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotDefault.setFixedSize(88, 28)
         btn_shotDefault.move(0, 34)
         btn_shotDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotDefault.clicked.connect(setShotDefault)
 
         # Publish::Templates::ShotPane: Publish template text field
-
-        txt_shot = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr', paneShotTemplates)
+        
+        txt_shot_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('value', '')
+        txt_shot = QtWidgets.QLineEdit(txt_shot_value, paneShotTemplates)
         txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shot.setFixedSize(556, 28)
         txt_shot.move (94, 34)
         txt_shot.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Publish template fields button
-
-        btn_shotFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        def addShotField(field):
+            txt_shot.insert(field)
+        shot_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('fields', [])
+        btn_shotFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotFields.setFixedSize(88, 28)
         btn_shotFields.move(656, 34)
         btn_shotFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotFields_menu = QtWidgets.QMenu()
-        btn_shotFields_menu.addAction('Field 1')
-        btn_shotFields_menu.addAction('Field 2')
+        for field in shot_template_fields:
+            action = btn_shotFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addShotField(field))
         btn_shotFields.setMenu(btn_shotFields_menu)
 
         # Publish::Templates::ShotPane: Batch template default button
-
+        def setShotBatchDefault():
+            txt_shotBatch.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_batch').get('default', ''))
         btn_shotBatchDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchDefault.setFixedSize(88, 28)
         btn_shotBatchDefault.move(0, 68)
         btn_shotBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotBatchDefault.clicked.connect(setShotBatchDefault)
 
         # Publish::Templates::ShotPane: Batch template text field
 
-        txt_shotBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch', paneShotTemplates)
+        txt_shotBatch_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_batch').get('value', '')
+        txt_shotBatch = QtWidgets.QLineEdit(txt_shotBatch_value, paneShotTemplates)
         txt_shotBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shotBatch.setMinimumSize(556, 28)
         txt_shotBatch.move(94, 68)
@@ -1484,7 +1561,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::ShotPane: Batch template fields button
 
-        btn_shotBatchFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotBatchFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchFields.setMinimumSize(88, 28)
         btn_shotBatchFields.move(656, 68)
@@ -1496,17 +1573,20 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
 
         # Publish::Templates::ShotPane: Version template default button
-
+        def setShotVersionDefault():
+            txt_shotVersion.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('version_name').get('default', ''))
         btn_shotVersionDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionDefault.setMinimumSize(88, 28)
         btn_shotVersionDefault.move(0, 102)
         btn_shotVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_shotVersionDefault.clicked.connect(setShotVersionDefault)
 
         # Publish::Templates::ShotPane: Vesrion template text field
 
-        txt_shotVersion = QtWidgets.QLineEdit('{Shot}_{name}_v{version}', paneShotTemplates)
+        txt_shotVersion_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('version_name').get('value', '')
+        txt_shotVersion = QtWidgets.QLineEdit(txt_shotVersion_value, paneShotTemplates)
         txt_shotVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shotVersion.setMinimumSize(256, 28)
         txt_shotVersion.move(94, 102)
@@ -1514,7 +1594,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::ShotPane: Version template fields button
 
-        btn_shotVersionFields = QtWidgets.QPushButton('Fields', paneShotTemplates)
+        btn_shotVersionFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionFields.setMinimumSize(88, 28)
         btn_shotVersionFields.move(356, 102)
@@ -1552,7 +1632,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::AssetPane: Publish template fields button
 
-        btn_assetFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetFields.setFixedSize(88, 28)
         btn_assetFields.move(656, 34)
         btn_assetFields.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -1582,7 +1662,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::AssetPane: Batch template fields button
 
-        btn_assetBatchFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetBatchFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchFields.setMinimumSize(88, 28)
         btn_assetBatchFields.move(656, 68)
@@ -1612,7 +1692,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Templates::AssetPane: Version template fields button
 
-        btn_assetVersionFields = QtWidgets.QPushButton('Fields', paneAssetTemplates)
+        btn_assetVersionFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionFields.setMinimumSize(88, 28)
         btn_assetVersionFields.move(356, 102)
@@ -1657,6 +1737,9 @@ class flameMenuProjectconnect(flameMenuApp):
         # Close button
 
         def close_prefs_dialog():
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_render']['value'] = txt_shot.text().encode('utf-8')
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_batch']['value'] = txt_shotBatch.text().encode('utf-8')
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['version_name']['value'] = txt_shotVersion.text().encode('utf-8')
             self.framework.save_prefs()
             window.accept()
 
@@ -1673,6 +1756,7 @@ class flameMenuProjectconnect(flameMenuApp):
         action_showShot()
         pressPublish()
         window.exec_()
+
 
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
@@ -1908,7 +1992,7 @@ class flameMenuNewBatch(flameMenuApp):
         self.register_query()
 
         if not self.prefs:
-            self.prefs['show_all'] = False
+            self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
 
@@ -2293,7 +2377,7 @@ class flameMenuBatchLoader(flameMenuApp):
 
         # app defaults
         if not self.prefs:
-            self.prefs['show_all'] = False
+            self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
 
@@ -2679,30 +2763,22 @@ class flameMenuPublisher(flameMenuApp):
     def __init__(self, framework, connector):
         flameMenuApp.__init__(self, framework)
         self.connector = connector
-        
+
         # app defaults
-        if not self.prefs:
-            self.prefs['show_all'] = False
+        if not self.prefs.master.get(self.name):
+            self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
             self.prefs['flame_bug_message_shown'] = False
-            self.prefs['templates'] = {
-            # known tokens are {Sequence},{Shot},{Step},{name},{version},{version_four},{frame}
-            # {name} and {version} will be guessed from the clip name and taken from
-            # number of Batch itertations as a fallback.
-            # EXAMPLE: There are 9 batch iterations in batch group.
-            # Any of the clips named as "mycomp", "SHOT_001_mycomp", "SHOT_001_mycomp_009", "SHOT_001_mycomp_v009"
-            # Would give us "mycomp" as a {name} and 009 as {version}
-            # Version number padding are default to 3 at the moment, ### style padding is not yet implemented
-            # Publishing into asset will just replace {Shot} fied with asset name
-            # 'flame_image_sequence': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
-            # 'flame_movie': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.mov',
-            'flame_render': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
-            'flame_batch': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
-            'version_name': '{Shot}_{name}_v{version}'
-            }
-            self.prefs['flame_render_type'] = 'Flame Render'
-            self.prefs['flame_batch_type'] = 'Flame Batch File'
+            self.prefs['templates'] = default_templates
+            # init values from default
+            for entity_type in self.prefs['templates'].keys():
+                for template in self.prefs['templates'][entity_type].keys():
+                    if isinstance(self.prefs['templates'][entity_type][template], dict):
+                        if 'default' in self.prefs['templates'][entity_type][template].keys():
+                            self.prefs['templates'][entity_type][template]['value'] = self.prefs['templates'][entity_type][template]['default']
+                        
+            self.prefs['flame_export_presets'] = default_flame_export_presets
             self.prefs['poster_frame'] = 1
 
         self.flame_bug_message = False
@@ -2897,7 +2973,7 @@ class flameMenuPublisher(flameMenuApp):
         entity_id = entity.get('id')
         if entity_id not in self.prefs.keys():
             self.prefs[entity_id] = {}
-            self.prefs[entity_id]['show_all'] = False
+            self.prefs[entity_id]['show_all'] = True
         prefs = self.prefs.get(entity_id)
         
         tasks = sg.find(
@@ -2909,7 +2985,9 @@ class flameMenuPublisher(flameMenuApp):
                 'step.Step.short_name',
                 'task_assignees',
                 'project.Project.id',
-                'entity'
+                'entity',
+                'entity.Asset.sg_asset_type',
+                'entity.Shot.sg_sequence'
             ]
         )
 
@@ -3036,91 +3114,116 @@ class flameMenuPublisher(flameMenuApp):
 
     def publish(self, entity, selection):
         
-        self.templates = self.prefs.get('templates')
-        self.flame_render_type = self.prefs.get('flame_render_type')
-        self.flame_batch_type = self.prefs.get('flame_batch_type')
-        self.poster_frame = self.prefs.get('poster_frame')
-
-        # shotgun storage root resolution
-        storage_root_path = None
-        if not self.connector.sg_storage_root:
-            if not self.connector.get_storage_root_dialog():
-                return False
+        # Main publishing function
         
-        self.connector.update_sg_storage_root()
-        storage_root_path = self.connector.resolve_storage_root_path(self.connector.sg_storage_root)
+        # First,let's check if the project folder is there
+        # and if not - try to create one
+        # connector takes care of storage root check and selection
+        # we're going to get empty path if connector was not able to resolve it
 
-        if not storage_root_path:
-            if sys.platform == 'darwin':
-                message = 'No Mac path '
-            elif sys.startswith('linux'):
-                platform_path_field = 'No Linux path '
-            message += 'specified for Shotgun Local File Storage "'
-            message += self.connector.sg_storage_root.get('code')
-            message += '". Can not continue with publishing.'
+        project_path = self.connector.resolve_project_path()
+        if not project_path:
+            message = 'Publishing stopped:\nUnable to resolve project path.'
             self.mbox.setText(message)
             self.mbox.exec_()
             return False
 
-        if not os.path.isdir(storage_root_path):
-            message = 'Path "' + storage_root_path
-            message += '" specified in Shotgun Local File Storage "'
-            message += self.connector.sg_storage_root.get('code')
-            message += '"  does not exist. Can not continue with publishing.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
+        # check if the project path is there and try to create if not
+
+        if not os.path.isdir(project_path):
+            try:
+                os.path.makedirs(project_path)
+            except:
+                message = 'Publishing stopped: Unable to create project folder %s' % project_path
+                self.mbox.setText(message)
+                self.mbox.exec_()
+                return False
+
+        # get necessary fields from currently selected export preset
+
+        export_preset_fields = self.get_export_preset_fields(self.prefs['flame_export_presets'].get('Publish'))
+        if not export_preset_fields:
             return False
+
+        # try to publish each of selected clips
+        
+        versions_published = set()
+        versions_failed = set()
+        pb_files_published = dict()
+        pb_files_failed = dict()
+
+        for clip in selection:
+            pb_file_data, status, cancel = self.publish_clip(clip, entity, project_path, export_preset_fields)
+            if status:
+                version_name = pb_file_data.get('version_name')
+                versions_published.add(version_name)
+                data = pb_files_published.get(version_name, [])
+                data.append(pb_file_data)
+                pb_files_published[version_name] = data
+            else:
+                version_name = pb_file_data.get('version_name')
+                versions_failed.add(version_name)
+                data = pb_files_failed.get(version_name, [])
+                data.append(pb_file_data)
+                pb_files_failed[version_name] = data
+            if cancel:
+                break
+
+        # report user of the status
+        
+        if cancel and (len(versions_published) == 0):
+            return False
+
+        elif (len(versions_published) == 0) and (len(versions_failed) > 0):
+            msg = 'Failed to publish into %s versions' % len(versions_failed)
+        elif (len(versions_published) > 0) and (len(versions_failed) == 0):
+            msg = 'Published into %s versions' % len(versions_published)
+        else:
+            msg = 'Published into %s versions, %s versions failed'
+
+        mbox = QtGui.QMessageBox()
+        mbox.setText('flameMenuSG: ' + msg)
+        detailed_msg = ''
+        if len(versions_published) > 0:
+            detailed_msg += 'Published:\n'
+            for version_name in versions_published:
+                detailed_msg += version_name + ':\n'
+                #for data in pb_files_published.get(version_name, []):
+                #    detailed_msg += '    ' + os.path.basename(data.get('path_cache', ''))
+        if len(versions_failed) > 0:
+            detailed_msg += 'Failed to publish: \n'
+            for version_name in versions_failed:
+                detailed_msg += version_name + '\n'
+                #for data in pb_files_failed.get(version_name, []):
+                #    detailed_msg += '    ' + os.path.basename(data.get('path_cache', ''))
+        mbox.setDetailedText(detailed_msg)
+        mbox.setStyleSheet('QLabel{min-width: 400px;}')
+        mbox.exec_()
+        
+        return True
+
+    def publish_clip(self, clip, entity, project_path, preset_fields):
 
         # start of main publishing routine
+
+        pb_file_info = {} # dictionary to return to publish function
+        
+        # Process info we've got from entity
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
         task_step = task.get('step.Step.code')
-        uid = self.create_uid()
-        
-        sg = self.connector.sg_user.create_sg_connection()
-        project_id = entity['task']['project.Project.id']
-        proj = sg.find_one(
-            'Project',
-            [['id', 'is', project_id]],
-            [
-                'name',
-                'tank_name'
-            ]
-        )
-
-        project_folder_name = proj.get('tank_name')
-        if not project_folder_name:
-            project_folder_name = proj.get('name')
-        
-        project_root = os.path.join(storage_root_path, project_folder_name)
-        if not os.path.isdir(project_root):
-            message = 'project folder "'
-            message += project_root
-            message += '" does not exist. '
-            message += 'Please create project folder to publish.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-        
-        # we need to bootstrap toolkit here but
-        # let's do a quick and dirty manual assignments for now
-        # multiple selections are left for later enhancements
-        if len(selection) > 1:
-            message = 'More than one clip selected. '
-            message += 'Multiple selection publish is not yet implemented. '
-            message += 'Please select one clip at time.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        clip = selection[0]
-        
-        # batch file name resolution
+        task_step_code = task.get('step.Step.short_name', task_step.upper())
+        sequence_name = task.get('entity.Shot.sg_sequence', {}).get('name', 'DefaultSequence')
+        sg_asset_type = task.get('entity.Asset.sg_asset_type','Default')
+        uid = self.create_uid()    
+                    
+        # linked .batch file path resolution
         # if the clip consists of several clips with different linked batch setups
-        # fall back to the current batch setup
+        # fall back to the current batch setup (should probably publish all of them?)
+
         import ast
 
         linked_batch_path = None
@@ -3130,28 +3233,18 @@ class flameMenuPublisher(flameMenuApp):
                 for segment in track.segments:
                     comments.add(segment.comment.get_value())
         if len(comments) == 1:
-            try:
-                linked_batch_path_dict = ast.literal_eval(comments.pop())
-                linked_batch_path = linked_batch_path_dict.get('batch_file')
-            except:
-                pass
-
-        # resolve Sequence name if linked to the shot
-        shot = sg.find_one(
-                'Shot',
-                [['id', 'is', task_entity_id]],
-                ['sg_sequence']
-            )
-            
-        sequence = shot.get('sg_sequence')
-        if not sequence:
-            sequence_name = 'DefaultSequence'
-        else:
-            sequence_name = sequence.get('name')
-            if not sequence_name:
-                sequence_name = 'DefaultSequence'
+            comment = comments.pop()
+            start_index = comment.find("{'batch_file': ")
+            end_index = comment.find("'}", start_index)
+            if (start_index > 0) and (end_index > 0):
+                try:
+                    linked_batch_path_dict = ast.literal_eval(comment[start_index:end_index+2])
+                    linked_batch_path = linked_batch_path_dict.get('batch_file')
+                except:
+                    pass
 
         # basic name/version detection from clip name
+
         batch_group_name = self.flame.batch.name.get_value()
 
         clip_name = clip.name.get_value()
@@ -3180,76 +3273,111 @@ class flameMenuPublisher(flameMenuApp):
         if version_number == -1:
             version_number = len(self.flame.batch.batch_iterations)
             version_padding = 3
+
+        # collect known template fields
+    
+        sg_frame = '%' + '{:02d}'.format(preset_fields.get('framePadding')) + 'd'
+
+        template_fields = {}
+        template_fields['Shot'] = task_entity_name
+        template_fields['Asset'] = task_entity_name
+        template_fields['sg_asset_type'] = sg_asset_type
+        template_fields['name'] = clip_name
+        template_fields['Step'] = task_step
+        template_fields['Step_code'] = task_step_code
+        template_fields['Sequence'] = sequence_name
+        template_fields['version'] = '{:03d}'.format(version_number)
+        template_fields['version_four'] = '{:04d}'.format(version_number)
+        template_fields['ext'] = preset_fields.get('fileExt')
+        template_fields['frame'] = sg_frame
+        # compose version name from template
+
+        version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
+        version_name = version_name.format(**template_fields)
+        update_version_thumbnail = True
+
+        # start with flame_render publish first.
+
+        pb_file_name = task_entity_name + ', ' + clip_name
+
+        # compose export path anf path_cache filed from template fields
+
+        export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('value', '')
+        export_path = export_path.format(**template_fields)
+        path_cache = export_path.format(**template_fields)
+        export_path = os.path.join(project_path, export_path)
+        path_cache = os.path.join(os.path.basename(project_path), path_cache)
+
+        # get PublishedFileType from Shotgun
+        # if it is not there - create it
+        flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
+        published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
+        if not published_file_type:
+            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
+
+        # check if we're adding publishes to existing version
+
+        if self.connector.sg.find('Version', [
+            ['entity', 'is', task_entity], 
+            ['code', 'is', version_name],
+            ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
+            ]):
+
+            # if it is a case:
+            # check if we already have published file of the same sg_published_file_type
+            # and with the same name and path_cache
+
+            task_published_files = self.connector.sg.find(
+                'PublishedFile',
+                [['task', 'is', {'type': 'Task', 'id': task.get('id')}]],
+                ['published_file_type', 
+                'path_cache', 
+                'name',
+                'version_number']
+            )
+
+            sg_pbf_type_flag = False
+            path_cache_flag = False
+            name_flag = False
+            version_number_flag = False
+
+            for task_published_file in task_published_files:
+                if task_published_file.get('published_file_type', {}).get('id') == published_file_type.get('id'):
+                    sg_pbf_type_flag = True
+                if task_published_file.get('name') == pb_file_name:
+                    name_flag = True
+                if task_published_file.get('version_number') == version_number:
+                    version_number_flag = True
+                if task_published_file.get('path_cache') == path_cache:
+                    path_cache_flag = True
+
+            if sg_pbf_type_flag and path_cache_flag and name_flag and version_number:
+
+                # we don't need to move down to .batch file publishing.
+                # let's return published file info for user
+
+                pb_file_info['version_name'] = version_name
+                pb_file_info['path_cache'] = path_cache,
+                pb_file_info['name'] = pb_file_name
         
-        version_name = self.templates.get('version_name')
-        version_name = version_name.replace('{Shot}', task_entity_name)
-        version_name = version_name.replace('{name}', clip_name)
-        version_name = version_name.replace('{Step}', task_step)
-        version_name = version_name.replace('{Sequence}', sequence_name)
-        version_name = version_name.replace('{version}', '{:03d}'.format(version_number))
-        version_name = version_name.replace('{version_four}', '{:04d}'.format(version_number))
+                return (pb_file_info, False, False)
+            
+            update_version_thumbnail = False
 
-        if sg.find('Version', [['entity', 'is', shot], ['code', 'is', version_name]]):
-            message = 'Version '
-            message += version_name
-            message += ' already exists in '
-            message += task_entity_name
-            message += '->'
-            message += task_step
-            message += '. Please iterate version number or choose another name'
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
+        preset_path = preset_fields.get('path')
 
-        # build export path
-
-        # That's the way they do it on toolkit
-        # template_data = {}
-        # template_data['Shot'] = task_entity_name
-        # template_data['name'] = clip_name
-        # template_data['Step'] = task_step
-        # template_data['Sequence'] = sequence_name
-        # template_data['version'] = '{:03d}'.format(version_number)
-        # export_path.format(**template_data)
-
-        export_path = self.templates.get('flame_render')
-        export_path = export_path.replace('{Shot}', task_entity_name)
-        export_path = export_path.replace('{name}', clip_name)
-        export_path = export_path.replace('{Step}', task_step)
-        export_path = export_path.replace('{Sequence}', sequence_name)
-        export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
-        export_path = export_path.replace('{version_four}', '{:04d}'.format(version_number))
-        export_path = os.path.join(storage_root_path, project_folder_name, export_path)
-
-        if export_path.endswith('.exr'):
-            preset_dir = self.flame.PyExporter.get_presets_dir(
-                    self.flame.PyExporter.PresetVisibility.Autodesk,
-                    self.flame.PyExporter.PresetType.Image_Sequence
-                )
-            preset_path = os.path.join(preset_dir, 'OpenEXR', 'OpenEXR (16-bit fp PIZ).xml')
-        elif export_path.endswith('.dpx'):
-            preset_dir = self.flame.PyExporter.get_presets_dir(
-                    self.flame.PyExporter.PresetVisibility.Autodesk,
-                    self.flame.PyExporter.PresetType.Image_Sequence
-                )
-            preset_path = os.path.join(preset_dir, 'DPX', 'DPX (10-bit).xml')
-        else:
-            preset_dir = self.flame.PyExporter.get_presets_dir(
-                    self.flame.PyExporter.PresetVisibility.Autodesk,
-                    self.flame.PyExporter.PresetType.Image_Sequence
-                )
-            preset_path = os.path.join(preset_dir, 'Jpeg', 'Jpeg (8-bit).xml')
+        # Export using main preset
 
         exporter = self.flame.PyExporter()
         exporter.foreground = True
         export_clip_name, ext = os.path.splitext(os.path.basename(export_path))
-        export_clip_name = export_clip_name.replace('{frame}', '')
+        export_clip_name = export_clip_name.replace(sg_frame, '')
         if export_clip_name.endswith('.'):
             export_clip_name = export_clip_name[:-1]
         original_clip_name = clip.name.get_value()
         clip.name.set_value(export_clip_name)
         export_dir = os.path.dirname(export_path)
-        
+
         if not os.path.isdir(export_dir):
             try:
                 os.makedirs(export_dir)
@@ -3268,6 +3396,8 @@ class flameMenuPublisher(flameMenuApp):
             clip.name.set_value(original_clip_name)
             return None
 
+        # Export preview to temp folder
+
         preset_dir = self.flame.PyExporter.get_presets_dir(
             self.flame.PyExporter.PresetVisibility.Shotgun,
             self.flame.PyExporter.PresetType.Movie
@@ -3281,6 +3411,8 @@ class flameMenuPublisher(flameMenuApp):
         except:
             pass
 
+        # Set clip in and out marks and export thumbnail to temp folder
+
         preset_dir = self.flame.PyExporter.get_presets_dir(
             self.flame.PyExporter.PresetVisibility.Shotgun,
             self.flame.PyExporter.PresetType.Image_Sequence
@@ -3289,8 +3421,8 @@ class flameMenuPublisher(flameMenuApp):
         clip.name.set_value(version_name + '_thumbnail_' + uid)
         export_dir = '/var/tmp'
         thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
-        clip.in_mark = self.poster_frame
-        clip.out_mark = self.poster_frame + 1
+        clip.in_mark = self.prefs.get('poster_frame', 1)
+        clip.out_mark = self.prefs.get('poster_frame', 1) + 1
         exporter.export_between_marks = True
         try:
             exporter.export(clip, preset_path, export_dir)
@@ -3299,62 +3431,51 @@ class flameMenuPublisher(flameMenuApp):
 
         clip.name.set_value(original_clip_name)
 
-        # get published file type for Flame Render or create a published file type on the fly
-        sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", self.flame_render_type]])
-        if not sg_published_file_type:
-            sg_published_file_type = sg.create("PublishedFileType", {"code": self.flame_render_type})
-        
-        # /opt/Autodesk/presets/2020.2/shotgun/bundle_cache/app_store/tk-flame/v1.15.4/hooks/tk-multi-publish2/create_version.py
-           
+        # Create version in Shotgun
         version_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             code = version_name,
             #description=item.description,
             entity = task_entity,
-            sg_task = task,
+            sg_task = {'type': 'Task', 'id': task.get('id')},
             #sg_path_to_frames=path
         )
-        version = sg.create('Version', version_data)
+        version = self.connector.sg.create('Version', version_data)
         if os.path.isfile(thumbnail_path):
-            sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
+            self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
         if os.path.isfile(preview_path):
-            sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
-
-        path_cache = self.templates.get('flame_render')
-        path_cache = path_cache.replace('{Shot}', task_entity_name)
-        path_cache = path_cache.replace('{name}', clip_name)
-        path_cache = path_cache.replace('{Step}', task_step)
-        path_cache = path_cache.replace('{Sequence}', sequence_name)
-        path_cache = path_cache.replace('{version}', '{:03d}'.format(version_number))
-        path_cache = path_cache.replace('{version_four}', '{:04d}'.format(version_number))
-        path_cache = path_cache.replace('{frame}', '%08d')
-        path_cache = os.path.join(project_folder_name, path_cache)
-
+            self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+        
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             version_number = version_number,
-            task = task,
+            task = {'type': 'Task', 'id': task.get('id')},
             version = version,
             entity = task_entity,
-            published_file_type = sg_published_file_type,
+            published_file_type = published_file_type,
             path = {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root},
             path_cache = path_cache,
             code = os.path.basename(path_cache),
-            name = task_entity_name + ', ' + clip_name,
+            name = pb_file_name
         )
-        published_file = sg.create('PublishedFile', published_file_data)
-        sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+        published_file = self.connector.sg.create('PublishedFile', published_file_data)
+        self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+
+        ##### CHANGE DICT TO LIST OF DICTS TO BE ABLE TO PROCESS INFO UPSTREAM
+
+        pb_file_info['version_name'] = version_name
+        pb_file_info['path_cache'] = path_cache
+        pb_file_info['name'] = pb_file_name
+
+        # compose batch export path and path_cache filed from template fields
+
+        export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
+        export_path = export_path.format(**template_fields)
+        path_cache = export_path.format(**template_fields)
+        export_path = os.path.join(project_path, export_path)
+        path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
         # copy flame .batch file linked to the clip or save current one if not resolved from comments
-        export_path = self.templates.get('flame_batch')
-        export_path = export_path.replace('{Shot}', task_entity_name)
-        export_path = export_path.replace('{name}', clip_name)
-        export_path = export_path.replace('{Step}', task_step)
-        export_path = export_path.replace('{Sequence}', sequence_name)
-        export_path = export_path.replace('{version}', '{:03d}'.format(version_number))
-        export_path = export_path.replace('{version_four}', '{:04d}'.format(version_number))
-        path_cache = os.path.join(project_folder_name, export_path)
-        export_path = os.path.join(storage_root_path, project_folder_name, export_path)
         
         if linked_batch_path:
             src, ext = os.path.splitext(linked_batch_path)
@@ -3376,17 +3497,23 @@ class flameMenuPublisher(flameMenuApp):
             self.flame.batch.save_setup(export_path)
 
         # get published file type for Flame Batch or create a published file type on the fly
-        sg_published_file_type = sg.find_one('PublishedFileType', filters=[["code", "is", self.flame_batch_type]])
-        if not sg_published_file_type:
-            sg_published_file_type = sg.create("PublishedFileType", {"code": self.flame_batch_type})
+
+        flame_batch_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('PublishedFileType', '')
+        published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_batch_type]])
+        if not published_file_type:
+            published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
+
         # update published file data and create PublishedFile for flame batch
-        published_file_data['published_file_type'] = sg_published_file_type
+
+        published_file_data['published_file_type'] = published_file_type
         published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
         published_file_data['path_cache'] = path_cache
         published_file_data['code'] = os.path.basename(path_cache)
         published_file_data['name'] = task_entity_name
-        published_file = sg.create('PublishedFile', published_file_data)
-        sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+        published_file = self.connector.sg.create('PublishedFile', published_file_data)
+        self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+
+        # clean-up preview and thumbnail files
 
         try:
             os.remove(thumbnail_path)
@@ -3394,11 +3521,103 @@ class flameMenuPublisher(flameMenuApp):
         except:
             pass
 
-        message = 'Version: "'
-        message += version_name
-        message += '" sucessfully published.'
-        self.mbox.setText(message)
-        self.mbox.exec_()
+        return (pb_file_info, True, False)
+
+    def get_export_preset_fields(self, preset):
+
+        # parses Flame Export preset and returns a dict of a parsed values
+        # of False on error.
+        # Example:
+        # {'fileType': 'OpenEXR',
+        #  'fileExt': 'exr',
+        #  'framePadding': 8
+        #  'startFrame': 1001
+        #  'useTimecode': 0
+        # }
+        
+        from xml.dom import minidom
+
+        preset_fields = {}
+
+        # Flame type to file extension map
+
+        flame_extension_map = {
+            'Alias': 'als',
+            'Cineon': 'cin',
+            'Dpx': 'dpx',
+            'Jpeg': 'jpg',
+            'Maya': 'iff',
+            'OpenEXR': 'exr',
+            'Pict': 'pict',
+            'Pixar': 'picio',
+            'Sgi': 'sgi',
+            'SoftImage': 'pic',
+            'Targa': 'tga',
+            'Tiff': 'tif',
+            'Wavefront': 'rla',
+            'QuickTime': 'mov',
+            'MXF': 'mxf',
+            'SonyMXF': 'mxf'
+        }
+
+        preset_path = ''
+
+        if os.path.isfile(preset.get('PresetFile', '')):
+            preset_path = preset.get('PresetFile')
+        else:
+            path_prefix = self.flame.PyExporter.get_presets_dir(
+                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
+                self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
+            )
+            preset_path = os.path.join(path_prefix, preset.get('PresetFile'))
+
+        preset_xml_doc = None
+        try:
+            preset_xml_doc = minidom.parse(preset_path)
+        except Exception as e:
+            message = 'flameMenuSG: Unable parse xml export preset file:\n%s' % e
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        preset_fields['path'] = preset_path
+
+        video = preset_xml_doc.getElementsByTagName('video')
+        if len(video) < 1:
+            message = 'flameMenuSG: XML parser error:\nUnable to find xml video tag in:\n%s' % preset_path
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        filetype = video[0].getElementsByTagName('fileType')
+        if len(filetype) < 1:
+            message = 'flameMenuSG: XML parser error:\nUnable to find video::fileType tag in:\n%s' % preset_path
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        preset_fields['fileType'] = filetype[0].firstChild.data
+        if preset_fields.get('fileType', '') not in flame_extension_map:
+            message = 'flameMenuSG:\nUnable to find extension corresponding to fileType:\n%s' % preset_fields.get('fileType', '')
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        preset_fields['fileExt'] = flame_extension_map.get(preset_fields.get('fileType'))
+
+        name = preset_xml_doc.getElementsByTagName('name')
+        if len(name) > 0:
+            framePadding = name[0].getElementsByTagName('framePadding')
+            startFrame = name[0].getElementsByTagName('startFrame')
+            useTimecode = name[0].getElementsByTagName('useTimecode')
+            if len(framePadding) > 0:
+                preset_fields['framePadding'] = int(framePadding[0].firstChild.data)
+            if len(startFrame) > 0:
+                preset_fields['startFrame'] = int(startFrame[0].firstChild.data)
+            if len(useTimecode) > 0:
+                preset_fields['useTimecode'] = int(useTimecode[0].firstChild.data)
+
+        return preset_fields
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
@@ -3568,6 +3787,20 @@ class flameMenuPublisher(flameMenuApp):
 app_framework = None
 shotgunConnector = None
 apps = []
+
+# Exception handler
+def exeption_handler(exctype, value, tb):
+    from PySide2 import QtWidgets
+    import traceback
+    msg = 'flameMenuSG: Python exception in %s' % traceback.format_exception(exctype)
+    mbox = QtWidgets.QMessageBox()
+    mbox.setText(msg)
+    mbox.setDetailedText(pformat(traceback.format_exception(exctype, value, tb)))
+    mbox.setStyleSheet('QLabel{min-width: 800px;}')
+    mbox.exec_()
+    sys.__excepthook__(exctype, value, tb)
+
+sys.excepthook = exeption_handler
 
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
