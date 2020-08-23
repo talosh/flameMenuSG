@@ -71,7 +71,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.6'
+__version__ = 'v0.0.7'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -287,6 +287,7 @@ class flameMenuApp(object):
         self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
         self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
         self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
+        self.mbox = QtGui.QMessageBox()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -310,6 +311,109 @@ class flameMenuApp(object):
             if self.connector:
                 self.connector.rescan_flag = False
 
+    def get_export_preset_fields(self, preset):
+
+        # parses Flame Export preset and returns a dict of a parsed values
+        # of False on error.
+        # Example:
+        # {'type': 'image',
+        #  'fileType': 'OpenEXR',
+        #  'fileExt': 'exr',
+        #  'framePadding': 8
+        #  'startFrame': 1001
+        #  'useTimecode': 0
+        # }
+        
+        from xml.dom import minidom
+
+        preset_fields = {}
+
+        # Flame type to file extension map
+
+        flame_extension_map = {
+            'Alias': 'als',
+            'Cineon': 'cin',
+            'Dpx': 'dpx',
+            'Jpeg': 'jpg',
+            'Maya': 'iff',
+            'OpenEXR': 'exr',
+            'Pict': 'pict',
+            'Pixar': 'picio',
+            'Sgi': 'sgi',
+            'SoftImage': 'pic',
+            'Targa': 'tga',
+            'Tiff': 'tif',
+            'Wavefront': 'rla',
+            'QuickTime': 'mov',
+            'MXF': 'mxf',
+            'SonyMXF': 'mxf'
+        }
+
+        preset_path = ''
+
+        if os.path.isfile(preset.get('PresetFile', '')):
+            preset_path = preset.get('PresetFile')
+        else:
+            path_prefix = self.flame.PyExporter.get_presets_dir(
+                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
+                self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
+            )
+            preset_file = preset.get('PresetFile')
+            if preset_file.startswith(os.path.sep):
+                preset_file = preset_file[1:]
+            preset_path = os.path.join(path_prefix, preset_file)
+        
+        preset_xml_doc = None
+        try:
+            preset_xml_doc = minidom.parse(preset_path)
+        except Exception as e:
+            message = 'flameMenuSG: Unable parse xml export preset file:\n%s' % e
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        preset_fields['path'] = preset_path
+
+        preset_type = preset_xml_doc.getElementsByTagName('type')
+        if len(preset_type) > 0:
+            preset_fields['type'] = preset_type[0].firstChild.data
+
+        video = preset_xml_doc.getElementsByTagName('video')
+        if len(video) < 1:
+            message = 'flameMenuSG: XML parser error:\nUnable to find xml video tag in:\n%s' % preset_path
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        filetype = video[0].getElementsByTagName('fileType')
+        if len(filetype) < 1:
+            message = 'flameMenuSG: XML parser error:\nUnable to find video::fileType tag in:\n%s' % preset_path
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        preset_fields['fileType'] = filetype[0].firstChild.data
+        if preset_fields.get('fileType', '') not in flame_extension_map:
+            message = 'flameMenuSG:\nUnable to find extension corresponding to fileType:\n%s' % preset_fields.get('fileType', '')
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        preset_fields['fileExt'] = flame_extension_map.get(preset_fields.get('fileType'))
+
+        name = preset_xml_doc.getElementsByTagName('name')
+        if len(name) > 0:
+            framePadding = name[0].getElementsByTagName('framePadding')
+            startFrame = name[0].getElementsByTagName('startFrame')
+            useTimecode = name[0].getElementsByTagName('useTimecode')
+            if len(framePadding) > 0:
+                preset_fields['framePadding'] = int(framePadding[0].firstChild.data)
+            if len(startFrame) > 0:
+                preset_fields['startFrame'] = int(startFrame[0].firstChild.data)
+            if len(useTimecode) > 0:
+                preset_fields['useTimecode'] = useTimecode[0].firstChild.data
+
+        return preset_fields
 
 class flameShotgunConnector(object):
     def __init__(self, framework):
@@ -1134,26 +1238,66 @@ class flameMenuProjectconnect(flameMenuApp):
             update_pipeline_config_info()
             update_project_path_info()
 
-        def set_presetTypePublish():
-            btn_presetType.setText('Publish')
+        def set_presetTypeImage():
+            btn_presetType.setText('File Sequence')
+            self.presetType = 0
         
-        def set_presetTypePreview():
-            btn_presetType.setText('Preview')
+        def set_presetTypeMovie():
+            btn_presetType.setText('Movie')
+            self.presetType = 2
 
-        def set_presetTypeThumbnail():
-            btn_presetType.setText('Thumbnail')
+        def set_presetLocationProject():
+            btn_PresetLocation.setText('Project')
+            self.PresetVisibility = 0
+            
+        def set_presetLocationShared():
+            btn_PresetLocation.setText('Shared')
+            self.PresetVisibility = 1
+
+        def set_presetLocationADSK():
+            btn_PresetLocation.setText('Autodesk')
+            self.PresetVisibility = 2
+
+        def set_presetLocationCustom():
+            btn_PresetLocation.setText('Custom')
+            self.PresetVisibility = -1            
+
+        def format_preset_details(export_preset_fields):
+            pprint (export_preset_fields)
+            preset_path = export_preset_fields.get('path')
+            preset_details = ''
+            preset_details += 'Name: ' + os.path.basename(preset_path) + '\n'
+            preset_details += 'File Type: ' + export_preset_fields.get('fileType') + ', '
+            preset_details += 'Extension: ' + export_preset_fields.get('fileExt') + '\n'
+            preset_details += 'Frame Padding: ' + str(export_preset_fields.get('framePadding')) +', '
+            if (export_preset_fields.get('useTimecode') == '1') or (export_preset_fields.get('useTimecode') == 'True'):
+                preset_details += 'Use Timecode'
+            else:
+                preset_details += 'Start Frame: ' + str(export_preset_fields.get('startFrame'))
+            return preset_details
 
         def changeExportPreset():
-            print ('file dialog')
             dialog = QtWidgets.QFileDialog()
             dialog.setWindowTitle('Select Format Preset')
             dialog.setNameFilter('XML files (*.xml)')
-            dialog.setDirectory(os.path.expanduser('~'))
+            if self.PresetVisibility == -1:
+                dialog.setDirectory(os.path.expanduser('~'))
+            else:
+                preset_folder = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(self.PresetVisibility),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+                dialog.setDirectory(preset_folder)
             dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
             if dialog.exec_() == QtWidgets.QDialog.Accepted:
                 file_full_path = str(dialog.selectedFiles()[0])
-                pprint (file_full_path)
-
+                file_full_path = file_full_path[len(preset_folder)+1:] if file_full_path.startswith(preset_folder) else file_full_path
+                preset = {'PresetVisibility': self.PresetVisibility, 'PresetType': self.presetType, 'PresetFile': file_full_path}
+                export_preset_fields = self.get_export_preset_fields(preset)
+                if export_preset_fields:
+                    self.framework.prefs['flameMenuPublisher']['flame_export_presets']['Publish'] = preset
+                    lbl_presetDetails.setText(format_preset_details(export_preset_fields))
+                else:
+                    pass
+        
         # Prefs window functions
 
         def pressGeneral():
@@ -1352,7 +1496,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: ExportPresets: label
 
-        lbl_export_preset = QtWidgets.QLabel('Export Format Presets', window)
+        lbl_export_preset = QtWidgets.QLabel('Publish Format Preset', window)
         lbl_export_preset.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_export_preset.setMinimumSize(440, 28)
         lbl_export_preset.setAlignment(QtCore.Qt.AlignCenter)
@@ -1363,8 +1507,76 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_export_preset = QtWidgets.QHBoxLayout()
         hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
-        # Publish: ExportPresets: Export preset selector
+        # Publish: ExportPresets: Preset type selector
 
+        btn_presetType = QtWidgets.QPushButton(window)
+
+        self.publish_preset = self.framework.prefs.get('flameMenuPublisher', {}).get('flame_export_presets', {}).get('Publish', {})
+        export_preset_fields = self.get_export_preset_fields(self.publish_preset)
+
+        if export_preset_fields.get('type', 'image') == 'movie':
+            self.presetType = 2
+        else:
+            self.presetType = 0
+
+        if self.presetType == 2:
+            btn_presetType.setText('Movie')
+        else:
+            btn_presetType.setText('File Sequence')
+        
+        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_presetType.setMinimumSize(108, 28)
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_presetType_menu = QtWidgets.QMenu()
+        btn_presetType_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_presetType_menu.addAction('Movie', set_presetTypeMovie)
+        btn_presetType.setMenu(btn_presetType_menu)
+        hbox_export_preset.addWidget(btn_presetType)
+
+        # Publish: ExportPresets: Preset location selector
+
+        self.exportPresetDirProject = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(0),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirShared = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(1),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirADSK = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(2),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+
+        btn_PresetLocation = QtWidgets.QPushButton(window)
+
+        if export_preset_fields.get('path').startswith(self.exportPresetDirProject):
+            self.PresetVisibility = 0
+            btn_PresetLocation.setText('Project')
+        elif export_preset_fields.get('path').startswith(self.exportPresetDirShared):
+            self.PresetVisibility = 1
+            btn_PresetLocation.setText('Shared')
+        elif export_preset_fields.get('path').startswith(self.exportPresetDirADSK):
+            self.PresetVisibility = 2
+            btn_PresetLocation.setText('Autodesk')
+        else:
+            self.PresetVisibility = -1
+            btn_PresetLocation.setText('Custom')
+
+        btn_PresetLocation.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PresetLocation.setMinimumSize(108, 28)
+        btn_PresetLocation.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+
+        btn_PresetLocation_menu = QtWidgets.QMenu()
+        btn_PresetLocation_menu.addAction('Project', set_presetLocationProject)
+        btn_PresetLocation_menu.addAction('Shared', set_presetLocationShared)
+        btn_PresetLocation_menu.addAction('Autodesk', set_presetLocationADSK)
+        btn_PresetLocation_menu.addAction('Custom', set_presetLocationCustom)
+
+        btn_PresetLocation.setMenu(btn_PresetLocation_menu)
+        hbox_export_preset.addWidget(btn_PresetLocation)
+
+        # Publish: ExportPresets: Export preset selector
+        # this saved for feauture ADSK style menu
+        '''
         btn_PresetSelector = QtWidgets.QPushButton('Publish', window)
         btn_PresetSelector.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_PresetSelector.setMinimumSize(88, 28)
@@ -1380,22 +1592,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_defaultPreset_menu.addMenu(btn_another_menu)
         btn_PresetSelector.setMenu(btn_defaultPreset_menu)
         hbox_export_preset.addWidget(btn_PresetSelector)
-
-
-        # Publish: ExportPresets: Preset typ selector
-
-        btn_presetType = QtWidgets.QPushButton('Publish', window)
-        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_presetType.setMinimumSize(88, 28)
-        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
-                                    'QPushButton::menu-indicator {image: none;}')
-        btn_presetType_menu = QtWidgets.QMenu()
-        btn_presetType_menu.addAction('Main Publish Export Format Preset', set_presetTypePublish)
-        btn_presetType_menu.addAction('Preview Export Format Preset', set_presetTypePreview)
-        btn_presetType_menu.addAction('Thumbnail Export Format Preset', set_presetTypeThumbnail)
-        btn_presetType.setMenu(btn_presetType_menu)
-        hbox_export_preset.addWidget(btn_presetType)
+        '''
 
         # Publish: ExportPresets: Change button
         
@@ -1411,12 +1608,12 @@ class flameMenuProjectconnect(flameMenuApp):
         vbox_export_preset.addLayout(hbox_export_preset)
 
         # Publish: ExportPresets: Exoprt preset details
-        
-        presetDetails = QtWidgets.QLabel('Publish: \nPreview: \nThumbnail: ', window)
-        presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
+        preset_details = format_preset_details(export_preset_fields)
+        lbl_presetDetails = QtWidgets.QLabel(preset_details, window)
+        lbl_presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        lbl_presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
 
-        vbox_export_preset.addWidget(presetDetails)
+        vbox_export_preset.addWidget(lbl_presetDetails)
 
         # Publish: ExportPresets: End of Export Preset section
         hbox_storage_root.addLayout(vbox_export_preset)
@@ -1432,6 +1629,8 @@ class flameMenuProjectconnect(flameMenuApp):
             btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             lbl_shotTemplate.setText('Shot Publish')
+            lbl_batchTemplate.setText('Shot Batch')
+            lbl_versionTemplate.setText('Shot Version')
             paneAssetTemplates.setVisible(False)
             paneShotTemplates.setVisible(True)
 
@@ -1440,6 +1639,8 @@ class flameMenuProjectconnect(flameMenuApp):
             btn_Shot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Asset.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             lbl_shotTemplate.setText('Asset Publish')
+            lbl_batchTemplate.setText('Asset Batch')
+            lbl_versionTemplate.setText('Asset Version')
             paneShotTemplates.setVisible(False)
             paneAssetTemplates.setVisible(True)
 
@@ -1487,12 +1688,12 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_shotTemplate.move(0, 34)
 
         # Publish::Tempates: Batch Template label
-        lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
+        lbl_batchTemplate = QtWidgets.QLabel('Shot Batch', paneTemplates)
         lbl_batchTemplate.setFixedSize(88, 28)
         lbl_batchTemplate.move(0, 68)
 
         # Publish::Tempates: Version Template label
-        lbl_versionTemplate = QtWidgets.QLabel('Version', paneTemplates)
+        lbl_versionTemplate = QtWidgets.QLabel('Shot Version', paneTemplates)
         lbl_versionTemplate.setFixedSize(88, 28)
         lbl_versionTemplate.move(0, 102)
 
@@ -3149,53 +3350,63 @@ class flameMenuPublisher(flameMenuApp):
         
         versions_published = set()
         versions_failed = set()
-        pb_files_published = dict()
-        pb_files_failed = dict()
+        pb_published = dict()
+        pb_failed = dict()
 
         for clip in selection:
-            pb_file_data, status, cancel = self.publish_clip(clip, entity, project_path, export_preset_fields)
-            if status:
-                version_name = pb_file_data.get('version_name')
+            pb_info, is_cancelled = self.publish_clip(clip, entity, project_path, export_preset_fields)
+            if pb_info.get('status', False):
+                version_name = pb_info.get('version_name')
                 versions_published.add(version_name)
-                data = pb_files_published.get(version_name, [])
-                data.append(pb_file_data)
-                pb_files_published[version_name] = data
+                data = pb_published.get(version_name, [])
+                data.append(pb_info)
+                pb_published[version_name] = data
             else:
-                version_name = pb_file_data.get('version_name')
+                version_name = pb_info.get('version_name')
                 versions_failed.add(version_name)
-                data = pb_files_failed.get(version_name, [])
-                data.append(pb_file_data)
-                pb_files_failed[version_name] = data
-            if cancel:
+                data = pb_failed.get(version_name, [])
+                data.append(pb_info)
+                pb_failed[version_name] = data
+            if is_cancelled:
                 break
 
         # report user of the status
         
-        if cancel and (len(versions_published) == 0):
+        if is_cancelled and (len(versions_published) == 0):
             return False
-
         elif (len(versions_published) == 0) and (len(versions_failed) > 0):
             msg = 'Failed to publish into %s versions' % len(versions_failed)
         elif (len(versions_published) > 0) and (len(versions_failed) == 0):
             msg = 'Published into %s versions' % len(versions_published)
         else:
-            msg = 'Published into %s versions, %s versions failed'
+            msg = 'Published into %s versions, %s versions failed' % (len(versions_published), len(versions_failed))
 
         mbox = QtGui.QMessageBox()
         mbox.setText('flameMenuSG: ' + msg)
+
         detailed_msg = ''
+
+        pprint (pb_published)
+
         if len(versions_published) > 0:
             detailed_msg += 'Published:\n'
-            for version_name in versions_published:
-                detailed_msg += version_name + ':\n'
-                #for data in pb_files_published.get(version_name, []):
-                #    detailed_msg += '    ' + os.path.basename(data.get('path_cache', ''))
+            for version_name in sorted(pb_published.keys()):
+                pb_info_list = pb_published.get(version_name)
+                for pb_info in pb_info_list:
+                    detailed_msg += ' '*4 + pb_info.get('version_name') + ':\n'
+                    if pb_info.get('flame_render', {}).get('flame_path'):
+                        path = pb_info.get('flame_render', {}).get('flame_path')
+                    else:
+                        path = pb_info.get('flame_render', {}).get('path_cache')
+                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
+                    path_cache = pb_info.get('flame_batch', {}).get('path_cache')
+                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
         if len(versions_failed) > 0:
             detailed_msg += 'Failed to publish: \n'
-            for version_name in versions_failed:
-                detailed_msg += version_name + '\n'
-                #for data in pb_files_failed.get(version_name, []):
-                #    detailed_msg += '    ' + os.path.basename(data.get('path_cache', ''))
+            for version_name in sorted(pb_failed.keys()):
+                pb_info_list = pb_failed.get(version_name)
+                for pb_info in pb_info_list:
+                    detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 400px;}')
         mbox.exec_()
@@ -3204,11 +3415,37 @@ class flameMenuPublisher(flameMenuApp):
 
     def publish_clip(self, clip, entity, project_path, preset_fields):
 
-        # start of main publishing routine
-
-        pb_file_info = {} # dictionary to return to publish function
+        # Publishes the clip and returns published files info and status
         
+        # Each flame clip publish will create primary publish, and batch file.
+        # there could be potentially secondary published defined in the future.
+        # the function will return the dictionary with information on that publishes
+        # to be presented to user, as well as is_cancelled flag.
+        # If there's an error and current publish should be stopped that gives
+        # user the possibility to stop other selected clips from being published
+        # returns: (dict)pb_info , (bool)is_cancelled
+
+        # dictionary that holds information about publish
+        # publish_clip will return the list of info dicts
+        # along with the status. It is purely to be able
+        # to inform user of the status after we processed multpile clips
+        
+        pb_info = {
+            'flame_clip_name': clip.name.get_value(),        # name of the clip selected in flame
+            'version_name': '',     # name of a version in shotgun
+            'flame_render': {       # 'flame_render' related data
+                'path_cache': '',
+                'pb_file_name': ''
+            },
+            'flame_batch': {        # 'flame_batch' related data
+                'path_cache': '',
+                'pb_file_name': ''
+            },
+            'status': False         # status of the flame clip publish
+        }
+
         # Process info we've got from entity
+
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
@@ -3290,12 +3527,16 @@ class flameMenuPublisher(flameMenuApp):
         template_fields['version_four'] = '{:04d}'.format(version_number)
         template_fields['ext'] = preset_fields.get('fileExt')
         template_fields['frame'] = sg_frame
+
         # compose version name from template
 
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
         version_name = version_name.format(**template_fields)
+        update_version_preview = True
         update_version_thumbnail = True
-
+        pb_info['version_name'] = version_name  
+        
+        # 'flame_render'
         # start with flame_render publish first.
 
         pb_file_name = task_entity_name + ', ' + clip_name
@@ -3313,7 +3554,11 @@ class flameMenuPublisher(flameMenuApp):
         flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
         if not published_file_type:
-            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
+            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})        
+
+        # fill the pb_info data for 'flame_render'
+        pb_info['flame_render']['path_cache'] = path_cache
+        pb_info['flame_render']['pb_file_name'] = pb_file_name
 
         # check if we're adding publishes to existing version
 
@@ -3322,6 +3567,10 @@ class flameMenuPublisher(flameMenuApp):
             ['code', 'is', version_name],
             ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
             ]):
+
+            # do not update version thumbnail and preview
+            update_version_preview = False
+            update_version_thumbnail = False
 
             # if it is a case:
             # check if we already have published file of the same sg_published_file_type
@@ -3354,19 +3603,27 @@ class flameMenuPublisher(flameMenuApp):
             if sg_pbf_type_flag and path_cache_flag and name_flag and version_number:
 
                 # we don't need to move down to .batch file publishing.
-                # let's return published file info for user
+                
+                # inform user that published file already exists:
+                mbox = QtGui.QMessageBox()
+                mbox.setText('Publish for flame clip %s already exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+                detailed_msg = ''
+                detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
+                mbox.setDetailedText(detailed_msg)
+                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
 
-                pb_file_info['version_name'] = version_name
-                pb_file_info['path_cache'] = path_cache,
-                pb_file_info['name'] = pb_file_name
-        
-                return (pb_file_info, False, False)
-            
-            update_version_thumbnail = False
-
-        preset_path = preset_fields.get('path')
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
 
         # Export using main preset
+
+        preset_path = preset_fields.get('path')
 
         exporter = self.flame.PyExporter()
         exporter.foreground = True
@@ -3383,18 +3640,26 @@ class flameMenuPublisher(flameMenuApp):
                 os.makedirs(export_dir)
             except:
                 clip.name.set_value(original_clip_name)
-                message = 'Can not create folder: ' + export_dir
-                message += ' Can not complete publishing.'
-                self.mbox.setText(message)
-                self.mbox.exec_()
-                return False
+
+                mbox = QtGui.QMessageBox()
+                mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
+                mbox.setDetailedText('Path: ' + export_dir)
+                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
 
         try:
             exporter.export(clip, preset_path, export_dir)
             clip.name.set_value(original_clip_name)
         except:
             clip.name.set_value(original_clip_name)
-            return None
+            return (pb_info, True)
 
         # Export preview to temp folder
 
@@ -3421,6 +3686,8 @@ class flameMenuPublisher(flameMenuApp):
         clip.name.set_value(version_name + '_thumbnail_' + uid)
         export_dir = '/var/tmp'
         thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+        clip_in_mark = clip.in_mark.get_value()
+        clip_out_mark = clip.out_mark.get_value()
         clip.in_mark = self.prefs.get('poster_frame', 1)
         clip.out_mark = self.prefs.get('poster_frame', 1) + 1
         exporter.export_between_marks = True
@@ -3428,7 +3695,9 @@ class flameMenuPublisher(flameMenuApp):
             exporter.export(clip, preset_path, export_dir)
         except:
             pass
-
+        
+        clip.in_mark.set_value(clip_in_mark)
+        clip.out_mark.set_value(clip_out_mark)
         clip.name.set_value(original_clip_name)
 
         # Create version in Shotgun
@@ -3446,6 +3715,8 @@ class flameMenuPublisher(flameMenuApp):
         if os.path.isfile(preview_path):
             self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
         
+        # Create 'flame_render' PublishedFile
+
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             version_number = version_number,
@@ -3461,11 +3732,62 @@ class flameMenuPublisher(flameMenuApp):
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
-        ##### CHANGE DICT TO LIST OF DICTS TO BE ABLE TO PROCESS INFO UPSTREAM
+        pb_info['status'] = True
 
-        pb_file_info['version_name'] = version_name
-        pb_file_info['path_cache'] = path_cache
-        pb_file_info['name'] = pb_file_name
+        # check what we've actually exported and get start and end frames from there
+        # this won't work for movie, so check the preset first
+        # this should be moved in a separate function later
+        
+        flame_path = ''
+        flame_render_path_cache = pb_info.get('flame_render', {}).get('path_cache', '')
+        flame_render_export_dir = os.path.join(os.path.dirname(project_path), os.path.dirname(flame_render_path_cache))
+
+        if preset_fields.get('type', 'image') == 'image':
+            import fnmatch
+
+            try:
+                file_names = [f for f in os.listdir(flame_render_export_dir) if os.path.isfile(os.path.join(flame_render_export_dir, f))]
+            except:
+                file_names = []
+                                    
+            frame_pattern = re.compile(r"^(.+?)([0-9#]+|[%]0\dd)$")
+            root, ext = os.path.splitext(os.path.basename(flame_render_path_cache))
+            match = re.search(frame_pattern, root)
+            if match:
+                pattern = os.path.join("%s%s" % (re.sub(match.group(2), "*", root), ext))
+                files = list()
+                for file_name in file_names:
+                    if fnmatch.fnmatch(file_name, pattern):
+                        files.append(os.path.join(export_dir, file_name))
+                
+                if files:
+                    file_roots = [os.path.splitext(f)[0] for f in files]
+                    frame_padding = len(re.search(frame_pattern, file_roots[0]).group(2))
+                    offset = len(match.group(1))
+                    frames = list()
+                    for f in file_roots:
+                        try:
+                            frame = int(os.path.basename(f)[offset:offset+frame_padding])
+                        except:
+                            continue
+                        frames.append(frame)
+                    pprint (frames)
+                    if frames:
+                        min_frame = min(frames)
+                        max_frame = max(frames)
+                        format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
+                        frame_spec = format_str % (min_frame, max_frame)
+                        flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
+                        flame_path = os.path.join(export_dir, flame_file_name)
+
+                        self.connector.sg.update('Version', version.get('id'), {'sg_first_frame': min_frame, 'sg_last_frame': max_frame})
+
+            pb_info['flame_render']['flame_path'] = flame_path
+        
+        elif preset_fields.get('type', 'image') == 'movie':
+            pass
+            # placeholder for movie export
+
 
         # compose batch export path and path_cache filed from template fields
 
@@ -3475,6 +3797,9 @@ class flameMenuPublisher(flameMenuApp):
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
+        pb_info['flame_batch']['path_cache'] = path_cache
+        pb_info['flame_batch']['pb_file_name'] = task_entity_name
+        
         # copy flame .batch file linked to the clip or save current one if not resolved from comments
         
         if linked_batch_path:
@@ -3486,11 +3811,18 @@ class flameMenuPublisher(flameMenuApp):
                     call(['cp', '-a', src, dest])
                     call(['cp', '-a', linked_batch_path, export_path])
                 except:
-                    message = 'Can not copy flame batch to "'
-                    message += dest + '"'
-                    self.mbox.setText(message)
-                    self.mbox.exec_()
-                    return False
+                    mbox = QtGui.QMessageBox()
+                    mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
+                    mbox.setDetailedText('Path: ' + export_path)
+                    mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                    btn_Continue.setText('Continue')
+                    mbox.exec_()
+                    if mbox.clickedButton() == btn_Continue:
+                        return (pb_info, False)
+                    else:
+                        return (pb_info, True)
             else:
                 self.flame.batch.save_setup(export_path)
         else:
@@ -3520,104 +3852,8 @@ class flameMenuPublisher(flameMenuApp):
             os.remove(preview_path)
         except:
             pass
-
-        return (pb_file_info, True, False)
-
-    def get_export_preset_fields(self, preset):
-
-        # parses Flame Export preset and returns a dict of a parsed values
-        # of False on error.
-        # Example:
-        # {'fileType': 'OpenEXR',
-        #  'fileExt': 'exr',
-        #  'framePadding': 8
-        #  'startFrame': 1001
-        #  'useTimecode': 0
-        # }
         
-        from xml.dom import minidom
-
-        preset_fields = {}
-
-        # Flame type to file extension map
-
-        flame_extension_map = {
-            'Alias': 'als',
-            'Cineon': 'cin',
-            'Dpx': 'dpx',
-            'Jpeg': 'jpg',
-            'Maya': 'iff',
-            'OpenEXR': 'exr',
-            'Pict': 'pict',
-            'Pixar': 'picio',
-            'Sgi': 'sgi',
-            'SoftImage': 'pic',
-            'Targa': 'tga',
-            'Tiff': 'tif',
-            'Wavefront': 'rla',
-            'QuickTime': 'mov',
-            'MXF': 'mxf',
-            'SonyMXF': 'mxf'
-        }
-
-        preset_path = ''
-
-        if os.path.isfile(preset.get('PresetFile', '')):
-            preset_path = preset.get('PresetFile')
-        else:
-            path_prefix = self.flame.PyExporter.get_presets_dir(
-                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
-                self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
-            )
-            preset_path = os.path.join(path_prefix, preset.get('PresetFile'))
-
-        preset_xml_doc = None
-        try:
-            preset_xml_doc = minidom.parse(preset_path)
-        except Exception as e:
-            message = 'flameMenuSG: Unable parse xml export preset file:\n%s' % e
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        preset_fields['path'] = preset_path
-
-        video = preset_xml_doc.getElementsByTagName('video')
-        if len(video) < 1:
-            message = 'flameMenuSG: XML parser error:\nUnable to find xml video tag in:\n%s' % preset_path
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-        
-        filetype = video[0].getElementsByTagName('fileType')
-        if len(filetype) < 1:
-            message = 'flameMenuSG: XML parser error:\nUnable to find video::fileType tag in:\n%s' % preset_path
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        preset_fields['fileType'] = filetype[0].firstChild.data
-        if preset_fields.get('fileType', '') not in flame_extension_map:
-            message = 'flameMenuSG:\nUnable to find extension corresponding to fileType:\n%s' % preset_fields.get('fileType', '')
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-        
-        preset_fields['fileExt'] = flame_extension_map.get(preset_fields.get('fileType'))
-
-        name = preset_xml_doc.getElementsByTagName('name')
-        if len(name) > 0:
-            framePadding = name[0].getElementsByTagName('framePadding')
-            startFrame = name[0].getElementsByTagName('startFrame')
-            useTimecode = name[0].getElementsByTagName('useTimecode')
-            if len(framePadding) > 0:
-                preset_fields['framePadding'] = int(framePadding[0].firstChild.data)
-            if len(startFrame) > 0:
-                preset_fields['startFrame'] = int(startFrame[0].firstChild.data)
-            if len(useTimecode) > 0:
-                preset_fields['useTimecode'] = int(useTimecode[0].firstChild.data)
-
-        return preset_fields
+        return (pb_info, False)
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
@@ -3792,7 +4028,7 @@ apps = []
 def exeption_handler(exctype, value, tb):
     from PySide2 import QtWidgets
     import traceback
-    msg = 'flameMenuSG: Python exception in %s' % traceback.format_exception(exctype)
+    msg = 'flameMenuSG: Python exception %s in %s' % (value, exctype)
     mbox = QtWidgets.QMessageBox()
     mbox.setText(msg)
     mbox.setDetailedText(pformat(traceback.format_exception(exctype, value, tb)))
