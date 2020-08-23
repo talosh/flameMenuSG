@@ -287,6 +287,7 @@ class flameMenuApp(object):
         self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
         self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
         self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
+        self.mbox = QtGui.QMessageBox()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -310,6 +311,109 @@ class flameMenuApp(object):
             if self.connector:
                 self.connector.rescan_flag = False
 
+    def get_export_preset_fields(self, preset):
+
+        # parses Flame Export preset and returns a dict of a parsed values
+        # of False on error.
+        # Example:
+        # {'type': 'image',
+        #  'fileType': 'OpenEXR',
+        #  'fileExt': 'exr',
+        #  'framePadding': 8
+        #  'startFrame': 1001
+        #  'useTimecode': 0
+        # }
+        
+        from xml.dom import minidom
+
+        preset_fields = {}
+
+        # Flame type to file extension map
+
+        flame_extension_map = {
+            'Alias': 'als',
+            'Cineon': 'cin',
+            'Dpx': 'dpx',
+            'Jpeg': 'jpg',
+            'Maya': 'iff',
+            'OpenEXR': 'exr',
+            'Pict': 'pict',
+            'Pixar': 'picio',
+            'Sgi': 'sgi',
+            'SoftImage': 'pic',
+            'Targa': 'tga',
+            'Tiff': 'tif',
+            'Wavefront': 'rla',
+            'QuickTime': 'mov',
+            'MXF': 'mxf',
+            'SonyMXF': 'mxf'
+        }
+
+        preset_path = ''
+
+        if os.path.isfile(preset.get('PresetFile', '')):
+            preset_path = preset.get('PresetFile')
+        else:
+            path_prefix = self.flame.PyExporter.get_presets_dir(
+                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
+                self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
+            )
+            preset_file = preset.get('PresetFile')
+            if preset_file.startswith(os.path.sep):
+                preset_file = preset_file[1:]
+            preset_path = os.path.join(path_prefix, preset_file)
+        
+        preset_xml_doc = None
+        try:
+            preset_xml_doc = minidom.parse(preset_path)
+        except Exception as e:
+            message = 'flameMenuSG: Unable parse xml export preset file:\n%s' % e
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        preset_fields['path'] = preset_path
+
+        preset_type = preset_xml_doc.getElementsByTagName('type')
+        if len(preset_type) > 0:
+            preset_fields['type'] = preset_type[0].firstChild.data
+
+        video = preset_xml_doc.getElementsByTagName('video')
+        if len(video) < 1:
+            message = 'flameMenuSG: XML parser error:\nUnable to find xml video tag in:\n%s' % preset_path
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        filetype = video[0].getElementsByTagName('fileType')
+        if len(filetype) < 1:
+            message = 'flameMenuSG: XML parser error:\nUnable to find video::fileType tag in:\n%s' % preset_path
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+
+        preset_fields['fileType'] = filetype[0].firstChild.data
+        if preset_fields.get('fileType', '') not in flame_extension_map:
+            message = 'flameMenuSG:\nUnable to find extension corresponding to fileType:\n%s' % preset_fields.get('fileType', '')
+            self.mbox.setText(message)
+            self.mbox.exec_()
+            return False
+        
+        preset_fields['fileExt'] = flame_extension_map.get(preset_fields.get('fileType'))
+
+        name = preset_xml_doc.getElementsByTagName('name')
+        if len(name) > 0:
+            framePadding = name[0].getElementsByTagName('framePadding')
+            startFrame = name[0].getElementsByTagName('startFrame')
+            useTimecode = name[0].getElementsByTagName('useTimecode')
+            if len(framePadding) > 0:
+                preset_fields['framePadding'] = int(framePadding[0].firstChild.data)
+            if len(startFrame) > 0:
+                preset_fields['startFrame'] = int(startFrame[0].firstChild.data)
+            if len(useTimecode) > 0:
+                preset_fields['useTimecode'] = useTimecode[0].firstChild.data
+
+        return preset_fields
 
 class flameShotgunConnector(object):
     def __init__(self, framework):
@@ -1134,26 +1238,66 @@ class flameMenuProjectconnect(flameMenuApp):
             update_pipeline_config_info()
             update_project_path_info()
 
-        def set_presetTypePublish():
-            btn_presetType.setText('Publish')
+        def set_presetTypeImage():
+            btn_presetType.setText('File Sequence')
+            self.presetType = 0
         
-        def set_presetTypePreview():
-            btn_presetType.setText('Preview')
+        def set_presetTypeMovie():
+            btn_presetType.setText('Movie')
+            self.presetType = 2
 
-        def set_presetTypeThumbnail():
-            btn_presetType.setText('Thumbnail')
+        def set_presetLocationProject():
+            btn_PresetLocation.setText('Project')
+            self.PresetVisibility = 0
+            
+        def set_presetLocationShared():
+            btn_PresetLocation.setText('Shared')
+            self.PresetVisibility = 1
+
+        def set_presetLocationADSK():
+            btn_PresetLocation.setText('Autodesk')
+            self.PresetVisibility = 2
+
+        def set_presetLocationCustom():
+            btn_PresetLocation.setText('Custom')
+            self.PresetVisibility = -1            
+
+        def format_preset_details(export_preset_fields):
+            pprint (export_preset_fields)
+            preset_path = export_preset_fields.get('path')
+            preset_details = ''
+            preset_details += 'Name: ' + os.path.basename(preset_path) + '\n'
+            preset_details += 'File Type: ' + export_preset_fields.get('fileType') + ', '
+            preset_details += 'Extension: ' + export_preset_fields.get('fileExt') + '\n'
+            preset_details += 'Frame Padding: ' + str(export_preset_fields.get('framePadding')) +', '
+            if (export_preset_fields.get('useTimecode') == '1') or (export_preset_fields.get('useTimecode') == 'True'):
+                preset_details += 'Use Timecode'
+            else:
+                preset_details += 'Start Frame: ' + str(export_preset_fields.get('startFrame'))
+            return preset_details
 
         def changeExportPreset():
-            print ('file dialog')
             dialog = QtWidgets.QFileDialog()
             dialog.setWindowTitle('Select Format Preset')
             dialog.setNameFilter('XML files (*.xml)')
-            dialog.setDirectory(os.path.expanduser('~'))
+            if self.PresetVisibility == -1:
+                dialog.setDirectory(os.path.expanduser('~'))
+            else:
+                preset_folder = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(self.PresetVisibility),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+                dialog.setDirectory(preset_folder)
             dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
             if dialog.exec_() == QtWidgets.QDialog.Accepted:
                 file_full_path = str(dialog.selectedFiles()[0])
-                pprint (file_full_path)
-
+                file_full_path = file_full_path[len(preset_folder)+1:] if file_full_path.startswith(preset_folder) else file_full_path
+                preset = {'PresetVisibility': self.PresetVisibility, 'PresetType': self.presetType, 'PresetFile': file_full_path}
+                export_preset_fields = self.get_export_preset_fields(preset)
+                if export_preset_fields:
+                    self.framework.prefs['flameMenuPublisher']['flame_export_presets']['Publish'] = preset
+                    lbl_presetDetails.setText(format_preset_details(export_preset_fields))
+                else:
+                    pass
+        
         # Prefs window functions
 
         def pressGeneral():
@@ -1352,7 +1496,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: ExportPresets: label
 
-        lbl_export_preset = QtWidgets.QLabel('Export Format Presets', window)
+        lbl_export_preset = QtWidgets.QLabel('Publish Format Preset', window)
         lbl_export_preset.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_export_preset.setMinimumSize(440, 28)
         lbl_export_preset.setAlignment(QtCore.Qt.AlignCenter)
@@ -1363,8 +1507,76 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_export_preset = QtWidgets.QHBoxLayout()
         hbox_export_preset.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
-        # Publish: ExportPresets: Export preset selector
+        # Publish: ExportPresets: Preset type selector
 
+        btn_presetType = QtWidgets.QPushButton(window)
+
+        self.publish_preset = self.framework.prefs.get('flameMenuPublisher', {}).get('flame_export_presets', {}).get('Publish', {})
+        export_preset_fields = self.get_export_preset_fields(self.publish_preset)
+
+        if export_preset_fields.get('type', 'image') == 'movie':
+            self.presetType = 2
+        else:
+            self.presetType = 0
+
+        if self.presetType == 2:
+            btn_presetType.setText('Movie')
+        else:
+            btn_presetType.setText('File Sequence')
+        
+        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_presetType.setMinimumSize(108, 28)
+        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_presetType_menu = QtWidgets.QMenu()
+        btn_presetType_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_presetType_menu.addAction('Movie', set_presetTypeMovie)
+        btn_presetType.setMenu(btn_presetType_menu)
+        hbox_export_preset.addWidget(btn_presetType)
+
+        # Publish: ExportPresets: Preset location selector
+
+        self.exportPresetDirProject = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(0),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirShared = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(1),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirADSK = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(2),
+                                        flame.PyExporter.PresetType.values.get(self.presetType))
+
+        btn_PresetLocation = QtWidgets.QPushButton(window)
+
+        if export_preset_fields.get('path').startswith(self.exportPresetDirProject):
+            self.PresetVisibility = 0
+            btn_PresetLocation.setText('Project')
+        elif export_preset_fields.get('path').startswith(self.exportPresetDirShared):
+            self.PresetVisibility = 1
+            btn_PresetLocation.setText('Shared')
+        elif export_preset_fields.get('path').startswith(self.exportPresetDirADSK):
+            self.PresetVisibility = 2
+            btn_PresetLocation.setText('Autodesk')
+        else:
+            self.PresetVisibility = -1
+            btn_PresetLocation.setText('Custom')
+
+        btn_PresetLocation.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PresetLocation.setMinimumSize(108, 28)
+        btn_PresetLocation.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+
+        btn_PresetLocation_menu = QtWidgets.QMenu()
+        btn_PresetLocation_menu.addAction('Project', set_presetLocationProject)
+        btn_PresetLocation_menu.addAction('Shared', set_presetLocationShared)
+        btn_PresetLocation_menu.addAction('Autodesk', set_presetLocationADSK)
+        btn_PresetLocation_menu.addAction('Custom', set_presetLocationCustom)
+
+        btn_PresetLocation.setMenu(btn_PresetLocation_menu)
+        hbox_export_preset.addWidget(btn_PresetLocation)
+
+        # Publish: ExportPresets: Export preset selector
+        # this saved for feauture ADSK style menu
+        '''
         btn_PresetSelector = QtWidgets.QPushButton('Publish', window)
         btn_PresetSelector.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_PresetSelector.setMinimumSize(88, 28)
@@ -1380,22 +1592,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_defaultPreset_menu.addMenu(btn_another_menu)
         btn_PresetSelector.setMenu(btn_defaultPreset_menu)
         hbox_export_preset.addWidget(btn_PresetSelector)
-
-
-        # Publish: ExportPresets: Preset typ selector
-
-        btn_presetType = QtWidgets.QPushButton('Publish', window)
-        btn_presetType.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_presetType.setMinimumSize(88, 28)
-        btn_presetType.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
-                                    'QPushButton::menu-indicator {image: none;}')
-        btn_presetType_menu = QtWidgets.QMenu()
-        btn_presetType_menu.addAction('Main Publish Export Format Preset', set_presetTypePublish)
-        btn_presetType_menu.addAction('Preview Export Format Preset', set_presetTypePreview)
-        btn_presetType_menu.addAction('Thumbnail Export Format Preset', set_presetTypeThumbnail)
-        btn_presetType.setMenu(btn_presetType_menu)
-        hbox_export_preset.addWidget(btn_presetType)
+        '''
 
         # Publish: ExportPresets: Change button
         
@@ -1411,12 +1608,12 @@ class flameMenuProjectconnect(flameMenuApp):
         vbox_export_preset.addLayout(hbox_export_preset)
 
         # Publish: ExportPresets: Exoprt preset details
-        
-        presetDetails = QtWidgets.QLabel('Publish: \nPreview: \nThumbnail: ', window)
-        presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
+        preset_details = format_preset_details(export_preset_fields)
+        lbl_presetDetails = QtWidgets.QLabel(preset_details, window)
+        lbl_presetDetails.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        lbl_presetDetails.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
 
-        vbox_export_preset.addWidget(presetDetails)
+        vbox_export_preset.addWidget(lbl_presetDetails)
 
         # Publish: ExportPresets: End of Export Preset section
         hbox_storage_root.addLayout(vbox_export_preset)
@@ -1432,6 +1629,8 @@ class flameMenuProjectconnect(flameMenuApp):
             btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             lbl_shotTemplate.setText('Shot Publish')
+            lbl_batchTemplate.setText('Shot Batch')
+            lbl_versionTemplate.setText('Shot Version')
             paneAssetTemplates.setVisible(False)
             paneShotTemplates.setVisible(True)
 
@@ -1440,6 +1639,8 @@ class flameMenuProjectconnect(flameMenuApp):
             btn_Shot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Asset.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             lbl_shotTemplate.setText('Asset Publish')
+            lbl_batchTemplate.setText('Asset Batch')
+            lbl_versionTemplate.setText('Asset Version')
             paneShotTemplates.setVisible(False)
             paneAssetTemplates.setVisible(True)
 
@@ -1487,12 +1688,12 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_shotTemplate.move(0, 34)
 
         # Publish::Tempates: Batch Template label
-        lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
+        lbl_batchTemplate = QtWidgets.QLabel('Shot Batch', paneTemplates)
         lbl_batchTemplate.setFixedSize(88, 28)
         lbl_batchTemplate.move(0, 68)
 
         # Publish::Tempates: Version Template label
-        lbl_versionTemplate = QtWidgets.QLabel('Version', paneTemplates)
+        lbl_versionTemplate = QtWidgets.QLabel('Shot Version', paneTemplates)
         lbl_versionTemplate.setFixedSize(88, 28)
         lbl_versionTemplate.move(0, 102)
 
@@ -3653,107 +3854,6 @@ class flameMenuPublisher(flameMenuApp):
             pass
         
         return (pb_info, False)
-
-    def get_export_preset_fields(self, preset):
-
-        # parses Flame Export preset and returns a dict of a parsed values
-        # of False on error.
-        # Example:
-        # {'type': 'image',
-        #  'fileType': 'OpenEXR',
-        #  'fileExt': 'exr',
-        #  'framePadding': 8
-        #  'startFrame': 1001
-        #  'useTimecode': 0
-        # }
-        
-        from xml.dom import minidom
-
-        preset_fields = {}
-
-        # Flame type to file extension map
-
-        flame_extension_map = {
-            'Alias': 'als',
-            'Cineon': 'cin',
-            'Dpx': 'dpx',
-            'Jpeg': 'jpg',
-            'Maya': 'iff',
-            'OpenEXR': 'exr',
-            'Pict': 'pict',
-            'Pixar': 'picio',
-            'Sgi': 'sgi',
-            'SoftImage': 'pic',
-            'Targa': 'tga',
-            'Tiff': 'tif',
-            'Wavefront': 'rla',
-            'QuickTime': 'mov',
-            'MXF': 'mxf',
-            'SonyMXF': 'mxf'
-        }
-
-        preset_path = ''
-
-        if os.path.isfile(preset.get('PresetFile', '')):
-            preset_path = preset.get('PresetFile')
-        else:
-            path_prefix = self.flame.PyExporter.get_presets_dir(
-                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
-                self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
-            )
-            preset_path = os.path.join(path_prefix, preset.get('PresetFile'))
-
-        preset_xml_doc = None
-        try:
-            preset_xml_doc = minidom.parse(preset_path)
-        except Exception as e:
-            message = 'flameMenuSG: Unable parse xml export preset file:\n%s' % e
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        preset_fields['path'] = preset_path
-
-        preset_type = preset_xml_doc.getElementsByTagName('type')
-        if len(preset_type) > 0:
-            preset_fields['type'] = preset_type[0].firstChild.data
-
-        video = preset_xml_doc.getElementsByTagName('video')
-        if len(video) < 1:
-            message = 'flameMenuSG: XML parser error:\nUnable to find xml video tag in:\n%s' % preset_path
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-        
-        filetype = video[0].getElementsByTagName('fileType')
-        if len(filetype) < 1:
-            message = 'flameMenuSG: XML parser error:\nUnable to find video::fileType tag in:\n%s' % preset_path
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-
-        preset_fields['fileType'] = filetype[0].firstChild.data
-        if preset_fields.get('fileType', '') not in flame_extension_map:
-            message = 'flameMenuSG:\nUnable to find extension corresponding to fileType:\n%s' % preset_fields.get('fileType', '')
-            self.mbox.setText(message)
-            self.mbox.exec_()
-            return False
-        
-        preset_fields['fileExt'] = flame_extension_map.get(preset_fields.get('fileType'))
-
-        name = preset_xml_doc.getElementsByTagName('name')
-        if len(name) > 0:
-            framePadding = name[0].getElementsByTagName('framePadding')
-            startFrame = name[0].getElementsByTagName('startFrame')
-            useTimecode = name[0].getElementsByTagName('useTimecode')
-            if len(framePadding) > 0:
-                preset_fields['framePadding'] = int(framePadding[0].firstChild.data)
-            if len(startFrame) > 0:
-                preset_fields['startFrame'] = int(startFrame[0].firstChild.data)
-            if len(useTimecode) > 0:
-                preset_fields['useTimecode'] = int(useTimecode[0].firstChild.data)
-
-        return preset_fields
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
