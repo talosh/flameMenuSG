@@ -71,7 +71,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.6'
+__version__ = 'v0.0.7'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -3153,7 +3153,11 @@ class flameMenuPublisher(flameMenuApp):
         pb_files_failed = dict()
 
         for clip in selection:
-            pb_file_data, status, cancel = self.publish_clip(clip, entity, project_path, export_preset_fields)
+            pb_info, is_cancelled = self.publish_clip(clip, entity, project_path, export_preset_fields)
+            pprint (pb_info)
+            pprint (is_cancelled)
+
+        '''
             if status:
                 version_name = pb_file_data.get('version_name')
                 versions_published.add(version_name)
@@ -3199,16 +3203,43 @@ class flameMenuPublisher(flameMenuApp):
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 400px;}')
         mbox.exec_()
+        '''
         
         return True
 
     def publish_clip(self, clip, entity, project_path, preset_fields):
 
-        # start of main publishing routine
-
-        pb_file_info = {} # dictionary to return to publish function
+        # Publishes the clip and returns published files info and status
         
+        # Each flame clip publish will create primary publish, and batch file.
+        # there could be potentially secondary published defined in the future.
+        # the function will return the dictionary with information on that publishes
+        # to be presented to user, as well as is_cancelled flag.
+        # If there's an error and current publish should be stopped that gives
+        # user the possibility to stop other selected clips from being published
+        # returns: (dict)pb_info , (bool)is_cancelled
+
+        # dictionary that holds information about publish
+        # publish_clip will return the list of info dicts
+        # along with the status. It is purely to be able
+        # to inform user of the status after we processed multpile clips
+        
+        pb_info = {
+            'flame_clip_name': clip.name.get_value(),        # name of the clip selected in flame
+            'version_name': '',     # name of a version in shotgun
+            'flame_render': {       # 'flame_render' related data
+                'path_cache': '',
+                'pb_file_name': ''
+            },
+            'flame_batch': {        # 'flame_batch' related data
+                'path_cache': '',
+                'pb_file_name': ''
+            },
+            'status': False         # status of the flame clip publish
+        }
+
         # Process info we've got from entity
+
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
@@ -3290,12 +3321,16 @@ class flameMenuPublisher(flameMenuApp):
         template_fields['version_four'] = '{:04d}'.format(version_number)
         template_fields['ext'] = preset_fields.get('fileExt')
         template_fields['frame'] = sg_frame
+
         # compose version name from template
 
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
         version_name = version_name.format(**template_fields)
+        update_version_preview = True
         update_version_thumbnail = True
-
+        pb_info['version_name'] = version_name  
+        
+        # 'flame_render'
         # start with flame_render publish first.
 
         pb_file_name = task_entity_name + ', ' + clip_name
@@ -3313,7 +3348,11 @@ class flameMenuPublisher(flameMenuApp):
         flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
         if not published_file_type:
-            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
+            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})        
+
+        # fill the pb_info data for 'flame_render'
+        pb_info['flame_render']['path_cache'] = path_cache
+        pb_info['flame_render']['pb_file_name'] = pb_file_name
 
         # check if we're adding publishes to existing version
 
@@ -3322,6 +3361,10 @@ class flameMenuPublisher(flameMenuApp):
             ['code', 'is', version_name],
             ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
             ]):
+
+            # do not update version thumbnail and preview
+            update_version_preview = False
+            update_version_thumbnail = False
 
             # if it is a case:
             # check if we already have published file of the same sg_published_file_type
@@ -3354,19 +3397,27 @@ class flameMenuPublisher(flameMenuApp):
             if sg_pbf_type_flag and path_cache_flag and name_flag and version_number:
 
                 # we don't need to move down to .batch file publishing.
-                # let's return published file info for user
+                
+                # inform user that published file already exists:
+                mbox = QtGui.QMessageBox()
+                mbox.setText('Publish for flame clip %s already exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+                detailed_msg = ''
+                detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
+                mbox.setDetailedText(detailed_msg)
+                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
 
-                pb_file_info['version_name'] = version_name
-                pb_file_info['path_cache'] = path_cache,
-                pb_file_info['name'] = pb_file_name
-        
-                return (pb_file_info, False, False)
-            
-            update_version_thumbnail = False
-
-        preset_path = preset_fields.get('path')
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
 
         # Export using main preset
+
+        preset_path = preset_fields.get('path')
 
         exporter = self.flame.PyExporter()
         exporter.foreground = True
@@ -3383,18 +3434,26 @@ class flameMenuPublisher(flameMenuApp):
                 os.makedirs(export_dir)
             except:
                 clip.name.set_value(original_clip_name)
-                message = 'Can not create folder: ' + export_dir
-                message += ' Can not complete publishing.'
-                self.mbox.setText(message)
-                self.mbox.exec_()
-                return False
+
+                mbox = QtGui.QMessageBox()
+                mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
+                mbox.setDetailedText('Path: ' + export_dir)
+                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
 
         try:
             exporter.export(clip, preset_path, export_dir)
             clip.name.set_value(original_clip_name)
         except:
             clip.name.set_value(original_clip_name)
-            return None
+            return (pb_info, True)
 
         # Export preview to temp folder
 
@@ -3421,6 +3480,8 @@ class flameMenuPublisher(flameMenuApp):
         clip.name.set_value(version_name + '_thumbnail_' + uid)
         export_dir = '/var/tmp'
         thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+        clip_in_mark = clip.in_mark.get_value()
+        clip_out_mark = clip.out_mark.get_value()
         clip.in_mark = self.prefs.get('poster_frame', 1)
         clip.out_mark = self.prefs.get('poster_frame', 1) + 1
         exporter.export_between_marks = True
@@ -3428,7 +3489,9 @@ class flameMenuPublisher(flameMenuApp):
             exporter.export(clip, preset_path, export_dir)
         except:
             pass
-
+        
+        clip.in_mark.set_value(clip_in_mark)
+        clip.out_mark.set_value(clip_out_mark)
         clip.name.set_value(original_clip_name)
 
         # Create version in Shotgun
@@ -3460,12 +3523,6 @@ class flameMenuPublisher(flameMenuApp):
         )
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
-
-        ##### CHANGE DICT TO LIST OF DICTS TO BE ABLE TO PROCESS INFO UPSTREAM
-
-        pb_file_info['version_name'] = version_name
-        pb_file_info['path_cache'] = path_cache
-        pb_file_info['name'] = pb_file_name
 
         # compose batch export path and path_cache filed from template fields
 
@@ -3521,7 +3578,7 @@ class flameMenuPublisher(flameMenuApp):
         except:
             pass
 
-        return (pb_file_info, True, False)
+        return (pb_info, False)
 
     def get_export_preset_fields(self, preset):
 
@@ -3792,7 +3849,7 @@ apps = []
 def exeption_handler(exctype, value, tb):
     from PySide2 import QtWidgets
     import traceback
-    msg = 'flameMenuSG: Python exception in %s' % traceback.format_exception(exctype)
+    msg = 'flameMenuSG: Python exception %s in %s' % (value, exctype)
     mbox = QtWidgets.QMessageBox()
     mbox.setText(msg)
     mbox.setDetailedText(pformat(traceback.format_exception(exctype, value, tb)))
