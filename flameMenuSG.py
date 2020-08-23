@@ -71,7 +71,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.7'
+__version__ = 'v0.0.8'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -1263,7 +1263,6 @@ class flameMenuProjectconnect(flameMenuApp):
             self.PresetVisibility = -1            
 
         def format_preset_details(export_preset_fields):
-            pprint (export_preset_fields)
             preset_path = export_preset_fields.get('path')
             preset_details = ''
             preset_details += 'Name: ' + os.path.basename(preset_path) + '\n'
@@ -1429,6 +1428,107 @@ class flameMenuProjectconnect(flameMenuApp):
         paneTabs.setLayout(hbox_main)
         paneTabs.move(10, 10)
 
+        # General
+
+        paneGeneral.setFixedSize(840, 264)
+        paneGeneral.move(172, 20)
+        paneGeneral.setVisible(False)
+
+        # General::BatchLink label
+
+        lbl_batchLink = QtWidgets.QLabel('Batch Link Autosave Path', paneGeneral)
+        lbl_batchLink.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_batchLink.setMinimumSize(840, 28)
+        lbl_batchLink.setAlignment(QtCore.Qt.AlignCenter)
+
+        # General::BatchLink Enable button
+        
+        def enableBatchLink():
+            if self.framework.prefs['flameBatchBlessing'].get('enabled', True):
+                btn_batchLink.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                self.framework.prefs['flameBatchBlessing']['enabled'] = False
+            else:
+                btn_batchLink.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                self.framework.prefs['flameBatchBlessing']['enabled'] = True
+
+        btn_batchLink = QtWidgets.QPushButton('Batch Link', paneGeneral)
+        btn_batchLink.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLink.setMinimumSize(88, 28)
+        btn_batchLink.move(0, 34)
+        if self.framework.prefs['flameBatchBlessing'].get('enabled', True):
+            btn_batchLink.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        else:
+            btn_batchLink.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_batchLink.pressed.connect(enableBatchLink)
+
+        # General::BatchLink default path button
+
+        def batchLinkDefault():
+            self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = '/var/tmp/flameMenuSG'
+            lbl_batchLinkPath.setText('/var/tmp/flameMenuSG')
+        btn_batchLinkDefault = QtWidgets.QPushButton('Default', paneGeneral)
+        btn_batchLinkDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLinkDefault.setMinimumSize(88, 28)
+        btn_batchLinkDefault.move(94, 34)
+        btn_batchLinkDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_batchLinkDefault.clicked.connect(batchLinkDefault)
+
+        # General::BatchLink path field
+
+        batch_link_path = self.framework.prefs.get('flameBatchBlessing', {}).get('flame_batch_root')
+        lbl_batchLinkPath = QtWidgets.QLabel(batch_link_path, paneGeneral)
+        lbl_batchLinkPath.setFocusPolicy(QtCore.Qt.NoFocus)
+        lbl_batchLinkPath.setMinimumSize(424, 28)
+        lbl_batchLinkPath.move(188,34)
+        lbl_batchLinkPath.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
+        lbl_batchLinkPath.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        # General::BatchLink Add Flame project name button
+        
+        def batchLinkUseProject():
+            if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+                btn_batchLinkUseProject.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                self.framework.prefs['flameBatchBlessing']['use_project'] = False
+            else:
+                btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                self.framework.prefs['flameBatchBlessing']['use_project'] = True
+           
+        btn_batchLinkUseProject = QtWidgets.QPushButton('Use Project Name', paneGeneral)
+        btn_batchLinkUseProject.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLinkUseProject.setMinimumSize(128, 28)
+        btn_batchLinkUseProject.move(618, 34)
+        if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+            btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        else:
+            btn_batchLinkUseProject.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_batchLinkUseProject.pressed.connect(batchLinkUseProject)
+
+
+        # General::BatchLink Browse button
+        def batchLinkBrowse():
+            batch_link_path = self.framework.prefs.get('flameBatchBlessing', {}).get('flame_batch_root')
+            dialog = QtWidgets.QFileDialog()
+            dialog.setWindowTitle('Select Batch Autosave Folder')
+            # dialog.setNameFilter('XML files (*.xml)')
+            dialog.setDirectory(batch_link_path)
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                pass
+
+        btn_batchLinkBrowse = QtWidgets.QPushButton('Browse', paneGeneral)
+        btn_batchLinkBrowse.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLinkBrowse.setMinimumSize(88, 28)
+        btn_batchLinkBrowse.move(752, 34)
+        btn_batchLinkBrowse.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_batchLinkBrowse.clicked.connect(batchLinkBrowse)
+
+        #lbl_General = QtWidgets.QLabel('General', paneGeneral)
+        #lbl_General.setStyleSheet('QFrame {color: #989898}')
+        #lbl_General.setAlignment(QtCore.Qt.AlignCenter)
+        #lbl_General.setFixedSize(840, 264)
+        #lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
         # Publish section:
         # Publish: main VBox
         vbox_publish = QtWidgets.QVBoxLayout()
@@ -1537,12 +1637,12 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: ExportPresets: Preset location selector
 
-        self.exportPresetDirProject = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(0),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
-        self.exportPresetDirShared = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(1),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
-        self.exportPresetDirADSK = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(2),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirProject = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(0),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirShared = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(1),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirADSK = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(2),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
 
         btn_PresetLocation = QtWidgets.QPushButton(window)
 
@@ -1913,16 +2013,6 @@ class flameMenuProjectconnect(flameMenuApp):
         panePublish.move(160, 10)
         panePublish.setVisible(False)
 
-        # General
-
-        paneGeneral.setFixedSize(840, 264)
-        paneGeneral.move(172, 20)
-        paneGeneral.setVisible(False)
-        lbl_General = QtWidgets.QLabel('General', paneGeneral)
-        lbl_General.setStyleSheet('QFrame {color: #989898}')
-        lbl_General.setAlignment(QtCore.Qt.AlignCenter)
-        lbl_General.setFixedSize(840, 264)
-        lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
 
         # Superclips
 
@@ -1967,6 +2057,8 @@ class flameBatchBlessing(flameMenuApp):
         if not self.prefs:
             self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
             self.prefs['flame_batch_folder'] = 'flame_batch_setups'
+            self.prefs['enabled'] = True
+            self.prefs['use_project'] = True
 
         self.root_folder = self.batch_setup_root_folder()
 
@@ -3386,8 +3478,6 @@ class flameMenuPublisher(flameMenuApp):
 
         detailed_msg = ''
 
-        pprint (pb_published)
-
         if len(versions_published) > 0:
             detailed_msg += 'Published:\n'
             for version_name in sorted(pb_published.keys()):
@@ -3771,7 +3861,7 @@ class flameMenuPublisher(flameMenuApp):
                         except:
                             continue
                         frames.append(frame)
-                    pprint (frames)
+
                     if frames:
                         min_frame = min(frames)
                         max_frame = max(frames)
