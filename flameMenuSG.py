@@ -1464,8 +1464,12 @@ class flameMenuProjectconnect(flameMenuApp):
         # General::BatchLink default path button
 
         def batchLinkDefault():
-            self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = '/var/tmp/flameMenuSG'
-            lbl_batchLinkPath.setText('/var/tmp/flameMenuSG')
+            self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = '/var/tmp/flameMenuSG/flame_batch_setups'
+            flame_project_name = self.flame.project.current_project.name
+            if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+                lbl_batchLinkPath.setText(os.path.join('/var/tmp/flameMenuSG/flame_batch_setups', flame_project_name))
+            else:
+                lbl_batchLinkPath.setText('/var/tmp/flameMenuSG/flame_batch_setups')
         btn_batchLinkDefault = QtWidgets.QPushButton('Default', paneGeneral)
         btn_batchLinkDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_batchLinkDefault.setMinimumSize(88, 28)
@@ -1476,10 +1480,15 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # General::BatchLink path field
 
+        lbl_batchLinkPath = QtWidgets.QLabel(paneGeneral)
         batch_link_path = self.framework.prefs.get('flameBatchBlessing', {}).get('flame_batch_root')
-        lbl_batchLinkPath = QtWidgets.QLabel(batch_link_path, paneGeneral)
+        if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+            flame_project_name = self.flame.project.current_project.name
+            lbl_batchLinkPath.setText(os.path.join(batch_link_path, flame_project_name))
+        else:
+            lbl_batchLinkPath.setText(batch_link_path)
         lbl_batchLinkPath.setFocusPolicy(QtCore.Qt.NoFocus)
-        lbl_batchLinkPath.setMinimumSize(424, 28)
+        lbl_batchLinkPath.setMinimumSize(464, 28)
         lbl_batchLinkPath.move(188,34)
         lbl_batchLinkPath.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
         lbl_batchLinkPath.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
@@ -1487,17 +1496,22 @@ class flameMenuProjectconnect(flameMenuApp):
         # General::BatchLink Add Flame project name button
         
         def batchLinkUseProject():
+            batch_link_path = self.framework.prefs.get('flameBatchBlessing', {}).get('flame_batch_root')
+            flame_project_name = self.flame.project.current_project.name
+            
             if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
                 btn_batchLinkUseProject.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
                 self.framework.prefs['flameBatchBlessing']['use_project'] = False
+                lbl_batchLinkPath.setText(batch_link_path)
             else:
                 btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
                 self.framework.prefs['flameBatchBlessing']['use_project'] = True
-           
-        btn_batchLinkUseProject = QtWidgets.QPushButton('Use Project Name', paneGeneral)
+                lbl_batchLinkPath.setText(os.path.join(batch_link_path, flame_project_name))
+            
+        btn_batchLinkUseProject = QtWidgets.QPushButton('Use Project', paneGeneral)
         btn_batchLinkUseProject.setFocusPolicy(QtCore.Qt.NoFocus)
-        btn_batchLinkUseProject.setMinimumSize(128, 28)
-        btn_batchLinkUseProject.move(618, 34)
+        btn_batchLinkUseProject.setMinimumSize(88, 28)
+        btn_batchLinkUseProject.move(658, 34)
         if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
             btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
         else:
@@ -2055,8 +2069,7 @@ class flameBatchBlessing(flameMenuApp):
         
         # app defaults
         if not self.prefs:
-            self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
-            self.prefs['flame_batch_folder'] = 'flame_batch_setups'
+            self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG/flame_batch_setups'
             self.prefs['enabled'] = True
             self.prefs['use_project'] = True
 
@@ -2070,11 +2083,16 @@ class flameBatchBlessing(flameMenuApp):
 
         flame_batch_name = flame.batch.name.get_value()
         current_project_name = flame.project.current_project.name
-        flame_batch_path = os.path.join(
-                                    self.prefs.get('flame_batch_root'),
-                                    self.prefs.get('flame_batch_folder'),
-                                    current_project_name,
-                                    flame_batch_name)
+
+        if self.prefs.get('use_project'):
+            flame_batch_path = os.path.join(
+                                        self.prefs.get('flame_batch_root'),
+                                        current_project_name,
+                                        flame_batch_name)
+        else:
+            flame_batch_path = os.path.join(
+                                        self.prefs.get('flame_batch_root'),
+                                        flame_batch_name)
         
         if not os.path.isdir(flame_batch_path):
             try:
