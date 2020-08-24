@@ -1934,6 +1934,7 @@ class flameMenuProjectconnect(flameMenuApp):
             version_zero = publish_prefs.get('version_zero', False)
             self.framework.prefs['flameMenuPublisher']['version_zero'] = not version_zero
             update_shotVersionZero()
+            update_assetVersionZero()
 
         btn_shotVersionZero = QtWidgets.QPushButton('Start From Zero', paneShotTemplates)
         btn_shotVersionZero.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -2039,6 +2040,30 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionFields_menu.addAction('Field 5')
         btn_assetVersionFields_menu.addAction('Field 6')
         btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
+
+        # Publish::Templates::AssetPane: Version zero button
+
+        def update_assetVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            if version_zero:
+                btn_assetVersionZero.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_assetVersionZero.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+        def clicked_assetVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            self.framework.prefs['flameMenuPublisher']['version_zero'] = not version_zero
+            update_shotVersionZero()
+            update_assetVersionZero()
+
+        btn_assetVersionZero = QtWidgets.QPushButton('Start From Zero', paneAssetTemplates)
+        btn_assetVersionZero.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetVersionZero.setMinimumSize(108, 28)
+        btn_assetVersionZero.move(450, 102)
+        btn_assetVersionZero.clicked.connect(clicked_shotVersionZero)
+        update_assetVersionZero()
 
         # Publish::Templates::AssetPane: END OF SECTION
 
