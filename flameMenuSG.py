@@ -31,7 +31,7 @@ default_templates = {
 # Publishing into asset will just replace {Shot} fied with asset name
 'Shot': {
     'flame_render': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
@@ -45,7 +45,7 @@ default_templates = {
 },
 'Asset':{
     'flame_render': {
-        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
@@ -71,7 +71,8 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.7'
+__version__ = 'v0.0.8'
+
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -312,6 +313,8 @@ class flameMenuApp(object):
                 self.connector.rescan_flag = False
 
     def get_export_preset_fields(self, preset):
+        
+        self.log('Flame export preset parser')
 
         # parses Flame Export preset and returns a dict of a parsed values
         # of False on error.
@@ -362,6 +365,8 @@ class flameMenuApp(object):
             if preset_file.startswith(os.path.sep):
                 preset_file = preset_file[1:]
             preset_path = os.path.join(path_prefix, preset_file)
+
+        self.log('parsing Flame export preset: %s' % preset_path)
         
         preset_xml_doc = None
         try:
@@ -415,6 +420,7 @@ class flameMenuApp(object):
 
         return preset_fields
 
+
 class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
@@ -454,7 +460,7 @@ class flameShotgunConnector(object):
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(30, )))
+        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(300, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -1263,7 +1269,6 @@ class flameMenuProjectconnect(flameMenuApp):
             self.PresetVisibility = -1            
 
         def format_preset_details(export_preset_fields):
-            pprint (export_preset_fields)
             preset_path = export_preset_fields.get('path')
             preset_details = ''
             preset_details += 'Name: ' + os.path.basename(preset_path) + '\n'
@@ -1283,8 +1288,8 @@ class flameMenuProjectconnect(flameMenuApp):
             if self.PresetVisibility == -1:
                 dialog.setDirectory(os.path.expanduser('~'))
             else:
-                preset_folder = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(self.PresetVisibility),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
+                preset_folder = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(self.PresetVisibility),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
                 dialog.setDirectory(preset_folder)
             dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
             if dialog.exec_() == QtWidgets.QDialog.Accepted:
@@ -1429,6 +1434,118 @@ class flameMenuProjectconnect(flameMenuApp):
         paneTabs.setLayout(hbox_main)
         paneTabs.move(10, 10)
 
+        # General
+
+        paneGeneral.setFixedSize(840, 264)
+        paneGeneral.move(172, 20)
+        paneGeneral.setVisible(False)
+
+        # General::BatchLink label
+
+        lbl_batchLink = QtWidgets.QLabel('Batch Link Autosave Path', paneGeneral)
+        lbl_batchLink.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_batchLink.setMinimumSize(840, 28)
+        lbl_batchLink.setAlignment(QtCore.Qt.AlignCenter)
+
+        def update_batchLinkPathLabel():
+            batch_link_path = self.framework.prefs.get('flameBatchBlessing', {}).get('flame_batch_root')
+            flame_project_name = self.flame.project.current_project.name
+            if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+                lbl_batchLinkPath.setText(os.path.join(batch_link_path, flame_project_name))
+            else:
+                lbl_batchLinkPath.setText(batch_link_path)
+
+        # General::BatchLink Enable button
+        
+        def enableBatchLink():
+            if self.framework.prefs['flameBatchBlessing'].get('enabled', True):
+                btn_batchLink.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                self.framework.prefs['flameBatchBlessing']['enabled'] = False
+            else:
+                btn_batchLink.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                self.framework.prefs['flameBatchBlessing']['enabled'] = True
+
+        btn_batchLink = QtWidgets.QPushButton('Batch Link', paneGeneral)
+        btn_batchLink.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLink.setMinimumSize(88, 28)
+        btn_batchLink.move(0, 34)
+        if self.framework.prefs['flameBatchBlessing'].get('enabled', True):
+            btn_batchLink.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        else:
+            btn_batchLink.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_batchLink.pressed.connect(enableBatchLink)
+
+        # General::BatchLink default path button
+
+        def batchLinkDefault():
+            self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = '/var/tmp/flameMenuSG/flame_batch_setups'
+            update_batchLinkPathLabel()
+        btn_batchLinkDefault = QtWidgets.QPushButton('Default', paneGeneral)
+        btn_batchLinkDefault.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLinkDefault.setMinimumSize(88, 28)
+        btn_batchLinkDefault.move(94, 34)
+        btn_batchLinkDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_batchLinkDefault.clicked.connect(batchLinkDefault)
+
+        # General::BatchLink path field
+
+        lbl_batchLinkPath = QtWidgets.QLabel(paneGeneral)
+        lbl_batchLinkPath.setFocusPolicy(QtCore.Qt.NoFocus)
+        lbl_batchLinkPath.setMinimumSize(464, 28)
+        lbl_batchLinkPath.move(188,34)
+        lbl_batchLinkPath.setStyleSheet('QFrame {color: #9a9a9a; background-color: #222222}')
+        lbl_batchLinkPath.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        update_batchLinkPathLabel()
+
+        # General::BatchLink Add Flame project name button
+        
+        def batchLinkUseProject():            
+            if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+                btn_batchLinkUseProject.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                self.framework.prefs['flameBatchBlessing']['use_project'] = False
+            else:
+                btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                self.framework.prefs['flameBatchBlessing']['use_project'] = True
+            update_batchLinkPathLabel()
+        
+        btn_batchLinkUseProject = QtWidgets.QPushButton('Use Project', paneGeneral)
+        btn_batchLinkUseProject.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLinkUseProject.setMinimumSize(88, 28)
+        btn_batchLinkUseProject.move(658, 34)
+        if self.framework.prefs['flameBatchBlessing'].get('use_project', True):
+            btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        else:
+            btn_batchLinkUseProject.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_batchLinkUseProject.pressed.connect(batchLinkUseProject)
+
+
+        # General::BatchLink Browse button
+        def batchLinkBrowse():
+            batch_link_path = self.framework.prefs.get('flameBatchBlessing', {}).get('flame_batch_root')
+            dialog = QtWidgets.QFileDialog()
+            dialog.setWindowTitle('Select Batch Autosave Folder')
+            dialog.setDirectory(batch_link_path)
+            new_path = dialog.getExistingDirectory(directory=batch_link_path,
+                                                    options=dialog.ShowDirsOnly)
+            if new_path:
+                self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = new_path
+                update_batchLinkPathLabel()
+
+        btn_batchLinkBrowse = QtWidgets.QPushButton('Browse', paneGeneral)
+        btn_batchLinkBrowse.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_batchLinkBrowse.setMinimumSize(88, 28)
+        btn_batchLinkBrowse.move(752, 34)
+        btn_batchLinkBrowse.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_batchLinkBrowse.clicked.connect(batchLinkBrowse)
+
+        #lbl_General = QtWidgets.QLabel('General', paneGeneral)
+        #lbl_General.setStyleSheet('QFrame {color: #989898}')
+        #lbl_General.setAlignment(QtCore.Qt.AlignCenter)
+        #lbl_General.setFixedSize(840, 264)
+        #lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
         # Publish section:
         # Publish: main VBox
         vbox_publish = QtWidgets.QVBoxLayout()
@@ -1537,12 +1654,12 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: ExportPresets: Preset location selector
 
-        self.exportPresetDirProject = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(0),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
-        self.exportPresetDirShared = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(1),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
-        self.exportPresetDirADSK = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(2),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirProject = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(0),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirShared = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(1),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
+        self.exportPresetDirADSK = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(2),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
 
         btn_PresetLocation = QtWidgets.QPushButton(window)
 
@@ -1761,7 +1878,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Batch template fields button
-
+        def addShotBatchField(field):
+            txt_shotBatch.insert(field)
         btn_shotBatchFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchFields.setMinimumSize(88, 28)
@@ -1769,8 +1887,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotBatchFields_menu = QtWidgets.QMenu()
-        btn_shotBatchFields_menu.addAction('Field 1')
-        btn_shotBatchFields_menu.addAction('Field 2')
+        for field in shot_template_fields:
+            action = btn_shotBatchFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addShotBatchField(field))
         btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
 
         # Publish::Templates::ShotPane: Version template default button
@@ -1794,7 +1913,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Version template fields button
-
+        def addShotVersionField(field):
+            txt_shotVersion.insert(field)
         btn_shotVersionFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionFields.setMinimumSize(88, 28)
@@ -1802,9 +1922,51 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotVersionFields_menu = QtWidgets.QMenu()
-        btn_shotVersionFields_menu.addAction('Field 5')
-        btn_shotVersionFields_menu.addAction('Field 6')
+        for field in shot_template_fields:
+            action = btn_shotVersionFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addShotVersionField(field))
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
+
+        # Publish::Templates::ShotPane: Version zero button
+
+        def update_shotVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            if version_zero:
+                btn_shotVersionZero.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_shotVersionZero.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+        def clicked_shotVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            self.framework.prefs['flameMenuPublisher']['version_zero'] = not version_zero
+            update_shotVersionZero()
+            update_assetVersionZero()
+
+        btn_shotVersionZero = QtWidgets.QPushButton('Start From Zero', paneShotTemplates)
+        btn_shotVersionZero.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotVersionZero.setMinimumSize(108, 28)
+        btn_shotVersionZero.move(450, 102)
+        btn_shotVersionZero.clicked.connect(clicked_shotVersionZero)
+        update_shotVersionZero()
+
+        '''
+        # Publish::Templates::ShotPane: Poster Frame Label
+
+        lbl_shotPosterFrame = QtWidgets.QLabel('Thumbnail Frame', paneShotTemplates)
+        lbl_shotPosterFrame.setFixedSize(108, 28)
+        lbl_shotPosterFrame.move(568, 102)
+        lbl_shotPosterFrame.setStyleSheet('QLabel {color: #989898}')
+
+        # Publish::Templates::ShotPane: Poster Frame text field
+
+        txt_shotPosterFrame = QtWidgets.QLineEdit('1', paneShotTemplates)
+        txt_shotPosterFrame.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shotPosterFrame.setFixedSize(40, 28)
+        txt_shotPosterFrame.move(682, 102)
+        txt_shotPosterFrame.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        '''
 
         # Publish::Templates::ShotPane: END OF SECTION
         # Publish::Templates::AssetPane: Show and hide
@@ -1815,24 +1977,29 @@ class flameMenuProjectconnect(flameMenuApp):
         paneAssetTemplates.move(96, 0)
 
         # Publish::Templates::AssetPane: Publish default button
-
+        def setAssetDefault():
+            txt_asset.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_render').get('default', ''))
         btn_assetDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetDefault.setFixedSize(88, 28)
         btn_assetDefault.move(0, 34)
         btn_assetDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetDefault.clicked.connect(setAssetDefault)
 
         # Publish::Templates::AssetPane: Publish template text field
-
-        txt_asset = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr', paneAssetTemplates)
+        txt_asset_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_render').get('value', '')
+        txt_asset = QtWidgets.QLineEdit(txt_asset_value, paneAssetTemplates)
         txt_asset.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_asset.setFixedSize(556, 28)
         txt_asset.move (94, 34)
         txt_asset.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Publish template fields button
+        asset_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('fields', [])
 
+        def addAssetField(field):
+            txt_asset.insert(field)
         btn_assetFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetFields.setFixedSize(88, 28)
         btn_assetFields.move(656, 34)
@@ -1840,29 +2007,33 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetFields_menu = QtWidgets.QMenu()
-        btn_assetFields_menu.addAction('Field 1')
-        btn_assetFields_menu.addAction('Field 2')
+        for field in asset_template_fields:
+            action = btn_assetFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addAssetField(field))
         btn_assetFields.setMenu(btn_assetFields_menu)
 
         # Publish::Templates::AssetPane: Batch template default button
-
+        def setAssetBatchDefault():
+            txt_assetBatch.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_batch').get('default', ''))
         btn_assetBatchDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchDefault.setFixedSize(88, 28)
         btn_assetBatchDefault.move(0, 68)
         btn_assetBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetBatchDefault.clicked.connect(setAssetBatchDefault)
 
         # Publish::Templates::AssetPane: Batch template text field
-
-        txt_assetBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch', paneAssetTemplates)
+        txt_assetBatch_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_batch').get('value', '')
+        txt_assetBatch = QtWidgets.QLineEdit(txt_assetBatch_value, paneAssetTemplates)
         txt_assetBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_assetBatch.setMinimumSize(556, 28)
         txt_assetBatch.move(94, 68)
         txt_assetBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Batch template fields button
-
+        def addAssetBatchField(field):
+            txt_assetBatch.insert(field)
         btn_assetBatchFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchFields.setMinimumSize(88, 28)
@@ -1870,29 +2041,33 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetBatchFields_menu = QtWidgets.QMenu()
-        btn_assetBatchFields_menu.addAction('Field 1')
-        btn_assetBatchFields_menu.addAction('Field 2')
+        for field in asset_template_fields:
+            action = btn_assetBatchFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addAssetBatchField(field))
         btn_assetBatchFields.setMenu(btn_assetBatchFields_menu)
 
         # Publish::Templates::AssetPane: Version template default button
-
+        def setAssetVersionDefault():
+            txt_assetVersion.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('version_name').get('default', ''))
         btn_assetVersionDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionDefault.setMinimumSize(88, 28)
         btn_assetVersionDefault.move(0, 102)
         btn_assetVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetVersionDefault.clicked.connect(setAssetVersionDefault)
 
         # Publish::Templates::AssetPane: Vesrion template text field
-
-        txt_assetVersion = QtWidgets.QLineEdit('{Asset}_{name}_v{version}', paneAssetTemplates)
+        txt_assetVersion_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('version_name').get('value', '')
+        txt_assetVersion = QtWidgets.QLineEdit(txt_assetVersion_value, paneAssetTemplates)
         txt_assetVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_assetVersion.setMinimumSize(256, 28)
         txt_assetVersion.move(94, 102)
         txt_assetVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Version template fields button
-
+        def addAssetVersionField(field):
+            txt_assetVersion.insert(field)
         btn_assetVersionFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionFields.setMinimumSize(88, 28)
@@ -1900,9 +2075,34 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetVersionFields_menu = QtWidgets.QMenu()
-        btn_assetVersionFields_menu.addAction('Field 5')
-        btn_assetVersionFields_menu.addAction('Field 6')
+        for field in asset_template_fields:
+            action = btn_assetVersionFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addAssetVersionField(field))
         btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
+
+        # Publish::Templates::AssetPane: Version zero button
+
+        def update_assetVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            if version_zero:
+                btn_assetVersionZero.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_assetVersionZero.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+        def clicked_assetVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            self.framework.prefs['flameMenuPublisher']['version_zero'] = not version_zero
+            update_shotVersionZero()
+            update_assetVersionZero()
+
+        btn_assetVersionZero = QtWidgets.QPushButton('Start From Zero', paneAssetTemplates)
+        btn_assetVersionZero.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_assetVersionZero.setMinimumSize(108, 28)
+        btn_assetVersionZero.move(450, 102)
+        btn_assetVersionZero.clicked.connect(clicked_shotVersionZero)
+        update_assetVersionZero()
 
         # Publish::Templates::AssetPane: END OF SECTION
 
@@ -1913,16 +2113,6 @@ class flameMenuProjectconnect(flameMenuApp):
         panePublish.move(160, 10)
         panePublish.setVisible(False)
 
-        # General
-
-        paneGeneral.setFixedSize(840, 264)
-        paneGeneral.move(172, 20)
-        paneGeneral.setVisible(False)
-        lbl_General = QtWidgets.QLabel('General', paneGeneral)
-        lbl_General.setStyleSheet('QFrame {color: #989898}')
-        lbl_General.setAlignment(QtCore.Qt.AlignCenter)
-        lbl_General.setFixedSize(840, 264)
-        lbl_General.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
 
         # Superclips
 
@@ -1965,8 +2155,9 @@ class flameBatchBlessing(flameMenuApp):
         
         # app defaults
         if not self.prefs:
-            self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG'
-            self.prefs['flame_batch_folder'] = 'flame_batch_setups'
+            self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG/flame_batch_setups'
+            self.prefs['enabled'] = True
+            self.prefs['use_project'] = True
 
         self.root_folder = self.batch_setup_root_folder()
 
@@ -1978,11 +2169,16 @@ class flameBatchBlessing(flameMenuApp):
 
         flame_batch_name = flame.batch.name.get_value()
         current_project_name = flame.project.current_project.name
-        flame_batch_path = os.path.join(
-                                    self.prefs.get('flame_batch_root'),
-                                    self.prefs.get('flame_batch_folder'),
-                                    current_project_name,
-                                    flame_batch_name)
+
+        if self.prefs.get('use_project'):
+            flame_batch_path = os.path.join(
+                                        self.prefs.get('flame_batch_root'),
+                                        current_project_name,
+                                        flame_batch_name)
+        else:
+            flame_batch_path = os.path.join(
+                                        self.prefs.get('flame_batch_root'),
+                                        flame_batch_name)
         
         if not os.path.isdir(flame_batch_path):
             try:
@@ -2981,10 +3177,12 @@ class flameMenuPublisher(flameMenuApp):
                         
             self.prefs['flame_export_presets'] = default_flame_export_presets
             self.prefs['poster_frame'] = 1
+            self.prefs['version_zero'] = False
 
         self.flame_bug_message = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
+        self.create_export_presets()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -3386,8 +3584,6 @@ class flameMenuPublisher(flameMenuApp):
 
         detailed_msg = ''
 
-        pprint (pb_published)
-
         if len(versions_published) > 0:
             detailed_msg += 'Published:\n'
             for version_name in sorted(pb_published.keys()):
@@ -3398,9 +3594,9 @@ class flameMenuPublisher(flameMenuApp):
                         path = pb_info.get('flame_render', {}).get('flame_path')
                     else:
                         path = pb_info.get('flame_render', {}).get('path_cache')
-                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
+                    detailed_msg += ' '*8 + os.path.basename(path) + '\n'
                     path_cache = pb_info.get('flame_batch', {}).get('path_cache')
-                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
+                    detailed_msg += ' '*8 + os.path.basename(path_cache) + '\n'
         if len(versions_failed) > 0:
             detailed_msg += 'Failed to publish: \n'
             for version_name in sorted(pb_failed.keys()):
@@ -3446,20 +3642,31 @@ class flameMenuPublisher(flameMenuApp):
 
         # Process info we've got from entity
 
+        self.log('Starting publish_clip for %s with entity:' % pb_info.get('flame_clip_name'))
+        self.log('\n%s' % pformat(entity))
+
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
         task_step = task.get('step.Step.code')
-        task_step_code = task.get('step.Step.short_name', task_step.upper())
-        sequence_name = task.get('entity.Shot.sg_sequence', {}).get('name', 'DefaultSequence')
+        task_step_code = task.get('step.Step.short_name')
+        if not task_step_code:
+            task_step_code = task_step.upper()
+        sequence = task.get('entity.Shot.sg_sequence')
+        if not sequence:
+            sequence_name = 'DefaultSequence'
+        else:
+            sequence_name = sequence.get('name', 'DefaultSequence')
         sg_asset_type = task.get('entity.Asset.sg_asset_type','Default')
         uid = self.create_uid()    
-                    
+        
         # linked .batch file path resolution
         # if the clip consists of several clips with different linked batch setups
         # fall back to the current batch setup (should probably publish all of them?)
+
+        self.log('looking for linked batch setup...')
 
         import ast
 
@@ -3480,7 +3687,11 @@ class flameMenuPublisher(flameMenuApp):
                 except:
                     pass
 
+        self.log('linked batch setup: %s' % linked_batch_path)
+
         # basic name/version detection from clip name
+
+        self.log('parsing clip name %s' % pb_info.get('flame_clip_name'))
 
         batch_group_name = self.flame.batch.name.get_value()
 
@@ -3507,13 +3718,27 @@ class flameMenuPublisher(flameMenuApp):
             clip_name = clip_name[1:]
         if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
             clip_name = clip_name[:-1]
+
+        self.log('parsed clip_name: %s' % clip_name)
+
         if version_number == -1:
+            self.log('can not parse version, looking for batch iterations')
             version_number = len(self.flame.batch.batch_iterations)
+            if (version_number == 0) and (not self.prefs.get('version_zero', False)):
+                version_number = 1
             version_padding = 3
+        
+        self.log('version number: %s' % version_number)
+        self.log('version_zero status: %s' % self.prefs.get('version_zero', False))
 
         # collect known template fields
-    
-        sg_frame = '%' + '{:02d}'.format(preset_fields.get('framePadding')) + 'd'
+
+        self.log('preset fields: %s' % pformat(preset_fields))
+
+        if preset_fields.get('type') == 'movie':
+            sg_frame = ''
+        else:
+            sg_frame = '%' + '{:02d}'.format(preset_fields.get('framePadding')) + 'd'
 
         template_fields = {}
         template_fields['Shot'] = task_entity_name
@@ -3528,33 +3753,57 @@ class flameMenuPublisher(flameMenuApp):
         template_fields['ext'] = preset_fields.get('fileExt')
         template_fields['frame'] = sg_frame
 
+        self.log('template fields:')
+        self.log('\n%s' % pformat(template_fields))
+
         # compose version name from template
 
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
+
+        self.log('version name template: %s' % version_name)
+
         version_name = version_name.format(**template_fields)
         update_version_preview = True
         update_version_thumbnail = True
-        pb_info['version_name'] = version_name  
+        pb_info['version_name'] = version_name
+
+        self.log('resolved version name: %s' % version_name)  
         
         # 'flame_render'
         # start with flame_render publish first.
+
+        self.log('starting flame_render publish...') 
 
         pb_file_name = task_entity_name + ', ' + clip_name
 
         # compose export path anf path_cache filed from template fields
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('value', '')
+
+        self.log('flame_render export preset: %s' % export_path)
+
         export_path = export_path.format(**template_fields)
         path_cache = export_path.format(**template_fields)
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
+        if preset_fields.get('type') == 'movie':
+            export_path = export_path.replace('..', '.')
+            path_cache = path_cache.replace('..', '.')
+
+        self.log('resolved export path: %s' % export_path)
+        self.log('path_cache %s' % path_cache)
+
         # get PublishedFileType from Shotgun
         # if it is not there - create it
         flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
+        self.log('PublishedFile type: %s, querying Shotgun' % flame_render_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
+        self.log('PublishedFile type: found: %s' % pformat(published_file_type))        
         if not published_file_type:
-            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})        
+            self.log('creating PublishedFile type %s' % flame_render_type)
+            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
+            self.log('created: %s' % pformat(published_file_type))
 
         # fill the pb_info data for 'flame_render'
         pb_info['flame_render']['path_cache'] = path_cache
@@ -3567,6 +3816,8 @@ class flameMenuPublisher(flameMenuApp):
             ['code', 'is', version_name],
             ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
             ]):
+
+            self.log('found existing version with the same name')
 
             # do not update version thumbnail and preview
             update_version_preview = False
@@ -3623,7 +3874,11 @@ class flameMenuPublisher(flameMenuApp):
 
         # Export using main preset
 
+        self.log('starting export form flame')
+
         preset_path = preset_fields.get('path')
+
+        self.log('export preset: %s' % preset_path)
 
         exporter = self.flame.PyExporter()
         exporter.foreground = True
@@ -3636,6 +3891,7 @@ class flameMenuPublisher(flameMenuApp):
         export_dir = os.path.dirname(export_path)
 
         if not os.path.isdir(export_dir):
+            self.log('creating folders: %s' % export_dir)
             try:
                 os.makedirs(export_dir)
             except:
@@ -3654,6 +3910,10 @@ class flameMenuPublisher(flameMenuApp):
                 else:
                     return (pb_info, True)
 
+        self.log('exporting clip %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+
         try:
             exporter.export(clip, preset_path, export_dir)
             clip.name.set_value(original_clip_name)
@@ -3663,14 +3923,21 @@ class flameMenuPublisher(flameMenuApp):
 
         # Export preview to temp folder
 
-        preset_dir = self.flame.PyExporter.get_presets_dir(
-            self.flame.PyExporter.PresetVisibility.Shotgun,
-            self.flame.PyExporter.PresetType.Movie
-        )
-        preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+
+        # preset_dir = self.flame.PyExporter.get_presets_dir(
+        #   self.flame.PyExporter.PresetVisibility.Shotgun,
+        #   self.flame.PyExporter.PresetType.Movie
+        # )
+        # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+        preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
         clip.name.set_value(version_name + '_preview_' + uid)
         export_dir = '/var/tmp'
         preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+
+        self.log('exporting preview %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
@@ -3678,11 +3945,12 @@ class flameMenuPublisher(flameMenuApp):
 
         # Set clip in and out marks and export thumbnail to temp folder
 
-        preset_dir = self.flame.PyExporter.get_presets_dir(
-            self.flame.PyExporter.PresetVisibility.Shotgun,
-            self.flame.PyExporter.PresetType.Image_Sequence
-        )
-        preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+        # preset_dir = self.flame.PyExporter.get_presets_dir(
+        #    self.flame.PyExporter.PresetVisibility.Shotgun,
+        #    self.flame.PyExporter.PresetType.Image_Sequence
+        # )
+        # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
         clip.name.set_value(version_name + '_thumbnail_' + uid)
         export_dir = '/var/tmp'
         thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
@@ -3691,6 +3959,12 @@ class flameMenuPublisher(flameMenuApp):
         clip.in_mark = self.prefs.get('poster_frame', 1)
         clip.out_mark = self.prefs.get('poster_frame', 1) + 1
         exporter.export_between_marks = True
+
+        self.log('exporting thumbnail %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
@@ -3701,6 +3975,9 @@ class flameMenuPublisher(flameMenuApp):
         clip.name.set_value(original_clip_name)
 
         # Create version in Shotgun
+
+        self.log('creating version in shotgun')
+
         version_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             code = version_name,
@@ -3710,12 +3987,19 @@ class flameMenuPublisher(flameMenuApp):
             #sg_path_to_frames=path
         )
         version = self.connector.sg.create('Version', version_data)
-        if os.path.isfile(thumbnail_path):
+        self.log('created Version: \n%s' % pformat(version))
+
+        if os.path.isfile(thumbnail_path) and update_version_thumbnail:
+            self.log('uploading thumbnail %s' % thumbnail_path)
             self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
-        if os.path.isfile(preview_path):
+        if os.path.isfile(preview_path) and update_version_preview:
+            self.log('uploading preview %s' % preview_path)
             self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+
         
         # Create 'flame_render' PublishedFile
+
+        self.log('creating flame_render published file in shotgun')
 
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
@@ -3730,6 +4014,9 @@ class flameMenuPublisher(flameMenuApp):
             name = pb_file_name
         )
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
+
+        self.log('created PublishedFile:\n%s' % pformat(published_file))
+        self.log('uploading thumbnail %s' % thumbnail_path)
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
         pb_info['status'] = True
@@ -3737,6 +4024,8 @@ class flameMenuPublisher(flameMenuApp):
         # check what we've actually exported and get start and end frames from there
         # this won't work for movie, so check the preset first
         # this should be moved in a separate function later
+
+        self.log('getting start and end frames from exported clip')
         
         flame_path = ''
         flame_render_path_cache = pb_info.get('flame_render', {}).get('path_cache', '')
@@ -3771,10 +4060,12 @@ class flameMenuPublisher(flameMenuApp):
                         except:
                             continue
                         frames.append(frame)
-                    pprint (frames)
+
                     if frames:
                         min_frame = min(frames)
+                        self.log('start frame: %s' % min_frame)
                         max_frame = max(frames)
+                        self.log('end_frame %s' % min_frame)
                         format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
                         frame_spec = format_str % (min_frame, max_frame)
                         flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
@@ -3788,8 +4079,10 @@ class flameMenuPublisher(flameMenuApp):
             pass
             # placeholder for movie export
 
-
+        # publish .batch file
         # compose batch export path and path_cache filed from template fields
+
+        self.log('starting .batch file publish')
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
         export_path = export_path.format(**template_fields)
@@ -3797,12 +4090,41 @@ class flameMenuPublisher(flameMenuApp):
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
+        self.log('resolved export path: %s' % export_path)
+        self.log('path_cache %s' % path_cache)
+
         pb_info['flame_batch']['path_cache'] = path_cache
         pb_info['flame_batch']['pb_file_name'] = task_entity_name
         
         # copy flame .batch file linked to the clip or save current one if not resolved from comments
-        
+
+        export_dir = os.path.dirname(export_path)
+        if not os.path.isdir(export_dir):
+            self.log('creating folders: %s' % export_dir)
+            try:
+                os.makedirs(export_dir)
+            except:
+                clip.name.set_value(original_clip_name)
+
+                mbox = QtGui.QMessageBox()
+                mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
+                mbox.setDetailedText('Path: ' + export_dir)
+                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
         if linked_batch_path:
+
+            self.log('copying linked .batch file')
+            self.log('from %s' % linked_batch_path)
+            slef.log('to %s' % export_path)
+
             src, ext = os.path.splitext(linked_batch_path)
             dest, ext = os.path.splitext(export_path)
             if os.path.isfile(linked_batch_path) and  os.path.isdir(src):
@@ -3824,18 +4146,28 @@ class flameMenuPublisher(flameMenuApp):
                     else:
                         return (pb_info, True)
             else:
+                self.log('no linked .batch file found on filesystem')
+                self.log('saving current batch to: %s' % export_path)
                 self.flame.batch.save_setup(export_path)
         else:
+            self.log('no linked .batch file')
+            self.log('saving current batch to: %s' % export_path)
             self.flame.batch.save_setup(export_path)
 
         # get published file type for Flame Batch or create a published file type on the fly
 
         flame_batch_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('PublishedFileType', '')
+        self.log('PublishedFile type: %s, querying Shotgun' % flame_batch_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_batch_type]])
+        self.log('PublishedFile type: found: %s' % pformat(published_file_type))
         if not published_file_type:
+            self.log('creating PublishedFile type %s' % flame_render_type)
             published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
+            self.log('created: %s' % pformat(published_file_type))
 
         # update published file data and create PublishedFile for flame batch
+
+        self.log('creating flame_batch published file in shotgun')
 
         published_file_data['published_file_type'] = published_file_type
         published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
@@ -3843,16 +4175,24 @@ class flameMenuPublisher(flameMenuApp):
         published_file_data['code'] = os.path.basename(path_cache)
         published_file_data['name'] = task_entity_name
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
+        
+        self.log('created PublishedFile:\n%s' % pformat(published_file))
+        self.log('uploading thumbnail %s' % thumbnail_path)
+        
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
         # clean-up preview and thumbnail files
+
+        self.log('cleaning up preview and thumbnail files')
 
         try:
             os.remove(thumbnail_path)
             os.remove(preview_path)
         except:
-            pass
+            self.log('cleaning up failed')
         
+        self.log('returning info:\n%s' % pformat(pb_info))
+
         return (pb_info, False)
 
     def update_loader_list(self, entity):
@@ -3985,6 +4325,373 @@ class flameMenuPublisher(flameMenuApp):
 
     def refresh(self, *args, **kwargs):
         pass
+
+    def create_export_presets(self):
+
+        preview_preset = '''<?xml version="1.0"?>
+        <preset version="9">
+        <type>movie</type>
+        <comment>Shotgun movie preview</comment>
+        <movie>
+            <fileType>QuickTime</fileType>
+            <namePattern>&lt;name&gt;</namePattern>
+            <yuvHeadroom>False</yuvHeadroom>
+            <yuvColourSpace>PCS_UNKNOWN</yuvColourSpace>
+        </movie>
+        <video>
+            <fileType>QuickTime</fileType>
+            <codec>33622016</codec>
+            <codecProfile>
+                <rootPath>/opt/Autodesk/mediaconverter/</rootPath>
+                <targetVersion>2020.2</targetVersion>
+                <pathSuffix>/profiles/.33622016/HDTV_720p_8Mbits.cdxprof</pathSuffix>
+            </codecProfile>
+            <namePattern>&lt;name&gt;</namePattern>
+            <overwriteWithVersions>False</overwriteWithVersions>
+            <lutState>
+                <Setup>
+                    <Base>
+                        <Version>18</Version>
+                        <Note></Note>
+                        <Expanded>False</Expanded>
+                        <ScrollBar>0</ScrollBar>
+                        <Frames>79</Frames>
+                        <Current_Time>1</Current_Time>
+                        <Input_DataType>4</Input_DataType>
+                        <ClampMode>0</ClampMode>
+                        <AdapDegrad>False</AdapDegrad>
+                        <ReadOnly>False</ReadOnly>
+                        <NoMediaHandling>1</NoMediaHandling>
+                        <UsedAsTransition>False</UsedAsTransition>
+                        <FrameBounds W="3200" H="1800" X="0" Y="0" SX="26.666666666666664" SY="15"/>
+                    </Base>
+                    <State>
+                        <LogLinTargetPixelFormat>143</LogLinTargetPixelFormat>
+                        <LogLinPropRefWhite>True</LogLinPropRefWhite>
+                        <LogLinPropRefBlack>True</LogLinPropRefBlack>
+                        <LogLinPropHighlight>True</LogLinPropHighlight>
+                        <LogLinPropShadow>True</LogLinPropShadow>
+                        <LogLinPropSoftclip>True</LogLinPropSoftclip>
+                        <LogLinPropDispGamma>True</LogLinPropDispGamma>
+                        <LogLinPropFilmGamma>True</LogLinPropFilmGamma>
+                        <LogLinPropExposure>True</LogLinPropExposure>
+                        <LogLinPropDefog>True</LogLinPropDefog>
+                        <LogLinPropKneeLow>True</LogLinPropKneeLow>
+                        <LogLinPropKneeHigh>True</LogLinPropKneeHigh>
+                        <LogLinAdjustPropLuts>True</LogLinAdjustPropLuts>
+                        <LogLinPropLowRoll>True</LogLinPropLowRoll>
+                        <LogLinPropLowCon>True</LogLinPropLowCon>
+                        <LogLinPropContrast>True</LogLinPropContrast>
+                        <LogLinPropHighCon>True</LogLinPropHighCon>
+                        <LogLinPropHighRoll>True</LogLinPropHighRoll>
+                        <LogLinHasBeenActivated>True</LogLinHasBeenActivated>
+                        <LutsBuilder>
+                            <LutsBuilder LutFileVersion="3">
+                                <ConversionType>0</ConversionType>
+                                <GammaType>1</GammaType>
+                                <BasicMode>6</BasicMode>
+                                <AdjustMode>False</AdjustMode>
+                                <RedLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </RedLut>
+                                <GreenLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </GreenLut>
+                                <BlueLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </BlueLut>
+                                <ColorTransformBuilder>
+                                    <ColorTransformBuilder CTBVersion="1.400000">
+                                        <CTBCustom>False</CTBCustom>
+                                        <CTBInvert>False</CTBInvert>
+                                        <CTBSolo>False</CTBSolo>
+                                        <CTBSelected>-1</CTBSelected>
+                                        <CTBIsColourSpaceConversion>False</CTBIsColourSpaceConversion>
+                                        <CTBSrcColourSpace></CTBSrcColourSpace>
+                                        <CTBDstColourSpace>Unknown</CTBDstColourSpace>
+                                        <CTBTaggedColourSpace>From Source</CTBTaggedColourSpace>
+                                        <CTBViewTransformEnabled>True</CTBViewTransformEnabled>
+                                        <CTBVTSrcCS>From Source</CTBVTSrcCS>
+                                        <CTBVTViewCS>From Rules</CTBVTViewCS>
+                                        <CTBVTDispCS>sRGB display</CTBVTDispCS>
+                                        <CTBItems/>
+                                    </ColorTransformBuilder>
+                                </ColorTransformBuilder>
+                            </LutsBuilder>
+                        </LutsBuilder>
+                    </State>
+                </Setup>
+            </lutState>
+            <resize>
+                <resizeType>fit</resizeType>
+                <resizeFilter>lanczos</resizeFilter>
+                <width>720</width>
+                <height>400</height>
+                <bitsPerChannel>8</bitsPerChannel>
+                <numChannels>3</numChannels>
+                <floatingPoint>False</floatingPoint>
+                <bigEndian>False</bigEndian>
+                <pixelRatio>1</pixelRatio>
+                <scanFormat>P</scanFormat>
+            </resize>
+        </video>
+        <audio>
+            <fileType>QuickTime</fileType>
+            <codec>4027060226</codec>
+            <codecProfile>
+                <rootPath>/opt/Autodesk/mediaconverter/</rootPath>
+                <targetVersion>2020.2</targetVersion>
+                <pathSuffix>/profiles/.4027060226/160 kbps.cdxprof</pathSuffix>
+            </codecProfile>
+            <namePattern>&lt;name&gt;</namePattern>
+            <mixdown>To2</mixdown>
+            <sampleRate>-1</sampleRate>
+            <bitDepth>-1</bitDepth>
+        </audio>
+        </preset>'''
+
+        thumbnail_preset = '''<?xml version="1.0" encoding="UTF-8"?>
+        <preset version="9">
+        <type>image</type>
+        <comment>Shotgun thumbnail</comment>
+        <video>
+            <fileType>Jpeg</fileType>
+            <codec>923688</codec>
+            <codecProfile></codecProfile>
+            <namePattern>&lt;name&gt;.</namePattern>
+            <compressionQuality>100</compressionQuality>
+            <transferCharacteristic>2</transferCharacteristic>
+            <publishLinked>0</publishLinked>
+            <lutState>
+                <Setup>
+                    <Base>
+                        <Version>18</Version>
+                        <Note></Note>
+                        <Expanded>False</Expanded>
+                        <ScrollBar>0</ScrollBar>
+                        <Frames>79</Frames>
+                        <Current_Time>1</Current_Time>
+                        <Input_DataType>4</Input_DataType>
+                        <ClampMode>0</ClampMode>
+                        <AdapDegrad>False</AdapDegrad>
+                        <ReadOnly>False</ReadOnly>
+                        <NoMediaHandling>1</NoMediaHandling>
+                        <UsedAsTransition>False</UsedAsTransition>
+                        <FrameBounds W="3200" H="1800" X="0" Y="0" SX="26.666666666666664" SY="15"/>
+                    </Base>
+                    <State>
+                        <LogLinTargetPixelFormat>143</LogLinTargetPixelFormat>
+                        <LogLinPropRefWhite>True</LogLinPropRefWhite>
+                        <LogLinPropRefBlack>True</LogLinPropRefBlack>
+                        <LogLinPropHighlight>True</LogLinPropHighlight>
+                        <LogLinPropShadow>True</LogLinPropShadow>
+                        <LogLinPropSoftclip>True</LogLinPropSoftclip>
+                        <LogLinPropDispGamma>True</LogLinPropDispGamma>
+                        <LogLinPropFilmGamma>True</LogLinPropFilmGamma>
+                        <LogLinPropExposure>True</LogLinPropExposure>
+                        <LogLinPropDefog>True</LogLinPropDefog>
+                        <LogLinPropKneeLow>True</LogLinPropKneeLow>
+                        <LogLinPropKneeHigh>True</LogLinPropKneeHigh>
+                        <LogLinAdjustPropLuts>True</LogLinAdjustPropLuts>
+                        <LogLinPropLowRoll>True</LogLinPropLowRoll>
+                        <LogLinPropLowCon>True</LogLinPropLowCon>
+                        <LogLinPropContrast>True</LogLinPropContrast>
+                        <LogLinPropHighCon>True</LogLinPropHighCon>
+                        <LogLinPropHighRoll>True</LogLinPropHighRoll>
+                        <LogLinHasBeenActivated>True</LogLinHasBeenActivated>
+                        <LutsBuilder>
+                            <LutsBuilder LutFileVersion="3">
+                                <ConversionType>0</ConversionType>
+                                <GammaType>1</GammaType>
+                                <BasicMode>6</BasicMode>
+                                <AdjustMode>False</AdjustMode>
+                                <RedLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </RedLut>
+                                <GreenLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </GreenLut>
+                                <BlueLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </BlueLut>
+                                <ColorTransformBuilder>
+                                    <ColorTransformBuilder CTBVersion="1.400000">
+                                        <CTBCustom>False</CTBCustom>
+                                        <CTBInvert>False</CTBInvert>
+                                        <CTBSolo>False</CTBSolo>
+                                        <CTBSelected>-1</CTBSelected>
+                                        <CTBIsColourSpaceConversion>False</CTBIsColourSpaceConversion>
+                                        <CTBSrcColourSpace></CTBSrcColourSpace>
+                                        <CTBDstColourSpace>Unknown</CTBDstColourSpace>
+                                        <CTBTaggedColourSpace>From Source</CTBTaggedColourSpace>
+                                        <CTBViewTransformEnabled>True</CTBViewTransformEnabled>
+                                        <CTBVTSrcCS>From Source</CTBVTSrcCS>
+                                        <CTBVTViewCS>From Rules</CTBVTViewCS>
+                                        <CTBVTDispCS>sRGB display</CTBVTDispCS>
+                                        <CTBItems/>
+                                    </ColorTransformBuilder>
+                                </ColorTransformBuilder>
+                            </LutsBuilder>
+                        </LutsBuilder>
+                    </State>
+                </Setup>
+            </lutState>
+            <resize>
+            <resizeType>fit</resizeType>
+            <resizeFilter>lanczos</resizeFilter>
+            <width>720</width>
+            <height>400</height>
+            <bitsPerChannel>8</bitsPerChannel>
+            <numChannels>3</numChannels>
+            <floatingPoint>0</floatingPoint>
+            <bigEndian>1</bigEndian>
+            <pixelRatio>1.000000</pixelRatio>
+            <scanFormat>P</scanFormat>
+            </resize>
+            </video>
+        <name>
+        <framePadding>0</framePadding>
+        <startFrame>1</startFrame>
+        <useTimecode>1</useTimecode>
+        </name>
+        </preset>'''
+
+        preview_preset_file_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        if not os.path.isfile(preview_preset_file_path):
+            try:
+                with open(preview_preset_file_path, 'a') as preview_preset_file:
+                    preview_preset_file.write(preview_preset)
+                    preview_preset_file.close()
+            except:
+                pass
+        thumbnail_preset_file_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+        if not os.path.isfile(thumbnail_preset_file_path):
+            try:
+                with open(thumbnail_preset_file_path, 'a') as thumbnail_preset_file:
+                    thumbnail_preset_file.write(thumbnail_preset)
+                    thumbnail_preset_file.close()
+            except:
+                pass
 
     def show_bug_message(self, *args, **kwargs):
         if self.flame_bug_message:
