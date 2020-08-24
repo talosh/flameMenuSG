@@ -456,7 +456,7 @@ class flameShotgunConnector(object):
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(30, )))
+        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(300, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -1919,6 +1919,29 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionFields_menu.addAction('Field 6')
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
 
+        # Publish::Templates::ShotPane: Version zero button
+
+        def update_shotVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            if version_zero:
+                btn_shotVersionZero.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_shotVersionZero.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+
+        def clicked_shotVersionZero():
+            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
+            version_zero = publish_prefs.get('version_zero', False)
+            self.framework.prefs['flameMenuPublisher']['version_zero'] = not version_zero
+            update_shotVersionZero()
+
+        btn_shotVersionZero = QtWidgets.QPushButton('Start From Zero', paneShotTemplates)
+        btn_shotVersionZero.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_shotVersionZero.setMinimumSize(108, 28)
+        btn_shotVersionZero.move(450, 102)
+        btn_shotVersionZero.clicked.connect(clicked_shotVersionZero)
+        update_shotVersionZero()
+
         # Publish::Templates::ShotPane: END OF SECTION
         # Publish::Templates::AssetPane: Show and hide
         # depending on an Entity toggle
@@ -3090,6 +3113,7 @@ class flameMenuPublisher(flameMenuApp):
                         
             self.prefs['flame_export_presets'] = default_flame_export_presets
             self.prefs['poster_frame'] = 1
+            self.prefs['version_zero'] = False
 
         self.flame_bug_message = False
         self.selected_clips = []
@@ -3506,9 +3530,9 @@ class flameMenuPublisher(flameMenuApp):
                         path = pb_info.get('flame_render', {}).get('flame_path')
                     else:
                         path = pb_info.get('flame_render', {}).get('path_cache')
-                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
+                    detailed_msg += ' '*8 + os.path.basename(path) + '\n'
                     path_cache = pb_info.get('flame_batch', {}).get('path_cache')
-                    detailed_msg += ' '*8 + os.path.basename(path) + ':\n'
+                    detailed_msg += ' '*8 + os.path.basename(path_cache) + '\n'
         if len(versions_failed) > 0:
             detailed_msg += 'Failed to publish: \n'
             for version_name in sorted(pb_failed.keys()):
@@ -3554,20 +3578,31 @@ class flameMenuPublisher(flameMenuApp):
 
         # Process info we've got from entity
 
+        self.log('Starting publish_clip for %s with entity:' % pb_info.get('flame_clip_name'))
+        self.log('\n%s' % pformat(entity))
+
         task = entity.get('task')
         task_entity = task.get('entity')
         task_entity_type = task_entity.get('type')
         task_entity_name = task_entity.get('name')
         task_entity_id = task_entity.get('id')
         task_step = task.get('step.Step.code')
-        task_step_code = task.get('step.Step.short_name', task_step.upper())
-        sequence_name = task.get('entity.Shot.sg_sequence', {}).get('name', 'DefaultSequence')
+        task_step_code = task.get('step.Step.short_name')
+        if not task_step_code:
+            task_step_code = task_step.upper()
+        sequence = task.get('entity.Shot.sg_sequence')
+        if not sequence:
+            sequence_name = 'DefaultSequence'
+        else:
+            sequence_name = sequence.get('name', 'DefaultSequence')
         sg_asset_type = task.get('entity.Asset.sg_asset_type','Default')
         uid = self.create_uid()    
-                    
+        
         # linked .batch file path resolution
         # if the clip consists of several clips with different linked batch setups
         # fall back to the current batch setup (should probably publish all of them?)
+
+        self.log('looking for linked batch setup...')
 
         import ast
 
@@ -3588,7 +3623,11 @@ class flameMenuPublisher(flameMenuApp):
                 except:
                     pass
 
+        self.log('linked batch setup: %s' % linked_batch_path)
+
         # basic name/version detection from clip name
+
+        self.log('parsing clip name %s' % pb_info.get('flame_clip_name'))
 
         batch_group_name = self.flame.batch.name.get_value()
 
@@ -3615,9 +3654,18 @@ class flameMenuPublisher(flameMenuApp):
             clip_name = clip_name[1:]
         if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
             clip_name = clip_name[:-1]
+
+        self.log('parsed clip_name: %s' % clip_name)
+
         if version_number == -1:
+            self.log('can not parse version, looking for batch iterations')
             version_number = len(self.flame.batch.batch_iterations)
+            if (version_number == 0) and (not self.prefs.get('version_zero', False)):
+                version_number = 1
             version_padding = 3
+        
+        self.log('version number: %s' % version_number)
+        self.log('version_zero status: %s' % self.prefs.get('version_zero', False))
 
         # collect known template fields
     
@@ -3636,33 +3684,53 @@ class flameMenuPublisher(flameMenuApp):
         template_fields['ext'] = preset_fields.get('fileExt')
         template_fields['frame'] = sg_frame
 
+        self.log('template fields:')
+        self.log('\n%s' % pformat(template_fields))
+
         # compose version name from template
 
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
+
+        self.log('version name template: %s' % version_name)
+
         version_name = version_name.format(**template_fields)
         update_version_preview = True
         update_version_thumbnail = True
-        pb_info['version_name'] = version_name  
+        pb_info['version_name'] = version_name
+
+        self.log('resolved version name: %s' % version_name)  
         
         # 'flame_render'
         # start with flame_render publish first.
+
+        self.log('starting flame_render publish...') 
 
         pb_file_name = task_entity_name + ', ' + clip_name
 
         # compose export path anf path_cache filed from template fields
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('value', '')
+
+        self.log('flame_render export preset: %s' % export_path)
+
         export_path = export_path.format(**template_fields)
         path_cache = export_path.format(**template_fields)
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
+        self.log('resolved export path: %s' % export_path)
+        self.log('path_cache %s' % path_cache)
+
         # get PublishedFileType from Shotgun
         # if it is not there - create it
         flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
+        self.log('PublishedFile type: %s, querying Shotgun' % flame_render_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
+        self.log('PublishedFile type: found: %s' % pformat(published_file_type))        
         if not published_file_type:
-            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})        
+            self.log('creating PublishedFile type %s' % flame_render_type)
+            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
+            self.log('created: %s' % pformat(published_file_type))
 
         # fill the pb_info data for 'flame_render'
         pb_info['flame_render']['path_cache'] = path_cache
@@ -3675,6 +3743,8 @@ class flameMenuPublisher(flameMenuApp):
             ['code', 'is', version_name],
             ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
             ]):
+
+            self.log('found existing version with the same name')
 
             # do not update version thumbnail and preview
             update_version_preview = False
@@ -3731,7 +3801,11 @@ class flameMenuPublisher(flameMenuApp):
 
         # Export using main preset
 
+        self.log('starting export form flame')
+
         preset_path = preset_fields.get('path')
+
+        self.log('export preset: %s' % preset_path)
 
         exporter = self.flame.PyExporter()
         exporter.foreground = True
@@ -3744,6 +3818,7 @@ class flameMenuPublisher(flameMenuApp):
         export_dir = os.path.dirname(export_path)
 
         if not os.path.isdir(export_dir):
+            self.log('creating folders: %s' % export_dir)
             try:
                 os.makedirs(export_dir)
             except:
@@ -3762,6 +3837,10 @@ class flameMenuPublisher(flameMenuApp):
                 else:
                     return (pb_info, True)
 
+        self.log('exporting clip %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+
         try:
             exporter.export(clip, preset_path, export_dir)
             clip.name.set_value(original_clip_name)
@@ -3770,6 +3849,7 @@ class flameMenuPublisher(flameMenuApp):
             return (pb_info, True)
 
         # Export preview to temp folder
+
 
         # preset_dir = self.flame.PyExporter.get_presets_dir(
         #   self.flame.PyExporter.PresetVisibility.Shotgun,
@@ -3780,6 +3860,11 @@ class flameMenuPublisher(flameMenuApp):
         clip.name.set_value(version_name + '_preview_' + uid)
         export_dir = '/var/tmp'
         preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+
+        self.log('exporting preview %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
@@ -3801,6 +3886,12 @@ class flameMenuPublisher(flameMenuApp):
         clip.in_mark = self.prefs.get('poster_frame', 1)
         clip.out_mark = self.prefs.get('poster_frame', 1) + 1
         exporter.export_between_marks = True
+
+        self.log('exporting thumbnail %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+
         try:
             exporter.export(clip, preset_path, export_dir)
         except:
@@ -3811,6 +3902,9 @@ class flameMenuPublisher(flameMenuApp):
         clip.name.set_value(original_clip_name)
 
         # Create version in Shotgun
+
+        self.log('creating version in shotgun')
+
         version_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             code = version_name,
@@ -3820,12 +3914,19 @@ class flameMenuPublisher(flameMenuApp):
             #sg_path_to_frames=path
         )
         version = self.connector.sg.create('Version', version_data)
-        if os.path.isfile(thumbnail_path):
+        self.log('created Version: \n%s' % pformat(version))
+
+        if os.path.isfile(thumbnail_path) and update_version_thumbnail:
+            self.log('uploading thumbnail %s' % thumbnail_path)
             self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
-        if os.path.isfile(preview_path):
+        if os.path.isfile(preview_path) and update_version_preview:
+            self.log('uploading preview %s' % preview_path)
             self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+
         
         # Create 'flame_render' PublishedFile
+
+        self.log('creating flame_render published file in shotgun')
 
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
@@ -3840,6 +3941,9 @@ class flameMenuPublisher(flameMenuApp):
             name = pb_file_name
         )
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
+
+        self.log('created PublishedFile:\n%s' % pformat(published_file))
+        self.log('uploading thumbnail %s' % thumbnail_path)
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
         pb_info['status'] = True
@@ -3847,6 +3951,8 @@ class flameMenuPublisher(flameMenuApp):
         # check what we've actually exported and get start and end frames from there
         # this won't work for movie, so check the preset first
         # this should be moved in a separate function later
+
+        self.log('getting start and end frames from exported clip')
         
         flame_path = ''
         flame_render_path_cache = pb_info.get('flame_render', {}).get('path_cache', '')
@@ -3884,7 +3990,9 @@ class flameMenuPublisher(flameMenuApp):
 
                     if frames:
                         min_frame = min(frames)
+                        self.log('start frame: %s' % min_frame)
                         max_frame = max(frames)
+                        self.log('end_frame %s' % min_frame)
                         format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
                         frame_spec = format_str % (min_frame, max_frame)
                         flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
@@ -3898,8 +4006,10 @@ class flameMenuPublisher(flameMenuApp):
             pass
             # placeholder for movie export
 
-
+        # publish .batch file
         # compose batch export path and path_cache filed from template fields
+
+        self.log('starting .batch file publish')
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
         export_path = export_path.format(**template_fields)
@@ -3907,12 +4017,41 @@ class flameMenuPublisher(flameMenuApp):
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
+        self.log('resolved export path: %s' % export_path)
+        self.log('path_cache %s' % path_cache)
+
         pb_info['flame_batch']['path_cache'] = path_cache
         pb_info['flame_batch']['pb_file_name'] = task_entity_name
         
         # copy flame .batch file linked to the clip or save current one if not resolved from comments
-        
+
+        export_dir = os.path.dirname(export_path)
+        if not os.path.isdir(export_dir):
+            self.log('creating folders: %s' % export_dir)
+            try:
+                os.makedirs(export_dir)
+            except:
+                clip.name.set_value(original_clip_name)
+
+                mbox = QtGui.QMessageBox()
+                mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
+                mbox.setDetailedText('Path: ' + export_dir)
+                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
         if linked_batch_path:
+
+            self.log('copying linked .batch file')
+            self.log('from %s' % linked_batch_path)
+            slef.log('to %s' % export_path)
+
             src, ext = os.path.splitext(linked_batch_path)
             dest, ext = os.path.splitext(export_path)
             if os.path.isfile(linked_batch_path) and  os.path.isdir(src):
@@ -3934,18 +4073,28 @@ class flameMenuPublisher(flameMenuApp):
                     else:
                         return (pb_info, True)
             else:
+                self.log('no linked .batch file found on filesystem')
+                self.log('saving current batch to: %s' % export_path)
                 self.flame.batch.save_setup(export_path)
         else:
+            self.log('no linked .batch file')
+            self.log('saving current batch to: %s' % export_path)
             self.flame.batch.save_setup(export_path)
 
         # get published file type for Flame Batch or create a published file type on the fly
 
         flame_batch_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('PublishedFileType', '')
+        self.log('PublishedFile type: %s, querying Shotgun' % flame_batch_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_batch_type]])
+        self.log('PublishedFile type: found: %s' % pformat(published_file_type))
         if not published_file_type:
+            self.log('creating PublishedFile type %s' % flame_render_type)
             published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
+            self.log('created: %s' % pformat(published_file_type))
 
         # update published file data and create PublishedFile for flame batch
+
+        self.log('creating flame_batch published file in shotgun')
 
         published_file_data['published_file_type'] = published_file_type
         published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
@@ -3953,16 +4102,24 @@ class flameMenuPublisher(flameMenuApp):
         published_file_data['code'] = os.path.basename(path_cache)
         published_file_data['name'] = task_entity_name
         published_file = self.connector.sg.create('PublishedFile', published_file_data)
+        
+        self.log('created PublishedFile:\n%s' % pformat(published_file))
+        self.log('uploading thumbnail %s' % thumbnail_path)
+        
         self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
 
         # clean-up preview and thumbnail files
+
+        self.log('cleaning up preview and thumbnail files')
 
         try:
             os.remove(thumbnail_path)
             os.remove(preview_path)
         except:
-            pass
+            self.log('cleaning up failed')
         
+        self.log('returning info:\n%s' % pformat(pb_info))
+
         return (pb_info, False)
 
     def update_loader_list(self, entity):
