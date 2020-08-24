@@ -3820,13 +3820,10 @@ class flameMenuPublisher(flameMenuApp):
             #sg_path_to_frames=path
         )
         version = self.connector.sg.create('Version', version_data)
-        try:
-            if os.path.isfile(thumbnail_path):
-                self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
-            if os.path.isfile(preview_path):
-                self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
-        except:
-            pass
+        if os.path.isfile(thumbnail_path):
+            self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
+        if os.path.isfile(preview_path):
+            self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
         
         # Create 'flame_render' PublishedFile
 
