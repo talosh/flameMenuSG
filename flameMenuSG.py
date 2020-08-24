@@ -31,7 +31,7 @@ default_templates = {
 # Publishing into asset will just replace {Shot} fied with asset name
 'Shot': {
     'flame_render': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.exr',
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
@@ -45,7 +45,7 @@ default_templates = {
 },
 'Asset':{
     'flame_render': {
-        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
@@ -313,6 +313,8 @@ class flameMenuApp(object):
                 self.connector.rescan_flag = False
 
     def get_export_preset_fields(self, preset):
+        
+        self.log('Flame export preset parser')
 
         # parses Flame Export preset and returns a dict of a parsed values
         # of False on error.
@@ -363,6 +365,8 @@ class flameMenuApp(object):
             if preset_file.startswith(os.path.sep):
                 preset_file = preset_file[1:]
             preset_path = os.path.join(path_prefix, preset_file)
+
+        self.log('parsing Flame export preset: %s' % preset_path)
         
         preset_xml_doc = None
         try:
@@ -1284,8 +1288,8 @@ class flameMenuProjectconnect(flameMenuApp):
             if self.PresetVisibility == -1:
                 dialog.setDirectory(os.path.expanduser('~'))
             else:
-                preset_folder = self.flame.PyExporter.get_presets_dir(flame.PyExporter.PresetVisibility.values.get(self.PresetVisibility),
-                                        flame.PyExporter.PresetType.values.get(self.presetType))
+                preset_folder = self.flame.PyExporter.get_presets_dir(self.flame.PyExporter.PresetVisibility.values.get(self.PresetVisibility),
+                                        self.flame.PyExporter.PresetType.values.get(self.presetType))
                 dialog.setDirectory(preset_folder)
             dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
             if dialog.exec_() == QtWidgets.QDialog.Accepted:
@@ -1946,6 +1950,23 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionZero.move(450, 102)
         btn_shotVersionZero.clicked.connect(clicked_shotVersionZero)
         update_shotVersionZero()
+
+        '''
+        # Publish::Templates::ShotPane: Poster Frame Label
+
+        lbl_shotPosterFrame = QtWidgets.QLabel('Thumbnail Frame', paneShotTemplates)
+        lbl_shotPosterFrame.setFixedSize(108, 28)
+        lbl_shotPosterFrame.move(568, 102)
+        lbl_shotPosterFrame.setStyleSheet('QLabel {color: #989898}')
+
+        # Publish::Templates::ShotPane: Poster Frame text field
+
+        txt_shotPosterFrame = QtWidgets.QLineEdit('1', paneShotTemplates)
+        txt_shotPosterFrame.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_shotPosterFrame.setFixedSize(40, 28)
+        txt_shotPosterFrame.move(682, 102)
+        txt_shotPosterFrame.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        '''
 
         # Publish::Templates::ShotPane: END OF SECTION
         # Publish::Templates::AssetPane: Show and hide
@@ -3711,8 +3732,13 @@ class flameMenuPublisher(flameMenuApp):
         self.log('version_zero status: %s' % self.prefs.get('version_zero', False))
 
         # collect known template fields
-    
-        sg_frame = '%' + '{:02d}'.format(preset_fields.get('framePadding')) + 'd'
+
+        self.log('preset fields: %s' % pformat(preset_fields))
+
+        if preset_fields.get('type') == 'movie':
+            sg_frame = ''
+        else:
+            sg_frame = '%' + '{:02d}'.format(preset_fields.get('framePadding')) + 'd'
 
         template_fields = {}
         template_fields['Shot'] = task_entity_name
@@ -3760,6 +3786,10 @@ class flameMenuPublisher(flameMenuApp):
         path_cache = export_path.format(**template_fields)
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
+
+        if preset_fields.get('type') == 'movie':
+            export_path = export_path.replace('..', '.')
+            path_cache = path_cache.replace('..', '.')
 
         self.log('resolved export path: %s' % export_path)
         self.log('path_cache %s' % path_cache)
