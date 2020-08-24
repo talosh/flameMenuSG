@@ -1874,7 +1874,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Batch template fields button
-
+        def addShotBatchField(field):
+            txt_shotBatch.insert(field)
         btn_shotBatchFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchFields.setMinimumSize(88, 28)
@@ -1882,8 +1883,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotBatchFields_menu = QtWidgets.QMenu()
-        btn_shotBatchFields_menu.addAction('Field 1')
-        btn_shotBatchFields_menu.addAction('Field 2')
+        for field in shot_template_fields:
+            action = btn_shotBatchFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addShotBatchField(field))
         btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
 
         # Publish::Templates::ShotPane: Version template default button
@@ -1907,7 +1909,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Version template fields button
-
+        def addShotVersionField(field):
+            txt_shotVersion.insert(field)
         btn_shotVersionFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionFields.setMinimumSize(88, 28)
@@ -1915,8 +1918,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotVersionFields_menu = QtWidgets.QMenu()
-        btn_shotVersionFields_menu.addAction('Field 5')
-        btn_shotVersionFields_menu.addAction('Field 6')
+        for field in shot_template_fields:
+            action = btn_shotVersionFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addShotVersionField(field))
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
 
         # Publish::Templates::ShotPane: Version zero button
@@ -1952,24 +1956,29 @@ class flameMenuProjectconnect(flameMenuApp):
         paneAssetTemplates.move(96, 0)
 
         # Publish::Templates::AssetPane: Publish default button
-
+        def setAssetDefault():
+            txt_asset.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_render').get('default', ''))
         btn_assetDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetDefault.setFixedSize(88, 28)
         btn_assetDefault.move(0, 34)
         btn_assetDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetDefault.clicked.connect(setAssetDefault)
 
         # Publish::Templates::AssetPane: Publish template text field
-
-        txt_asset = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.exr', paneAssetTemplates)
+        txt_asset_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_render').get('value', '')
+        txt_asset = QtWidgets.QLineEdit(txt_asset_value, paneAssetTemplates)
         txt_asset.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_asset.setFixedSize(556, 28)
         txt_asset.move (94, 34)
         txt_asset.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Publish template fields button
+        asset_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('fields', [])
 
+        def addAssetField(field):
+            txt_asset.insert(field)
         btn_assetFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetFields.setFixedSize(88, 28)
         btn_assetFields.move(656, 34)
@@ -1977,29 +1986,33 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetFields_menu = QtWidgets.QMenu()
-        btn_assetFields_menu.addAction('Field 1')
-        btn_assetFields_menu.addAction('Field 2')
+        for field in asset_template_fields:
+            action = btn_assetFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addAssetField(field))
         btn_assetFields.setMenu(btn_assetFields_menu)
 
         # Publish::Templates::AssetPane: Batch template default button
-
+        def setAssetBatchDefault():
+            txt_assetBatch.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_batch').get('default', ''))
         btn_assetBatchDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchDefault.setFixedSize(88, 28)
         btn_assetBatchDefault.move(0, 68)
         btn_assetBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetBatchDefault.clicked.connect(setAssetBatchDefault)
 
         # Publish::Templates::AssetPane: Batch template text field
-
-        txt_assetBatch = QtWidgets.QLineEdit('sequences/{Sequence}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch', paneAssetTemplates)
+        txt_assetBatch_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_batch').get('value', '')
+        txt_assetBatch = QtWidgets.QLineEdit(txt_assetBatch_value, paneAssetTemplates)
         txt_assetBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_assetBatch.setMinimumSize(556, 28)
         txt_assetBatch.move(94, 68)
         txt_assetBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Batch template fields button
-
+        def addAssetBatchField(field):
+            txt_assetBatch.insert(field)
         btn_assetBatchFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchFields.setMinimumSize(88, 28)
@@ -2007,29 +2020,33 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetBatchFields_menu = QtWidgets.QMenu()
-        btn_assetBatchFields_menu.addAction('Field 1')
-        btn_assetBatchFields_menu.addAction('Field 2')
+        for field in asset_template_fields:
+            action = btn_assetBatchFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addAssetBatchField(field))
         btn_assetBatchFields.setMenu(btn_assetBatchFields_menu)
 
         # Publish::Templates::AssetPane: Version template default button
-
+        def setAssetVersionDefault():
+            txt_assetVersion.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('version_name').get('default', ''))
         btn_assetVersionDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionDefault.setMinimumSize(88, 28)
         btn_assetVersionDefault.move(0, 102)
         btn_assetVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        btn_assetVersionDefault.clicked.connect(setAssetVersionDefault)
 
         # Publish::Templates::AssetPane: Vesrion template text field
-
-        txt_assetVersion = QtWidgets.QLineEdit('{Asset}_{name}_v{version}', paneAssetTemplates)
+        txt_assetVersion_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('version_name').get('value', '')
+        txt_assetVersion = QtWidgets.QLineEdit(txt_assetVersion_value, paneAssetTemplates)
         txt_assetVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_assetVersion.setMinimumSize(256, 28)
         txt_assetVersion.move(94, 102)
         txt_assetVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Version template fields button
-
+        def addAssetVersionField(field):
+            txt_assetVersion.insert(field)
         btn_assetVersionFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionFields.setMinimumSize(88, 28)
@@ -2037,8 +2054,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetVersionFields_menu = QtWidgets.QMenu()
-        btn_assetVersionFields_menu.addAction('Field 5')
-        btn_assetVersionFields_menu.addAction('Field 6')
+        for field in asset_template_fields:
+            action = btn_assetVersionFields_menu.addAction(field)
+            action.triggered[()].connect(lambda field=field: addAssetVersionField(field))
         btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
 
         # Publish::Templates::AssetPane: Version zero button
