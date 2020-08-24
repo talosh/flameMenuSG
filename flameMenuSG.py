@@ -73,6 +73,7 @@ loader_PublishedFileType_base = {
 
 __version__ = 'v0.0.8'
 
+
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
 
@@ -414,6 +415,7 @@ class flameMenuApp(object):
                 preset_fields['useTimecode'] = useTimecode[0].firstChild.data
 
         return preset_fields
+
 
 class flameShotgunConnector(object):
     def __init__(self, framework):
@@ -3092,6 +3094,7 @@ class flameMenuPublisher(flameMenuApp):
         self.flame_bug_message = False
         self.selected_clips = []
         self.mbox = QtGui.QMessageBox()
+        self.create_export_presets()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -3768,11 +3771,12 @@ class flameMenuPublisher(flameMenuApp):
 
         # Export preview to temp folder
 
-        preset_dir = self.flame.PyExporter.get_presets_dir(
-            self.flame.PyExporter.PresetVisibility.Shotgun,
-            self.flame.PyExporter.PresetType.Movie
-        )
-        preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+        # preset_dir = self.flame.PyExporter.get_presets_dir(
+        #   self.flame.PyExporter.PresetVisibility.Shotgun,
+        #   self.flame.PyExporter.PresetType.Movie
+        # )
+        # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+        preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
         clip.name.set_value(version_name + '_preview_' + uid)
         export_dir = '/var/tmp'
         preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
@@ -3783,11 +3787,12 @@ class flameMenuPublisher(flameMenuApp):
 
         # Set clip in and out marks and export thumbnail to temp folder
 
-        preset_dir = self.flame.PyExporter.get_presets_dir(
-            self.flame.PyExporter.PresetVisibility.Shotgun,
-            self.flame.PyExporter.PresetType.Image_Sequence
-        )
-        preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+        # preset_dir = self.flame.PyExporter.get_presets_dir(
+        #    self.flame.PyExporter.PresetVisibility.Shotgun,
+        #    self.flame.PyExporter.PresetType.Image_Sequence
+        # )
+        # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
         clip.name.set_value(version_name + '_thumbnail_' + uid)
         export_dir = '/var/tmp'
         thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
@@ -3815,10 +3820,13 @@ class flameMenuPublisher(flameMenuApp):
             #sg_path_to_frames=path
         )
         version = self.connector.sg.create('Version', version_data)
-        if os.path.isfile(thumbnail_path):
-            self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
-        if os.path.isfile(preview_path):
-            self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+        try:
+            if os.path.isfile(thumbnail_path):
+                self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
+            if os.path.isfile(preview_path):
+                self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+        except:
+            pass
         
         # Create 'flame_render' PublishedFile
 
@@ -4090,6 +4098,373 @@ class flameMenuPublisher(flameMenuApp):
 
     def refresh(self, *args, **kwargs):
         pass
+
+    def create_export_presets(self):
+
+        preview_preset = '''<?xml version="1.0"?>
+        <preset version="9">
+        <type>movie</type>
+        <comment>Shotgun movie preview</comment>
+        <movie>
+            <fileType>QuickTime</fileType>
+            <namePattern>&lt;name&gt;</namePattern>
+            <yuvHeadroom>False</yuvHeadroom>
+            <yuvColourSpace>PCS_UNKNOWN</yuvColourSpace>
+        </movie>
+        <video>
+            <fileType>QuickTime</fileType>
+            <codec>33622016</codec>
+            <codecProfile>
+                <rootPath>/opt/Autodesk/mediaconverter/</rootPath>
+                <targetVersion>2020.2</targetVersion>
+                <pathSuffix>/profiles/.33622016/HDTV_720p_8Mbits.cdxprof</pathSuffix>
+            </codecProfile>
+            <namePattern>&lt;name&gt;</namePattern>
+            <overwriteWithVersions>False</overwriteWithVersions>
+            <lutState>
+                <Setup>
+                    <Base>
+                        <Version>18</Version>
+                        <Note></Note>
+                        <Expanded>False</Expanded>
+                        <ScrollBar>0</ScrollBar>
+                        <Frames>79</Frames>
+                        <Current_Time>1</Current_Time>
+                        <Input_DataType>4</Input_DataType>
+                        <ClampMode>0</ClampMode>
+                        <AdapDegrad>False</AdapDegrad>
+                        <ReadOnly>False</ReadOnly>
+                        <NoMediaHandling>1</NoMediaHandling>
+                        <UsedAsTransition>False</UsedAsTransition>
+                        <FrameBounds W="3200" H="1800" X="0" Y="0" SX="26.666666666666664" SY="15"/>
+                    </Base>
+                    <State>
+                        <LogLinTargetPixelFormat>143</LogLinTargetPixelFormat>
+                        <LogLinPropRefWhite>True</LogLinPropRefWhite>
+                        <LogLinPropRefBlack>True</LogLinPropRefBlack>
+                        <LogLinPropHighlight>True</LogLinPropHighlight>
+                        <LogLinPropShadow>True</LogLinPropShadow>
+                        <LogLinPropSoftclip>True</LogLinPropSoftclip>
+                        <LogLinPropDispGamma>True</LogLinPropDispGamma>
+                        <LogLinPropFilmGamma>True</LogLinPropFilmGamma>
+                        <LogLinPropExposure>True</LogLinPropExposure>
+                        <LogLinPropDefog>True</LogLinPropDefog>
+                        <LogLinPropKneeLow>True</LogLinPropKneeLow>
+                        <LogLinPropKneeHigh>True</LogLinPropKneeHigh>
+                        <LogLinAdjustPropLuts>True</LogLinAdjustPropLuts>
+                        <LogLinPropLowRoll>True</LogLinPropLowRoll>
+                        <LogLinPropLowCon>True</LogLinPropLowCon>
+                        <LogLinPropContrast>True</LogLinPropContrast>
+                        <LogLinPropHighCon>True</LogLinPropHighCon>
+                        <LogLinPropHighRoll>True</LogLinPropHighRoll>
+                        <LogLinHasBeenActivated>True</LogLinHasBeenActivated>
+                        <LutsBuilder>
+                            <LutsBuilder LutFileVersion="3">
+                                <ConversionType>0</ConversionType>
+                                <GammaType>1</GammaType>
+                                <BasicMode>6</BasicMode>
+                                <AdjustMode>False</AdjustMode>
+                                <RedLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </RedLut>
+                                <GreenLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </GreenLut>
+                                <BlueLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </BlueLut>
+                                <ColorTransformBuilder>
+                                    <ColorTransformBuilder CTBVersion="1.400000">
+                                        <CTBCustom>False</CTBCustom>
+                                        <CTBInvert>False</CTBInvert>
+                                        <CTBSolo>False</CTBSolo>
+                                        <CTBSelected>-1</CTBSelected>
+                                        <CTBIsColourSpaceConversion>False</CTBIsColourSpaceConversion>
+                                        <CTBSrcColourSpace></CTBSrcColourSpace>
+                                        <CTBDstColourSpace>Unknown</CTBDstColourSpace>
+                                        <CTBTaggedColourSpace>From Source</CTBTaggedColourSpace>
+                                        <CTBViewTransformEnabled>True</CTBViewTransformEnabled>
+                                        <CTBVTSrcCS>From Source</CTBVTSrcCS>
+                                        <CTBVTViewCS>From Rules</CTBVTViewCS>
+                                        <CTBVTDispCS>sRGB display</CTBVTDispCS>
+                                        <CTBItems/>
+                                    </ColorTransformBuilder>
+                                </ColorTransformBuilder>
+                            </LutsBuilder>
+                        </LutsBuilder>
+                    </State>
+                </Setup>
+            </lutState>
+            <resize>
+                <resizeType>fit</resizeType>
+                <resizeFilter>lanczos</resizeFilter>
+                <width>720</width>
+                <height>400</height>
+                <bitsPerChannel>8</bitsPerChannel>
+                <numChannels>3</numChannels>
+                <floatingPoint>False</floatingPoint>
+                <bigEndian>False</bigEndian>
+                <pixelRatio>1</pixelRatio>
+                <scanFormat>P</scanFormat>
+            </resize>
+        </video>
+        <audio>
+            <fileType>QuickTime</fileType>
+            <codec>4027060226</codec>
+            <codecProfile>
+                <rootPath>/opt/Autodesk/mediaconverter/</rootPath>
+                <targetVersion>2020.2</targetVersion>
+                <pathSuffix>/profiles/.4027060226/160 kbps.cdxprof</pathSuffix>
+            </codecProfile>
+            <namePattern>&lt;name&gt;</namePattern>
+            <mixdown>To2</mixdown>
+            <sampleRate>-1</sampleRate>
+            <bitDepth>-1</bitDepth>
+        </audio>
+        </preset>'''
+
+        thumbnail_preset = '''<?xml version="1.0" encoding="UTF-8"?>
+        <preset version="9">
+        <type>image</type>
+        <comment>Shotgun thumbnail</comment>
+        <video>
+            <fileType>Jpeg</fileType>
+            <codec>923688</codec>
+            <codecProfile></codecProfile>
+            <namePattern>&lt;name&gt;.</namePattern>
+            <compressionQuality>100</compressionQuality>
+            <transferCharacteristic>2</transferCharacteristic>
+            <publishLinked>0</publishLinked>
+            <lutState>
+                <Setup>
+                    <Base>
+                        <Version>18</Version>
+                        <Note></Note>
+                        <Expanded>False</Expanded>
+                        <ScrollBar>0</ScrollBar>
+                        <Frames>79</Frames>
+                        <Current_Time>1</Current_Time>
+                        <Input_DataType>4</Input_DataType>
+                        <ClampMode>0</ClampMode>
+                        <AdapDegrad>False</AdapDegrad>
+                        <ReadOnly>False</ReadOnly>
+                        <NoMediaHandling>1</NoMediaHandling>
+                        <UsedAsTransition>False</UsedAsTransition>
+                        <FrameBounds W="3200" H="1800" X="0" Y="0" SX="26.666666666666664" SY="15"/>
+                    </Base>
+                    <State>
+                        <LogLinTargetPixelFormat>143</LogLinTargetPixelFormat>
+                        <LogLinPropRefWhite>True</LogLinPropRefWhite>
+                        <LogLinPropRefBlack>True</LogLinPropRefBlack>
+                        <LogLinPropHighlight>True</LogLinPropHighlight>
+                        <LogLinPropShadow>True</LogLinPropShadow>
+                        <LogLinPropSoftclip>True</LogLinPropSoftclip>
+                        <LogLinPropDispGamma>True</LogLinPropDispGamma>
+                        <LogLinPropFilmGamma>True</LogLinPropFilmGamma>
+                        <LogLinPropExposure>True</LogLinPropExposure>
+                        <LogLinPropDefog>True</LogLinPropDefog>
+                        <LogLinPropKneeLow>True</LogLinPropKneeLow>
+                        <LogLinPropKneeHigh>True</LogLinPropKneeHigh>
+                        <LogLinAdjustPropLuts>True</LogLinAdjustPropLuts>
+                        <LogLinPropLowRoll>True</LogLinPropLowRoll>
+                        <LogLinPropLowCon>True</LogLinPropLowCon>
+                        <LogLinPropContrast>True</LogLinPropContrast>
+                        <LogLinPropHighCon>True</LogLinPropHighCon>
+                        <LogLinPropHighRoll>True</LogLinPropHighRoll>
+                        <LogLinHasBeenActivated>True</LogLinHasBeenActivated>
+                        <LutsBuilder>
+                            <LutsBuilder LutFileVersion="3">
+                                <ConversionType>0</ConversionType>
+                                <GammaType>1</GammaType>
+                                <BasicMode>6</BasicMode>
+                                <AdjustMode>False</AdjustMode>
+                                <RedLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </RedLut>
+                                <GreenLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </GreenLut>
+                                <BlueLut>
+                                    <Cineon Version="1">
+                                        <ConversionType>0</ConversionType>
+                                        <ReferenceWhite>0.669599</ReferenceWhite>
+                                        <ReferenceBlack>0.092864</ReferenceBlack>
+                                        <Highlight>1</Highlight>
+                                        <Shadow>0</Shadow>
+                                        <Softclip>0</Softclip>
+                                        <FilmGamma>0.600000</FilmGamma>
+                                        <GammaCorrection>0.450000</GammaCorrection>
+                                        <Defog>0</Defog>
+                                        <KneeLow>0</KneeLow>
+                                        <KneeHigh>0</KneeHigh>
+                                        <Exposure>0</Exposure>
+                                        <LowRoll>0</LowRoll>
+                                        <LowCon>0</LowCon>
+                                        <Contrast>0</Contrast>
+                                        <HighCon>0</HighCon>
+                                        <HighRoll>0</HighRoll>
+                                        <Encoding>9</Encoding>
+                                        <Invert>0</Invert>
+                                    </Cineon>
+                                </BlueLut>
+                                <ColorTransformBuilder>
+                                    <ColorTransformBuilder CTBVersion="1.400000">
+                                        <CTBCustom>False</CTBCustom>
+                                        <CTBInvert>False</CTBInvert>
+                                        <CTBSolo>False</CTBSolo>
+                                        <CTBSelected>-1</CTBSelected>
+                                        <CTBIsColourSpaceConversion>False</CTBIsColourSpaceConversion>
+                                        <CTBSrcColourSpace></CTBSrcColourSpace>
+                                        <CTBDstColourSpace>Unknown</CTBDstColourSpace>
+                                        <CTBTaggedColourSpace>From Source</CTBTaggedColourSpace>
+                                        <CTBViewTransformEnabled>True</CTBViewTransformEnabled>
+                                        <CTBVTSrcCS>From Source</CTBVTSrcCS>
+                                        <CTBVTViewCS>From Rules</CTBVTViewCS>
+                                        <CTBVTDispCS>sRGB display</CTBVTDispCS>
+                                        <CTBItems/>
+                                    </ColorTransformBuilder>
+                                </ColorTransformBuilder>
+                            </LutsBuilder>
+                        </LutsBuilder>
+                    </State>
+                </Setup>
+            </lutState>
+            <resize>
+            <resizeType>fit</resizeType>
+            <resizeFilter>lanczos</resizeFilter>
+            <width>720</width>
+            <height>400</height>
+            <bitsPerChannel>8</bitsPerChannel>
+            <numChannels>3</numChannels>
+            <floatingPoint>0</floatingPoint>
+            <bigEndian>1</bigEndian>
+            <pixelRatio>1.000000</pixelRatio>
+            <scanFormat>P</scanFormat>
+            </resize>
+            </video>
+        <name>
+        <framePadding>0</framePadding>
+        <startFrame>1</startFrame>
+        <useTimecode>1</useTimecode>
+        </name>
+        </preset>'''
+
+        preview_preset_file_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        if not os.path.isfile(preview_preset_file_path):
+            try:
+                with open(preview_preset_file_path, 'a') as preview_preset_file:
+                    preview_preset_file.write(preview_preset)
+                    preview_preset_file.close()
+            except:
+                pass
+        thumbnail_preset_file_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+        if not os.path.isfile(thumbnail_preset_file_path):
+            try:
+                with open(thumbnail_preset_file_path, 'a') as thumbnail_preset_file:
+                    thumbnail_preset_file.write(thumbnail_preset)
+                    thumbnail_preset_file.close()
+            except:
+                pass
 
     def show_bug_message(self, *args, **kwargs):
         if self.flame_bug_message:
