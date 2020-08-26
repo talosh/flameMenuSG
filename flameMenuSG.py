@@ -71,7 +71,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.9'
+__version__ = 'v0.0.10'
 
 
 class flameAppFramework(object):
@@ -2804,11 +2804,24 @@ class flameMenuNewBatch(flameMenuApp):
     def create_new_batch(self, entity):        
         sg = self.connector.sg
 
+        # check if flame batch with entity name already in desktop
+
         entity = sg.find_one (
             entity.get('type'),
             [['id', 'is', entity.get('id')]],
             ['code', 'sg_head_in', 'sg_tail_out', 'sg_vfx_requirements']
         )
+
+        batch_groups = []
+        for batch_group in self.flame.project.current_project.current_workspace.desktop.batch_groups:
+            batch_groups.append(batch_group.name.get_value())
+
+        code = entity.get('code')
+        if not code:
+            code = 'New Batch'
+
+        if code in batch_groups:
+            return False
 
         publishes = sg.find (
             'PublishedFile',
@@ -2873,10 +2886,6 @@ class flameMenuNewBatch(flameMenuApp):
             flame_path = self.build_flame_friendly_path(path)
             flame_paths_to_import.append(flame_path)
         
-        code = entity.get('code')
-        if not code:
-            code = 'New Batch'
-
         sg_head_in = entity.get('sg_head_in')
         if not sg_head_in:
             sg_head_in = 1001
@@ -2897,6 +2906,9 @@ class flameMenuNewBatch(flameMenuApp):
         
         for flame_path in flame_paths_to_import:
             self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
+
+        render_node = flame.batch.create_node('Render')
+        render_node.name.set_value('<batch name>_comp_v<iteration###>')
 
         self.flame.batch.organize()
 
