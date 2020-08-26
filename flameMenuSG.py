@@ -71,7 +71,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.8'
+__version__ = 'v0.0.9'
 
 
 class flameAppFramework(object):
@@ -524,15 +524,17 @@ class flameShotgunConnector(object):
 
         # create separate sgotgun connection for cache
 
-        sg = self.sg_user.create_sg_connection()
+        # sg = self.sg_user.create_sg_connection()
 
         if perform_query:
-            entity = query.get('entity')
-            filters = query.get('filters')
-            fields = query.get('fields')
-            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+            query_body = query.get('query')
+            entity = query_body.get('entity')
+            filters = query_body.get('filters')
+            fields = query_body.get('fields')
+            self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
+            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
         
-        del sg
+        # del sg
         
         return query.get(query_type)
 
@@ -1540,6 +1542,215 @@ class flameMenuProjectconnect(flameMenuApp):
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_batchLinkBrowse.clicked.connect(batchLinkBrowse)
 
+        # General::Loader PublishedFileTypes label
+
+        lbl_PublishedFileTypes = QtWidgets.QLabel('Loader Published File Types', paneGeneral)
+        lbl_PublishedFileTypes.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_PublishedFileTypes.setMinimumSize(536, 28)
+        lbl_PublishedFileTypes.move(304, 68)
+        lbl_PublishedFileTypes.setAlignment(QtCore.Qt.AlignCenter)
+
+        # General::Loader PublishedFileTypes Button 1
+
+        btn_PublishedFileType1 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType1.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType1.setText('Not Implemented')
+        btn_PublishedFileType1.setMinimumSize(128, 28)
+        btn_PublishedFileType1.move(304, 102)
+        btn_PublishedFileType1.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType1_menu = QtWidgets.QMenu()
+        btn_PublishedFileType1_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType1_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType1.setMenu(btn_PublishedFileType1_menu)
+
+        # General::Loader PublishedFileTypes Button 2
+
+        btn_PublishedFileType2 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType2.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType2.setText('Not Implemented')
+        btn_PublishedFileType2.setMinimumSize(128, 28)
+        btn_PublishedFileType2.move(440, 102)
+        btn_PublishedFileType2.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType2_menu = QtWidgets.QMenu()
+        btn_PublishedFileType2_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType2_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType2.setMenu(btn_PublishedFileType1_menu)
+
+        # General::Loader PublishedFileTypes Button 3
+
+        btn_PublishedFileType3 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType3.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType3.setText('Not Implemented')
+        btn_PublishedFileType3.setMinimumSize(128, 28)
+        btn_PublishedFileType3.move(576, 102)
+        btn_PublishedFileType3.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType3_menu = QtWidgets.QMenu()
+        btn_PublishedFileType3_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType3_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType3.setMenu(btn_PublishedFileType1_menu)
+
+        # General::Loader PublishedFileTypes Button 4
+
+        btn_PublishedFileType4 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType4.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType4.setText('Not Implemented')
+        btn_PublishedFileType4.setMinimumSize(128, 28)
+        btn_PublishedFileType4.move(712, 102)
+        btn_PublishedFileType4.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType4_menu = QtWidgets.QMenu()
+        btn_PublishedFileType4_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType4_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType4.setMenu(btn_PublishedFileType1_menu)
+
+        '''
+        # General::Loader PublishedFileTypes Button 5
+
+        btn_PublishedFileType5 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType5.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType5.setText('Flame Batch File')
+        btn_PublishedFileType5.setMinimumSize(128, 28)
+        btn_PublishedFileType5.move(304, 136)
+        btn_PublishedFileType5.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType5_menu = QtWidgets.QMenu()
+        btn_PublishedFileType5_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType5_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType5.setMenu(btn_PublishedFileType1_menu)
+
+        # General::Loader PublishedFileTypes Button 6
+
+        btn_PublishedFileType6 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType6.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType6.setText('Flame Batch File')
+        btn_PublishedFileType6.setMinimumSize(128, 28)
+        btn_PublishedFileType6.move(440, 136)
+        btn_PublishedFileType6.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType6_menu = QtWidgets.QMenu()
+        btn_PublishedFileType6_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType6_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType6.setMenu(btn_PublishedFileType1_menu)
+
+        # General::Loader PublishedFileTypes Button 7
+
+        btn_PublishedFileType7 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType7.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType7.setText('Flame Batch File')
+        btn_PublishedFileType7.setMinimumSize(128, 28)
+        btn_PublishedFileType7.move(576, 136)
+        btn_PublishedFileType7.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType7_menu = QtWidgets.QMenu()
+        btn_PublishedFileType7_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType7_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType7.setMenu(btn_PublishedFileType1_menu)
+
+        # General::Loader PublishedFileTypes Button 8
+
+        btn_PublishedFileType8 = QtWidgets.QPushButton(paneGeneral)
+        btn_PublishedFileType8.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_PublishedFileType8.setText('Flame Batch File')
+        btn_PublishedFileType8.setMinimumSize(128, 28)
+        btn_PublishedFileType8.move(712, 136)
+        btn_PublishedFileType8.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_PublishedFileType8_menu = QtWidgets.QMenu()
+        btn_PublishedFileType8_menu.addAction('File Sequence', set_presetTypeImage)
+        btn_PublishedFileType8_menu.addAction('Movie', set_presetTypeMovie)
+        btn_PublishedFileType8.setMenu(btn_PublishedFileType1_menu)
+        '''
+        # General::Create Default Task Template Label
+
+        lbl_DefTaskTemplate = QtWidgets.QLabel('Default Task Template', paneGeneral)
+        lbl_DefTaskTemplate.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_DefTaskTemplate.setMinimumSize(298, 28)
+        lbl_DefTaskTemplate.move(0, 68)
+        lbl_DefTaskTemplate.setAlignment(QtCore.Qt.AlignCenter)
+
+        # General::Create Shot Task Template Label
+
+        lbl_ShotTaskTemplate = QtWidgets.QLabel('Shot', paneGeneral)
+        lbl_ShotTaskTemplate.setStyleSheet('QFrame {color: #989898;}')
+        lbl_ShotTaskTemplate.setMinimumSize(36, 28)
+        lbl_ShotTaskTemplate.move(0, 102)
+
+        # General::Loader Shot Task Template Menu
+        btn_ShotTaskTemplate = QtWidgets.QPushButton(paneGeneral)
+        flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
+        shot_task_template = flameMenuNewBatch_prefs.get('shot_task_template', {})
+        code = shot_task_template.get('code', 'No code')
+        btn_ShotTaskTemplate.setText(code)
+        shot_task_templates = self.connector.sg.find('TaskTemplate', [['entity_type', 'is', 'Shot']], ['code'])
+        shot_task_templates_by_id = {x.get('id'):x for x in shot_task_templates}
+        shot_task_templates_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in shot_task_templates}
+        def selectShotTaskTemplate(template_id):
+            template = shot_task_templates_by_id.get(template_id, {})
+            code = template.get('code', 'no_code')
+            btn_ShotTaskTemplate.setText(code)
+            self.framework.prefs['flameMenuNewBatch']['shot_task_template'] = template
+        btn_ShotTaskTemplate.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_ShotTaskTemplate.setMinimumSize(258, 28)
+        btn_ShotTaskTemplate.move(40, 102)
+        btn_ShotTaskTemplate.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_ShotTaskTemplate_menu = QtWidgets.QMenu()
+        for code_id in sorted(shot_task_templates_by_code_id.keys()):
+            template = shot_task_templates_by_code_id.get(code_id, {})
+            code = template.get('code', 'no_code')
+            template_id = template.get('id')
+            action = btn_ShotTaskTemplate_menu.addAction(code)
+            action.triggered[()].connect(lambda template_id=template_id: selectShotTaskTemplate(template_id))
+        btn_ShotTaskTemplate.setMenu(btn_ShotTaskTemplate_menu)
+
+        # General::Create Asset Task Template Label
+
+        lbl_AssetTaskTemplate = QtWidgets.QLabel('Asset', paneGeneral)
+        lbl_AssetTaskTemplate.setStyleSheet('QFrame {color: #989898;}')
+        lbl_AssetTaskTemplate.setMinimumSize(36, 28)
+        lbl_AssetTaskTemplate.move(0, 136)
+
+        # General::Loader Asset Task Template Menu
+        btn_AssetTaskTemplate = QtWidgets.QPushButton(paneGeneral)
+        flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
+        shot_task_template = flameMenuNewBatch_prefs.get('asset_task_template', {})
+        code = shot_task_template.get('code', 'No code')
+        btn_AssetTaskTemplate.setText(code)
+        asset_task_templates = self.connector.sg.find('TaskTemplate', [['entity_type', 'is', 'Asset']], ['code'])
+        asset_task_templates_by_id = {x.get('id'):x for x in asset_task_templates}
+        asset_task_templates_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in asset_task_templates}
+        def selectAssetTaskTemplate(template_id):
+            template = shot_task_templates_by_id.get(template_id, {})
+            code = template.get('code', 'no_code')
+            btn_AssetTaskTemplate.setText(code)
+            self.framework.prefs['flameMenuNewBatch']['asset_task_template'] = template
+        btn_AssetTaskTemplate.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_AssetTaskTemplate.setMinimumSize(258, 28)
+        btn_AssetTaskTemplate.move(40, 136)
+        btn_AssetTaskTemplate.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_AssetTaskTemplate_menu = QtWidgets.QMenu()
+        for code_id in sorted(asset_task_templates_by_code_id.keys()):
+            template = asset_task_templates_by_code_id.get(code_id, {})
+            code = template.get('code', 'no_code')
+            template_id = template.get('id')
+            action = btn_AssetTaskTemplate_menu.addAction(code)
+            action.triggered[()].connect(lambda template_id=template_id: selectAssetTaskTemplate(template_id))
+        btn_AssetTaskTemplate.setMenu(btn_AssetTaskTemplate_menu)
+
         #lbl_General = QtWidgets.QLabel('General', paneGeneral)
         #lbl_General.setStyleSheet('QFrame {color: #989898}')
         #lbl_General.setAlignment(QtCore.Qt.AlignCenter)
@@ -2388,10 +2599,38 @@ class flameMenuNewBatch(flameMenuApp):
         self.current_tasks_uid = None
         self.register_query()
 
-        if not self.prefs:
+        if not self.prefs.master.get(self.name):
             self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
+
+            self.prefs['last_sequence_used'] = {}
+
+            task_templates = self.connector.sg.find('TaskTemplate', [], ['entity_type','code'])
+            task_templates_by_id = {x.get('id'):x for x in task_templates}
+
+            if 42 in task_templates_by_id.keys():
+                self.prefs['shot_task_template'] = task_templates_by_id.get(42)
+            else:
+
+                # set to first id avaliable for Shot
+
+                for template_id in sorted(task_templates_by_id.keys()):
+                    template = task_templates_by_id.get(template_id, {})
+                    if template.get('entity_type') == 'Shot':
+                        self.prefs['shot_task_template'] = template
+                        break
+            if 41 in task_templates_by_id.keys():
+                self.prefs['asset_task_template'] = task_templates_by_id.get(41)
+            else:
+
+                # set to first id avaliable for Asset
+
+                for template_id in sorted(task_templates_by_id.keys()):
+                    template = task_templates_by_id.get(template_id, {})
+                    if template.get('entity_type') == 'Asset':
+                        self.prefs['asset_task_template'] = template
+                        break
 
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -2403,7 +2642,7 @@ class flameMenuNewBatch(flameMenuApp):
     def build_menu(self):
         '''
         # ---------------------------------
-        # menu time debug code
+        # menu build time debug code
 
         number_of_menu_itmes = 256
         menu = {'name': self.name, 'actions': []}
@@ -2416,7 +2655,7 @@ class flameMenuNewBatch(flameMenuApp):
         return menu
 
         # ---------------------------------
-        # menu time debug code
+        # menu build time debug code
         '''
 
         if not self.connector.sg_user:
@@ -2447,6 +2686,8 @@ class flameMenuNewBatch(flameMenuApp):
         menu_item['execute'] = self.flip_assigned
         menu['actions'].append(menu_item)
 
+        # found entities menu
+
         user_only = not self.prefs['show_all']
         filter_out = ['Project', 'Sequence']
         found_entities = self.get_entities(user_only, filter_out)
@@ -2460,10 +2701,18 @@ class flameMenuNewBatch(flameMenuApp):
 
         menu_main_body = []
         for index, entity_type in enumerate(sorted(found_entities.keys())):
+
             menu_item = {}
-            menu_item['name'] = '- [ ' + entity_type + 's ]'
-            menu_item['execute'] = self.rescan
+            menu_item['name'] = '- [ ' + entity_type + 's ] [+]'
+            if entity_type == 'Asset':
+                menu_item['execute'] = self.create_asset_dialog
+            elif entity_type == 'Shot':
+                menu_item['execute'] = self.create_shot_dialog
+            else:
+                menu_item['execute'] = self.rescan
+            menu_item['waitCursor'] = False
             menu_main_body.append(menu_item)
+                
             entities_by_name = {}
             for entity in found_entities[entity_type]:
                 entities_by_name[entity.get('name')] = entity
@@ -2553,7 +2802,8 @@ class flameMenuNewBatch(flameMenuApp):
         return entities
 
     def create_new_batch(self, entity):        
-        sg = self.connector.sg_user.create_sg_connection()
+        sg = self.connector.sg
+
         entity = sg.find_one (
             entity.get('type'),
             [['id', 'is', entity.get('id')]],
@@ -2649,6 +2899,350 @@ class flameMenuNewBatch(flameMenuApp):
             self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
         self.flame.batch.organize()
+
+    def create_asset_dialog(self, *args, **kwargs):
+        from PySide2 import QtWidgets, QtCore
+
+        flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
+        self.asset_task_template =  flameMenuNewBatch_prefs.get('asset_task_template', {})
+
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(280, 180)
+        window.setWindowTitle('Create Shot in Shotgun')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setAlignment(QtCore.Qt.AlignTop)
+
+        # Asset Task Template label
+
+        lbl_TaskTemplate = QtWidgets.QLabel('Task Template', window)
+        lbl_TaskTemplate.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_TaskTemplate.setMinimumHeight(28)
+        lbl_TaskTemplate.setMaximumHeight(28)
+        lbl_TaskTemplate.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_TaskTemplate)
+
+        # Create and Cancel Buttons
+        hbox_Create = QtWidgets.QHBoxLayout()
+
+        select_btn = QtWidgets.QPushButton('Create', window)
+        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        select_btn.setMinimumSize(128, 28)
+        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        select_btn.clicked.connect(window.accept)
+
+        cancel_btn = QtWidgets.QPushButton('Cancel', window)
+        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        cancel_btn.setMinimumSize(128, 28)
+        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        cancel_btn.clicked.connect(window.reject)
+
+        hbox_Create.addWidget(cancel_btn)
+        hbox_Create.addWidget(select_btn)
+
+        vbox.addLayout(hbox_Create)
+
+        window.setLayout(vbox)
+        if window.exec_():
+            pass
+
+    def create_shot_dialog(self, *args, **kwargs):
+        from PySide2 import QtWidgets, QtCore
+
+        self.sequence_name = ''
+        self.sequence_id = -1
+        flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
+        self.shot_task_template =  flameMenuNewBatch_prefs.get('shot_task_template', {})
+        self.shot_name = ''
+
+        def newSequenceDialog():
+            window_NewSequnece = QtWidgets.QDialog()
+            window_NewSequnece.setMinimumSize(280, 100)
+            window_NewSequnece.setWindowTitle('Create New Sequence in Shotgun')
+            window_NewSequnece.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+            window_NewSequnece.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            window_NewSequnece.setStyleSheet('background-color: #313131')
+
+            screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+            window_NewSequnece.move((screen_res.width()/2)-150, (screen_res.height() / 2)-280)
+
+            vbox_NewSequnece = QtWidgets.QVBoxLayout()
+            vbox_NewSequnece.setAlignment(QtCore.Qt.AlignTop)
+
+            # Shot Name Label
+
+            lbl_SequenceName = QtWidgets.QLabel('New Sequence Name', window_NewSequnece)
+            lbl_SequenceName.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+            lbl_SequenceName.setMinimumHeight(28)
+            lbl_SequenceName.setMaximumHeight(28)
+            lbl_SequenceName.setAlignment(QtCore.Qt.AlignCenter)
+            vbox_NewSequnece.addWidget(lbl_SequenceName)
+
+            # Sequence Name Text Field
+            def txt_NewSequenceName_textChanged():
+                self.sequence_name = txt_NewSequenceName.text()
+            txt_NewSequenceName = QtWidgets.QLineEdit('', window_NewSequnece)
+            txt_NewSequenceName.setFocusPolicy(QtCore.Qt.ClickFocus)
+            txt_NewSequenceName.setMinimumSize(280, 28)
+            txt_NewSequenceName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+            txt_NewSequenceName.textChanged.connect(txt_NewSequenceName_textChanged)
+            vbox_NewSequnece.addWidget(txt_NewSequenceName)
+
+            # Create and Cancel Buttons
+            hbox_NewSequneceCreate = QtWidgets.QHBoxLayout()
+
+            btn_NewSequenceCreate = QtWidgets.QPushButton('Create', window_NewSequnece)
+            btn_NewSequenceCreate.setFocusPolicy(QtCore.Qt.NoFocus)
+            btn_NewSequenceCreate.setMinimumSize(128, 28)
+            btn_NewSequenceCreate.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+            btn_NewSequenceCreate.clicked.connect(window_NewSequnece.accept)
+
+            btn_NewSequenceCancel = QtWidgets.QPushButton('Cancel', window_NewSequnece)
+            btn_NewSequenceCancel.setFocusPolicy(QtCore.Qt.NoFocus)
+            btn_NewSequenceCancel.setMinimumSize(128, 28)
+            btn_NewSequenceCancel.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}')
+            btn_NewSequenceCancel.clicked.connect(window_NewSequnece.reject)
+
+            hbox_NewSequneceCreate.addWidget(btn_NewSequenceCancel)
+            hbox_NewSequneceCreate.addWidget(btn_NewSequenceCreate)
+
+            vbox_NewSequnece.addLayout(hbox_NewSequneceCreate)
+
+            window_NewSequnece.setLayout(vbox_NewSequnece)
+
+            if window_NewSequnece.exec_():
+                if self.sequence_name == '':
+                    return {}
+                else:
+                    data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
+                    'code': self.sequence_name}
+                    return self.connector.sg.create('Sequence', data)
+            else:
+                return {}
+
+        window = QtWidgets.QDialog()
+        window.setMinimumSize(280, 180)
+        window.setWindowTitle('Create Shot in Shotgun')
+        window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        window.setStyleSheet('background-color: #313131')
+
+        screen_res = QtWidgets.QDesktopWidget().screenGeometry()
+        window.move((screen_res.width()/2)-150, (screen_res.height() / 2)-180)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.setAlignment(QtCore.Qt.AlignTop)
+
+        # Sequence label
+
+        lbl_Sequence = QtWidgets.QLabel('Sequence', window)
+        lbl_Sequence.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_Sequence.setMinimumHeight(28)
+        lbl_Sequence.setMaximumHeight(28)
+        lbl_Sequence.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_Sequence)
+
+        # Sequence Selector and New Sequence Button Hbox
+
+        # hbox_Sequence = QtWidgets.QHBoxLayout()
+        # hbox_Sequence.setAlignment(QtCore.Qt.AlignLeft)
+
+        # Sequence Selector Button
+
+        btn_Sequence = QtWidgets.QPushButton(window)
+        self.sequences = self.connector.sg.find('Sequence', 
+            [['project', 'is', {'type': 'Project', 'id': self.connector.sg_linked_project_id}]], 
+            ['code'])
+        if self.prefs.get('last_sequence_used'):
+            sequence = self.prefs.get('last_sequence_used', {})
+            code = sequence.get('code', 'No Name')
+            self.sequence_id = sequence.get('id', -1)
+        else:
+            code = 'DefaultSequence'
+        btn_Sequence.setText(code)
+        self.sequences_by_id = {x.get('id'):x for x in self.sequences}
+        self.sequences_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in self.sequences}
+        def selectSequence(sequence_id):
+            
+            if sequence_id == 0:
+                new_sequence = newSequenceDialog()
+                if new_sequence:
+                    btn_Sequence_menu.clear()
+                    self.sequences = self.connector.sg.find('Sequence', 
+                    [['project', 'is', {'type': 'Project', 'id': self.connector.sg_linked_project_id}]], 
+                    ['code'])
+                    self.sequences_by_id = {x.get('id'):x for x in self.sequences}
+                    self.sequences_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in self.sequences}
+                    action = btn_Sequence_menu.addAction('DefaultSequence')
+                    action.triggered[()].connect(lambda sequence_id=-1: selectSequence(sequence_id))
+                    for code_id in sorted(self.sequences_by_code_id.keys()):
+                        sequence = self.sequences_by_code_id.get(code_id, {})
+                        code = sequence.get('code', 'No code')
+                        sequence_id = sequence.get('id')
+                        action = btn_Sequence_menu.addAction(code)
+                        action.triggered[()].connect(lambda sequence_id=sequence_id: selectSequence(sequence_id))
+                    action = btn_Sequence_menu.addAction('Create New Sequence...')
+                    action.triggered[()].connect(lambda sequence_id=0: selectSequence(sequence_id))
+                    btn_Sequence.setMenu(btn_Sequence_menu)
+                    self.sequence_id = new_sequence.get('id')
+                    btn_Sequence.setText(new_sequence.get('code'))
+
+            elif sequence_id == -1:
+                self.sequence_id = -1
+                btn_Sequence.setText('DefaultSequence')
+                return
+            else:
+                sequence = self.sequences_by_id.get(sequence_id, {})
+                code = sequence.get('code', 'no_code')
+                btn_Sequence.setText(code)
+                self.sequence_id = sequence_id
+                self.prefs['last_sequence_used'] = sequence
+
+        btn_Sequence.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_Sequence.setMinimumSize(280, 28)
+        btn_Sequence.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_Sequence_menu = QtWidgets.QMenu()
+        action = btn_Sequence_menu.addAction('DefaultSequence')
+        action.triggered[()].connect(lambda sequence_id=-1: selectSequence(sequence_id))
+        for code_id in sorted(self.sequences_by_code_id.keys()):
+            sequence = self.sequences_by_code_id.get(code_id, {})
+            code = sequence.get('code', 'No code')
+            sequence_id = sequence.get('id')
+            action = btn_Sequence_menu.addAction(code)
+            action.triggered[()].connect(lambda sequence_id=sequence_id: selectSequence(sequence_id))
+        action = btn_Sequence_menu.addAction('Create New Sequence...')
+        action.triggered[()].connect(lambda sequence_id=0: selectSequence(sequence_id))
+        btn_Sequence.setMenu(btn_Sequence_menu)
+        vbox.addWidget(btn_Sequence)
+
+        # Shot Task Template label
+
+        lbl_TaskTemplate = QtWidgets.QLabel('Task Template', window)
+        lbl_TaskTemplate.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_TaskTemplate.setMinimumHeight(28)
+        lbl_TaskTemplate.setMaximumHeight(28)
+        lbl_TaskTemplate.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_TaskTemplate)
+
+        # Shot Task Template Menu
+
+        btn_ShotTaskTemplate = QtWidgets.QPushButton(window)
+        flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
+        shot_task_template = flameMenuNewBatch_prefs.get('shot_task_template', {})
+        code = shot_task_template.get('code', 'No code')
+        btn_ShotTaskTemplate.setText(code)
+        shot_task_templates = self.connector.sg.find('TaskTemplate', [['entity_type', 'is', 'Shot']], ['code'])
+        shot_task_templates_by_id = {x.get('id'):x for x in shot_task_templates}
+        shot_task_templates_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in shot_task_templates}
+        def selectShotTaskTemplate(template_id):
+            template = shot_task_templates_by_id.get(template_id, {})
+            code = template.get('code', 'no_code')
+            btn_ShotTaskTemplate.setText(code)
+            self.shot_task_template = template
+        btn_ShotTaskTemplate.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_ShotTaskTemplate.setMinimumSize(258, 28)
+        btn_ShotTaskTemplate.move(40, 102)
+        btn_ShotTaskTemplate.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_ShotTaskTemplate_menu = QtWidgets.QMenu()
+        for code_id in sorted(shot_task_templates_by_code_id.keys()):
+            template = shot_task_templates_by_code_id.get(code_id, {})
+            code = template.get('code', 'no_code')
+            template_id = template.get('id')
+            action = btn_ShotTaskTemplate_menu.addAction(code)
+            action.triggered[()].connect(lambda template_id=template_id: selectShotTaskTemplate(template_id))
+        btn_ShotTaskTemplate.setMenu(btn_ShotTaskTemplate_menu)
+        vbox.addWidget(btn_ShotTaskTemplate)
+
+        # Shot Name Label
+
+        lbl_ShotName = QtWidgets.QLabel('New Shot Name', window)
+        lbl_ShotName.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_ShotName.setMinimumHeight(28)
+        lbl_ShotName.setMaximumHeight(28)
+        lbl_ShotName.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_ShotName)
+
+        # Shot Name Text Field
+        def txt_ShotName_textChanged():
+            self.shot_name = txt_ShotName.text()
+        txt_ShotName = QtWidgets.QLineEdit('', window)
+        txt_ShotName.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_ShotName.setMinimumSize(280, 28)
+        txt_ShotName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        txt_ShotName.textChanged.connect(txt_ShotName_textChanged)
+        vbox.addWidget(txt_ShotName)
+
+        # Spacer Label
+
+        lbl_Spacer = QtWidgets.QLabel('', window)
+        lbl_Spacer.setStyleSheet('QFrame {color: #989898; background-color: #313131}')
+        lbl_Spacer.setMinimumHeight(4)
+        lbl_Spacer.setMaximumHeight(4)
+        lbl_Spacer.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_Spacer)
+
+        # Create and Cancel Buttons
+        hbox_Create = QtWidgets.QHBoxLayout()
+
+        select_btn = QtWidgets.QPushButton('Create', window)
+        select_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        select_btn.setMinimumSize(128, 28)
+        select_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        select_btn.clicked.connect(window.accept)
+
+        cancel_btn = QtWidgets.QPushButton('Cancel', window)
+        cancel_btn.setFocusPolicy(QtCore.Qt.NoFocus)
+        cancel_btn.setMinimumSize(128, 28)
+        cancel_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                'QPushButton:pressed {font:italic; color: #d9d9d9}')
+        cancel_btn.clicked.connect(window.reject)
+
+        hbox_Create.addWidget(cancel_btn)
+        hbox_Create.addWidget(select_btn)
+
+        vbox.addLayout(hbox_Create)
+
+        window.setLayout(vbox)
+        if window.exec_():
+            if self.shot_name == '':
+                return {}
+            else:
+                data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
+                'code': self.shot_name,
+                'task_template': self.shot_task_template}
+                self.log('creating new shot...')
+                new_shot = self.connector.sg.create('Shot', data)
+                self.log('new shot:\n%s' % pformat(new_shot))
+                self.log('updating async cache for uid: %s' % self.current_tasks_uid)
+                self.connector.async_cache_get(self.current_tasks_uid, True)
+                self.log('creating new batch')
+                self.create_new_batch(new_shot)
+                return new_shot
+        else:
+            return {}
+
+        '''
+        data = {'project': {'type': 'Project','id': 4},
+        'code': '100_010',
+        'description': 'dark shot with wicked cool ninjas',
+        'task_template': template }
+        result = sg.create('Shot', data)
+        '''
 
     def build_flame_friendly_path(self, path):
         import re
@@ -2773,7 +3367,7 @@ class flameMenuBatchLoader(flameMenuApp):
         self.connector = connector
 
         # app defaults
-        if not self.prefs:
+        if not self.prefs.master.get(self.name):
             self.prefs['show_all'] = True
             self.prefs['current_page'] = 0
             self.prefs['menu_max_items_per_page'] = 128
