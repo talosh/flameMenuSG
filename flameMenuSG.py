@@ -2903,12 +2903,13 @@ class flameMenuNewBatch(flameMenuApp):
     def create_asset_dialog(self, *args, **kwargs):
         from PySide2 import QtWidgets, QtCore
 
+        self.asset_name = ''
         flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
         self.asset_task_template =  flameMenuNewBatch_prefs.get('asset_task_template', {})
 
         window = QtWidgets.QDialog()
         window.setMinimumSize(280, 180)
-        window.setWindowTitle('Create Shot in Shotgun')
+        window.setWindowTitle('Create Asset in Shotgun')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         window.setStyleSheet('background-color: #313131')
@@ -2927,6 +2928,65 @@ class flameMenuNewBatch(flameMenuApp):
         lbl_TaskTemplate.setMaximumHeight(28)
         lbl_TaskTemplate.setAlignment(QtCore.Qt.AlignCenter)
         vbox.addWidget(lbl_TaskTemplate)
+
+        # Shot Task Template Menu
+
+        btn_AssetTaskTemplate = QtWidgets.QPushButton(window)
+        flameMenuNewBatch_prefs = self.framework.prefs.get('flameMenuNewBatch', {})
+        asset_task_template = flameMenuNewBatch_prefs.get('asset_task_template', {})
+        code = asset_task_template.get('code', 'No code')
+        btn_AssetTaskTemplate.setText(code)
+        asset_task_templates = self.connector.sg.find('TaskTemplate', [['entity_type', 'is', 'Asset']], ['code'])
+        asset_task_templates_by_id = {x.get('id'):x for x in asset_task_templates}
+        asset_task_templates_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in asset_task_templates}
+        def selectAssetTaskTemplate(template_id):
+            template = shot_task_templates_by_id.get(template_id, {})
+            code = template.get('code', 'no_code')
+            btn_AssetTaskTemplate.setText(code)
+            self.asset_task_template = template
+        btn_AssetTaskTemplate.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_AssetTaskTemplate.setMinimumSize(258, 28)
+        btn_AssetTaskTemplate.move(40, 102)
+        btn_AssetTaskTemplate.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #29323d; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                                    'QPushButton:pressed {font:italic; color: #d9d9d9}'
+                                    'QPushButton::menu-indicator {image: none;}')
+        btn_AssetTaskTemplate_menu = QtWidgets.QMenu()
+        for code_id in sorted(asset_task_templates_by_code_id.keys()):
+            template = asset_task_templates_by_code_id.get(code_id, {})
+            code = template.get('code', 'no_code')
+            template_id = template.get('id')
+            action = btn_AssetTaskTemplate_menu.addAction(code)
+            action.triggered[()].connect(lambda template_id=template_id: selectAssetTaskTemplate(template_id))
+        btn_AssetTaskTemplate.setMenu(btn_AssetTaskTemplate_menu)
+        vbox.addWidget(btn_AssetTaskTemplate)
+
+        # Shot Name Label
+
+        lbl_AssettName = QtWidgets.QLabel('New Asset Name', window)
+        lbl_AssettName.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_AssettName.setMinimumHeight(28)
+        lbl_AssettName.setMaximumHeight(28)
+        lbl_AssettName.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_AssettName)
+
+        # Shot Name Text Field
+        def txt_AssetName_textChanged():
+            self.asset_name = txt_AssetName.text()
+        txt_AssetName = QtWidgets.QLineEdit('', window)
+        txt_AssetName.setFocusPolicy(QtCore.Qt.ClickFocus)
+        txt_AssetName.setMinimumSize(280, 28)
+        txt_AssetName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
+        txt_AssetName.textChanged.connect(txt_AssetName_textChanged)
+        vbox.addWidget(txt_AssetName)
+
+        # Spacer Label
+
+        lbl_Spacer = QtWidgets.QLabel('', window)
+        lbl_Spacer.setStyleSheet('QFrame {color: #989898; background-color: #313131}')
+        lbl_Spacer.setMinimumHeight(4)
+        lbl_Spacer.setMaximumHeight(4)
+        lbl_Spacer.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(lbl_Spacer)
 
         # Create and Cancel Buttons
         hbox_Create = QtWidgets.QHBoxLayout()
@@ -2952,7 +3012,22 @@ class flameMenuNewBatch(flameMenuApp):
 
         window.setLayout(vbox)
         if window.exec_():
-            pass
+            if self.asset_name == '':
+                return {}
+            else:
+                data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
+                'code': self.asset_name,
+                'task_template': self.asset_task_template}
+                self.log('creating new asset...')
+                new_asset = self.connector.sg.create('Asset', data)
+                self.log('new asset:\n%s' % pformat(new_asset))
+                self.log('updating async cache for uid: %s' % self.current_tasks_uid)
+                self.connector.async_cache_get(self.current_tasks_uid, True)
+                self.log('creating new batch')
+                self.create_new_batch(new_asset)
+                return new_asset
+        else:
+            return {}
 
     def create_shot_dialog(self, *args, **kwargs):
         from PySide2 import QtWidgets, QtCore
@@ -3222,8 +3297,18 @@ class flameMenuNewBatch(flameMenuApp):
             if self.shot_name == '':
                 return {}
             else:
+                if self.sequence_id == -1:
+                    shot_sequence = self.connector.sg.find_one('Sequence', [['code', 'is', 'DefaultSequence']])
+                    if not shot_sequence:
+                        sequence_data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
+                        'code': 'DefaultSequence'}
+                        shot_sequence = self.connector.sg.create('Sequence', sequence_data)
+                else:
+                    shot_sequence = self.connector.sg.find_one('Sequence', [['id', 'is', self.sequence_id]])
+
                 data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
                 'code': self.shot_name,
+                'sg_sequence': shot_sequence,
                 'task_template': self.shot_task_template}
                 self.log('creating new shot...')
                 new_shot = self.connector.sg.create('Shot', data)
@@ -4250,10 +4335,10 @@ class flameMenuPublisher(flameMenuApp):
             task_step_code = task_step.upper()
         sequence = task.get('entity.Shot.sg_sequence')
         if not sequence:
-            sequence_name = 'DefaultSequence'
+            sequence_name = 'NoSequence'
         else:
-            sequence_name = sequence.get('name', 'DefaultSequence')
-        sg_asset_type = task.get('entity.Asset.sg_asset_type','Default')
+            sequence_name = sequence.get('name', 'NoSequence')
+        sg_asset_type = task.get('entity.Asset.sg_asset_type','NoType')
         uid = self.create_uid()    
         
         # linked .batch file path resolution
