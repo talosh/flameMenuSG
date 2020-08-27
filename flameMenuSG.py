@@ -705,7 +705,7 @@ class flameShotgunConnector(object):
                 name = project.get('name')
                 if not name:
                     return 'unknown_project'
-                return self.sanitize_name(name)
+                return self.sanitize_name(name).lower()
 
         return project.get('tank_name').lower()
 
@@ -1057,6 +1057,7 @@ class flameShotgunConnector(object):
             if current_batch_name != self.batch_name:
                 self.rescan_flag = True
             self.loop_timeout(timeout, start)
+
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -1552,6 +1553,8 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # General::Loader PublishedFileTypes label
 
+        '''
+
         lbl_PublishedFileTypes = QtWidgets.QLabel('Loader Published File Types', paneGeneral)
         lbl_PublishedFileTypes.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_PublishedFileTypes.setMinimumSize(536, 28)
@@ -1618,7 +1621,6 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_PublishedFileType4_menu.addAction('Movie', set_presetTypeMovie)
         btn_PublishedFileType4.setMenu(btn_PublishedFileType1_menu)
 
-        '''
         # General::Loader PublishedFileTypes Button 5
 
         btn_PublishedFileType5 = QtWidgets.QPushButton(paneGeneral)
@@ -1678,7 +1680,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_PublishedFileType8_menu.addAction('File Sequence', set_presetTypeImage)
         btn_PublishedFileType8_menu.addAction('Movie', set_presetTypeMovie)
         btn_PublishedFileType8.setMenu(btn_PublishedFileType1_menu)
-        '''
+
+        ''' # end of loader PublishedFileType settings
+
         # General::Create Default Task Template Label
 
         lbl_DefTaskTemplate = QtWidgets.QLabel('Default Task Template', paneGeneral)
@@ -4321,9 +4325,9 @@ class flameMenuPublisher(flameMenuApp):
 
         if not os.path.isdir(project_path):
             try:
-                os.path.makedirs(project_path)
-            except:
-                message = 'Publishing stopped: Unable to create project folder %s' % project_path
+                os.makedirs(project_path)
+            except Exception as e:
+                message = 'Publishing stopped: Unable to create project folder %s, reason: %s' % (project_path, e)
                 self.mbox.setText(message)
                 self.mbox.exec_()
                 return False
