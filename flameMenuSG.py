@@ -4134,13 +4134,12 @@ class flameMenuPublisher(flameMenuApp):
         if not self.connector.sg_linked_project:
             return None
 
-        sg = self.connector.sg
         batch_name = self.flame.batch.name.get_value()
-        self.log('publish menu: batch name is: %s' % batch_name)
         tasks = []
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
-        if not cached_tasks:
 
+        if not isinstance(cached_tasks, list):
+            
             # try to unregister cache and register again
 
             self.unregister_query()
@@ -4198,6 +4197,7 @@ class flameMenuPublisher(flameMenuApp):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
 
         menus = []
+
         add_remove_menu = self.build_addremove_menu()
         for action in add_remove_menu['actions']:
             action['isVisible'] = self.scope_clip
@@ -4243,6 +4243,7 @@ class flameMenuPublisher(flameMenuApp):
 
         user_only = not self.prefs['show_all']
         filter_out = ['Project', 'Sequence']
+
         found_entities = self.get_entities(user_only, filter_out)
 
         if len(found_entities) == 0:
@@ -4327,8 +4328,6 @@ class flameMenuPublisher(flameMenuApp):
         entity['code'] = entity.get('name', 'no_name')
         start = time.time()
 
-        sg = self.connector.sg
-
         entity_type = entity.get('type')
         entity_id = entity.get('id')
         if entity_id not in self.prefs.keys():
@@ -4338,7 +4337,8 @@ class flameMenuPublisher(flameMenuApp):
 
         tasks = []
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
-        if not cached_tasks:
+        
+        if not isinstance(cached_tasks, list):
 
             # try to unregister cache and register again
 
@@ -4361,10 +4361,11 @@ class flameMenuPublisher(flameMenuApp):
                 continue
             tasks.append(cached_task)
         
+
         versions = []
         cached_versions = self.connector.async_cache_get(self.current_versions_uid)
 
-        if not cached_versions:
+        if not isinstance(cached_versions, list):
 
             # try to unregister cache and register again
 
@@ -4378,7 +4379,6 @@ class flameMenuPublisher(flameMenuApp):
                 # give up
 
                 return {}
-
 
         for cached_version in cached_versions:
             version_entity = cached_version.get('entity')
@@ -4394,48 +4394,6 @@ class flameMenuPublisher(flameMenuApp):
             human_user = self.connector.sg_human_user
 
         
-        '''
-        found_entity = sg.find_one(
-                    entity_type,
-                    [['id', 'is', entity_id]],
-                    ['code']
-        )
-        
-        if not found_entity:
-            return {}
-
-        tasks = sg.find(
-            'Task',
-            [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
-            [
-                'content',
-                'step.Step.code',
-                'step.Step.short_name',
-                'task_assignees',
-                'project.Project.id',
-                'entity',
-                'entity.Asset.sg_asset_type',
-                'entity.Shot.sg_sequence'
-            ]
-        )
-
-        versions = sg.find(
-            'Version',
-            [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
-            [
-                'code',
-                'sg_task.Task.id'
-            ]
-        )
-        
-        pprint (versions)
-        
-        human_user = sg.find_one('HumanUser', 
-                [['login', 'is', self.connector.sg_user.login]],
-                []
-                )
-        '''
-
         self.log('publish menu search block took %s' % (time.time() - start))
 
         menu = {}
@@ -5247,7 +5205,8 @@ class flameMenuPublisher(flameMenuApp):
         # get current tasks form async cache
 
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
-        if not cached_tasks:
+
+        if not isinstance(cached_tasks, list):
 
             # try to unregister cache and register again
 
@@ -5294,6 +5253,7 @@ class flameMenuPublisher(flameMenuApp):
                 shots.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Shot'})
             elif entity.get('type') == 'Asset':
                 assets.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Asset'})
+        
         return {'Asset': assets, 'Shot': shots}
         
         '''
