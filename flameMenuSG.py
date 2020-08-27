@@ -3528,7 +3528,7 @@ class flameMenuBatchLoader(flameMenuApp):
         sg = self.connector.sg
 
         batch_name = self.flame.batch.name.get_value()
-        if ('additional menu ' + batch_name) in self.prefs.keys():
+        if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
         else:
             self.prefs['additional menu ' + batch_name] = []
