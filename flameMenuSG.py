@@ -5789,6 +5789,22 @@ class flameMenuPublisher(flameMenuApp):
         else:
             return False
 
+    def rescan(self, *args, **kwargs):
+        if not self.flame:
+            try:
+                import flame
+                self.flame = flame
+            except:
+                self.flame = None
+
+        self.connector.async_cache_get(self.current_tasks_uid, True)
+        self.connector.async_cache.get(self.current_versions_uid, True)
+
+        if self.flame:
+            self.flame.execute_shortcut('Rescan Python Hooks')
+            self.log('Rescan Python Hooks')
+            if self.connector:
+                self.connector.rescan_flag = False
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
