@@ -20,8 +20,8 @@ The file storage to use with a particular flame project can be selected via flam
 Preferences for flameMenuSG are stored next to Shotgun preferences, \~/Library/Caches/Shotgun/flameMenuSG/<hostname> on MacOSX and \~/.shotgun/flameMenuSG/<hostname> on 
 Linux. flameMenuSG.prefs file contains global scope preferences, while flameMenuSG.<flame_user>.prefs and flameMenuSG.<flame_user>.<flame_project>.prefs are user scope and project scope preferences.
 
-
-Some things are still hardcoded so it might not work for you out of the box. If this is the case please let me know what exactly does not work for you.
-
-NOTE: Refreshing custom menus in flame is currently limited to "refresh pyton hooks".
-That means it is going to reload all pythong hooks currently enabled in the system.
+### Known issues
+Context menus speed might degrade depending on an actual set of other python hooks in the system.
+This is due to Flame current limitation with refreshing context menus that forces other python hooks to be refreshed as well.
+If you experience context menu slowdown try to turn off Auto Refresh setting for this menu in flameMenuSG Preferences->General.
+You may have to refresh menus manually using "~ Refresh" menu command in order to get menu up to date.
