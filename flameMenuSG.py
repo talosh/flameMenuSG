@@ -470,8 +470,8 @@ class flameShotgunConnector(object):
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(300, )))
-        self.loops.append(threading.Thread(target=self.batch_group_check, args=(4, )))
+        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(60, )))
+        # self.loops.append(threading.Thread(target=self.batch_group_check, args=(4, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -538,7 +538,10 @@ class flameShotgunConnector(object):
             fields = query_body.get('fields')
             self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
             self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
-                
+        
+        if query_type == 'result':
+            return list(query.get('result'))
+        
         return query.get(query_type)
 
     def async_cache_clear(self):
@@ -3562,7 +3565,16 @@ class flameMenuNewBatch(flameMenuApp):
                 self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': ['entity', 'task_assignees']
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
                 })
                 return True
             else:
@@ -3573,7 +3585,16 @@ class flameMenuNewBatch(flameMenuApp):
             self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': ['entity', 'task_assignees']
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ] 
             })
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
@@ -4054,6 +4075,11 @@ class flameMenuPublisher(flameMenuApp):
         self.mbox = QtGui.QMessageBox()
         self.create_export_presets()
         
+        # async cache related initialization
+        self.current_tasks_uid = None
+        self.current_versions_uid = None
+        self.register_query()
+        
     def __getattr__(self, name):
         def method(*args, **kwargs):
             entity = self.dynamic_menu_data.get(name)
@@ -4091,29 +4117,28 @@ class flameMenuPublisher(flameMenuApp):
             return None
 
         sg = self.connector.sg
-
-
         batch_name = self.flame.batch.name.get_value()
-
         self.log('publish menu: batch name is: %s' % batch_name)
+        tasks = []
+        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            tasks.append(cached_task)
+        entities_id_list = [task.get('entity').get('id') for task in tasks]
         
         add_menu_list = []
 
         if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
+
             for index, stored_entity in enumerate(add_menu_list):
                 stored_entity_type = stored_entity.get('type', 'Shot')
                 stored_entity_id = stored_entity.get('id', 0)
-                found_entity = sg.find_one(stored_entity_type, [['id', 'is', stored_entity_id]])
-                if not found_entity:
+                if not stored_entity_id in entities_id_list:
                     add_menu_list.pop(index)
-
-            if not add_menu_list:
-                project_id = self.connector.sg_linked_project_id
-                tasks = sg.find('Task',
-                    [['project.Project.id', 'is', project_id]],
-                    ['entity']
-                )
+            
+            if not add_menu_list:                                
                 entity = {}
                 for task in tasks:
                     current_entity = task.get('entity')
@@ -4127,11 +4152,7 @@ class flameMenuPublisher(flameMenuApp):
 
         else:
             self.prefs['additional menu ' + batch_name] = []
-            project_id = self.connector.sg_linked_project_id
-            tasks = sg.find('Task',
-                [['project.Project.id', 'is', project_id]],
-                ['entity']
-            )
+
             entity = {}
             for task in tasks:
                 current_entity = task.get('entity')
@@ -4167,8 +4188,8 @@ class flameMenuPublisher(flameMenuApp):
         flame_project_name = self.flame.project.current_project.name
         batch_name = self.flame.batch.name.get_value()
         entities_to_mark = []
-        batch_loader_additional = self.prefs.get('additional menu ' + batch_name)
-        for item in batch_loader_additional:
+        add_menu_list = self.prefs.get('additional menu ' + batch_name)
+        for item in add_menu_list:
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
@@ -4270,6 +4291,9 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def build_publish_menu(self, entity):
+        entity['code'] = entity.get('name', 'no_name')
+        start = time.time()
+
         sg = self.connector.sg
 
         entity_type = entity.get('type')
@@ -4279,6 +4303,32 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs[entity_id]['show_all'] = True
         prefs = self.prefs.get(entity_id)
 
+        tasks = []
+        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            if cached_task.get('entity').get('id') != entity_id:
+                continue
+            tasks.append(cached_task)
+        
+        versions = []
+        cached_versions = self.connector.async_cache_get(self.current_versions_uid)
+        for cached_version in cached_versions:
+            version_entity = cached_version.get('entity')
+            if not version_entity:
+                continue
+            if entity.get('id', 0) == version_entity.get('id'):
+                versions.append(cached_version)
+        
+
+        if not self.connector.sg_human_user:
+            human_user = {'id': 0}
+        else:
+            human_user = self.connector.sg_human_user
+
+        
+        '''
         found_entity = sg.find_one(
                     entity_type,
                     [['id', 'is', entity_id]],
@@ -4312,13 +4362,18 @@ class flameMenuPublisher(flameMenuApp):
             ]
         )
         
+        pprint (versions)
+        
         human_user = sg.find_one('HumanUser', 
                 [['login', 'is', self.connector.sg_user.login]],
                 []
                 )
+        '''
+
+        self.log('publish menu search block took %s' % (time.time() - start))
 
         menu = {}
-        menu['name'] = 'Publish ' + found_entity.get('code') + ':'
+        menu['name'] = 'Publish ' + entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
@@ -5122,6 +5177,45 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['additional menu ' + batch_name] = add_list
 
     def get_entities(self, user_only = True, filter_out=[]):
+        
+        # get current tasks form async cache
+
+        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+
+        # remove tasks without entities and filter if user_only
+        
+        user_id = 0
+        if self.connector.sg_human_user:
+            user_id = self.connector.sg_human_user.get('id', 0)
+        tasks = []
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            if user_only:
+                if not cached_task.get('task_assignees'):
+                    continue
+                else:
+                    task_assignees_ids = [assignee.get('id') for assignee in cached_task.get('task_assignees', [])]
+                    if user_id not in task_assignees_ids:
+                        continue
+
+            tasks.append(cached_task)            
+
+        # group entities by id
+
+        entities_by_id = {task.get('entity').get('id'):task.get('entity') for task in tasks}
+        
+        shots = []
+        assets = []
+        for entity_id in sorted(entities_by_id.keys()):
+            entity = entities_by_id.get(entity_id)
+            if entity.get('type') == 'Shot':
+                shots.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Shot'})
+            elif entity.get('type') == 'Asset':
+                assets.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Asset'})
+        return {'Asset': assets, 'Shot': shots}
+        
+        '''
         sg = self.connector.sg
 
         project_id = self.connector.sg_linked_project_id
@@ -5161,6 +5255,7 @@ class flameMenuPublisher(flameMenuApp):
             found_entities[entity_type] = list(found_by_type)
 
         return found_entities
+        '''
 
     def build_flame_friendly_path(self, path):
         import glob
@@ -5620,7 +5715,80 @@ class flameMenuPublisher(flameMenuApp):
                 self.mbox.setText(message)
                 self.mbox.exec_()
         self.prefs['flame_bug_message_shown'] = True
-    
+
+    def register_query(self, *args, **kwargs):
+        if self.connector.sg_linked_project_id and self.current_tasks_uid:
+            # check if project id match
+            try:
+                filters = self.connector.async_cache.get(self.current_tasks_uid).get('query').get('filters')
+                project_id = filters[0][2]
+            except:
+                return False
+
+            if project_id != self.connector.sg_linked_project_id:
+                # unregiter old id and register new one
+                self.connector.async_cache_unregister(self.current_tasks_uid)
+                self.current_tasks_uid = self.connector.async_cache_register({
+                    'entity': 'Task',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
+                })
+                self.current_versions_uid = self.connector.async_cache_register({
+                    'entity': 'Version',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'code',
+                        'sg_task.Task.id',
+                        'entity'
+                    ]
+                })
+                return True
+            else:
+                return False
+            
+        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
+            # register new query from scratch
+            self.current_tasks_uid = self.connector.async_cache_register({
+                    'entity': 'Task',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
+            # ['entity', 'task_assignees']
+            })
+            self.current_versions_uid = self.connector.async_cache_register({
+                    'entity': 'Version',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'code',
+                        'sg_task.Task.id',
+                        'entity'
+                    ]
+            })          
+            return True
+        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
+            # unregister current uid
+            self.connector.async_cache_unregister(self.current_tasks_uid)
+            return True
+        else:
+            return False
+
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
@@ -5721,6 +5889,7 @@ def project_saved(project_name, save_time, is_auto_save):
             shotgunConnector.rescan_flag = False
             
 def get_main_menu_custom_ui_actions():
+    start = time.time()
     menu = []
     flameMenuProjectconnectApp = None
     for app in apps:
@@ -5731,11 +5900,17 @@ def get_main_menu_custom_ui_actions():
     if menu:
         menu[0]['actions'].append({'name': __version__, 'isEnabled': False})
 
-    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-    if menu_auto_refresh.get('main_menu', False):
-        try:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
+    if DEBUG:
+        print('main menu update took %s' % (time.time() - start))
+
+    if app_framework:
+        menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+        if menu_auto_refresh.get('main_menu', False):
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+            except:
+                pass
     return menu
 
 def get_media_panel_custom_ui_actions():
@@ -5752,16 +5927,20 @@ def get_media_panel_custom_ui_actions():
             if app_menu:
                 menu.extend(app_menu)
     if DEBUG:
-        print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
+        print('media panel menu update took %s' % (time.time() - start))
 
-    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-    if menu_auto_refresh.get('media_panel', False):
-        try:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
+    if app_framework:
+        menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+        if menu_auto_refresh.get('media_panel', False):
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+            except:
+                pass
     return menu
 
 def get_batch_custom_ui_actions():
+    start = time.time()
     menu = []
     flameMenuBatchLoaderApp = None
     for app in apps:
@@ -5772,11 +5951,17 @@ def get_batch_custom_ui_actions():
         for menuitem in flameMenuBatchLoaderApp.build_menu():
             menu.append(menuitem)
 
-    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-    if menu_auto_refresh.get('batch', False):
-        try:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
+    if DEBUG:
+        print('batch menu update took %s' % (time.time() - start))
+
+    if app_framework:
+        menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+        if menu_auto_refresh.get('batch', False):
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+            except:
+                pass
     return menu
 
 def batch_render_begin(info, userData, *args, **kwargs):
