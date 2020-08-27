@@ -700,7 +700,7 @@ class flameShotgunConnector(object):
                 name = project.get('name')
                 if not name:
                     return 'unknown_project'
-                return self.sanitize_name(name)
+                return self.sanitize_name(name).lower()
 
         return project.get('tank_name')
 
