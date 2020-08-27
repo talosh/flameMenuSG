@@ -3565,7 +3565,16 @@ class flameMenuNewBatch(flameMenuApp):
                 self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': ['entity', 'task_assignees']
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
                 })
                 return True
             else:
@@ -3576,7 +3585,16 @@ class flameMenuNewBatch(flameMenuApp):
             self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': ['entity', 'task_assignees']
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ] 
             })
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
@@ -4059,6 +4077,7 @@ class flameMenuPublisher(flameMenuApp):
         
         # async cache related initialization
         self.current_tasks_uid = None
+        self.current_versions_uid = None
         self.register_query()
         
     def __getattr__(self, name):
@@ -4272,6 +4291,7 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def build_publish_menu(self, entity):
+        entity['code'] = entity.get('name', 'no_name')
         start = time.time()
 
         sg = self.connector.sg
@@ -4283,6 +4303,32 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs[entity_id]['show_all'] = True
         prefs = self.prefs.get(entity_id)
 
+        tasks = []
+        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            if cached_task.get('entity').get('id') != entity_id:
+                continue
+            tasks.append(cached_task)
+        
+        versions = []
+        cached_versions = self.connector.async_cache_get(self.current_versions_uid)
+        for cached_version in cached_versions:
+            version_entity = cached_version.get('entity')
+            if not version_entity:
+                continue
+            if entity.get('id', 0) == version_entity.get('id'):
+                versions.append(cached_version)
+        
+
+        if not self.connector.sg_human_user:
+            human_user = {'id': 0}
+        else:
+            human_user = self.connector.sg_human_user
+
+        
+        '''
         found_entity = sg.find_one(
                     entity_type,
                     [['id', 'is', entity_id]],
@@ -4316,15 +4362,18 @@ class flameMenuPublisher(flameMenuApp):
             ]
         )
         
+        pprint (versions)
+        
         human_user = sg.find_one('HumanUser', 
                 [['login', 'is', self.connector.sg_user.login]],
                 []
                 )
+        '''
 
         self.log('publish menu search block took %s' % (time.time() - start))
 
         menu = {}
-        menu['name'] = 'Publish ' + found_entity.get('code') + ':'
+        menu['name'] = 'Publish ' + entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
@@ -5150,10 +5199,7 @@ class flameMenuPublisher(flameMenuApp):
                     if user_id not in task_assignees_ids:
                         continue
 
-            tasks.append(cached_task)
-        
-        pprint (len(tasks))
-            
+            tasks.append(cached_task)            
 
         # group entities by id
 
@@ -5685,7 +5731,25 @@ class flameMenuPublisher(flameMenuApp):
                 self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': ['entity', 'task_assignees']
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
+                })
+                self.current_versions_uid = self.connector.async_cache_register({
+                    'entity': 'Version',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'code',
+                        'sg_task.Task.id',
+                        'entity'
+                    ]
                 })
                 return True
             else:
@@ -5696,8 +5760,27 @@ class flameMenuPublisher(flameMenuApp):
             self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': ['entity', 'task_assignees']
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
+            # ['entity', 'task_assignees']
             })
+            self.current_versions_uid = self.connector.async_cache_register({
+                    'entity': 'Version',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'code',
+                        'sg_task.Task.id',
+                        'entity'
+                    ]
+            })          
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
             # unregister current uid
