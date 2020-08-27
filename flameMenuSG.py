@@ -4325,9 +4325,9 @@ class flameMenuPublisher(flameMenuApp):
 
         if not os.path.isdir(project_path):
             try:
-                os.path.makedirs(project_path)
-            except:
-                message = 'Publishing stopped: Unable to create project folder %s' % project_path
+                os.makedirs(project_path)
+            except Exception as e:
+                message = 'Publishing stopped: Unable to create project folder %s, reason: %s' % (project_path, e)
                 self.mbox.setText(message)
                 self.mbox.exec_()
                 return False
