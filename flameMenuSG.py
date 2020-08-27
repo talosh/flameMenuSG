@@ -4113,7 +4113,16 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs[entity_id] = {}
             self.prefs[entity_id]['show_all'] = True
         prefs = self.prefs.get(entity_id)
+
+        found_entity = sg.find_one(
+                    entity_type,
+                    [['id', 'is', entity_id]],
+                    ['code']
+        )
         
+        if not found_entity:
+            return {}
+
         tasks = sg.find(
             'Task',
             [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
@@ -4138,12 +4147,6 @@ class flameMenuPublisher(flameMenuApp):
             ]
         )
         
-        found_entity = sg.find_one(
-                    entity_type,
-                    [['id', 'is', entity_id]],
-                    ['code']
-        )
-
         human_user = sg.find_one('HumanUser', 
                 [['login', 'is', self.connector.sg_user.login]],
                 []
