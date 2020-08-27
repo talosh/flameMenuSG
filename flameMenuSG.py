@@ -3551,6 +3551,30 @@ class flameMenuBatchLoader(flameMenuApp):
         batch_name = self.flame.batch.name.get_value()
         if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
+            for index, stored_entity in enumerate(add_menu_list):
+                stored_entity_type = stored_entity.get('type', 'Shot')
+                stored_entity_id = stored_entity.get('id', 0)
+                found_entity = sg.find_one(stored_entity_type, [['id', 'is', stored_entity_id]])
+                if not found_entity:
+                    add_menu_list.pop(index)
+
+            if not add_menu_list:
+                project_id = self.connector.sg_linked_project_id
+                tasks = sg.find('Task',
+                    [['project.Project.id', 'is', project_id]],
+                    ['entity']
+                )
+                entity = {}
+                for task in tasks:
+                    current_entity = task.get('entity')
+                    if current_entity:
+                        if current_entity.get('name') == batch_name:
+                            entity = current_entity
+                            break
+                if entity:
+                    self.update_loader_list(entity)
+                add_menu_list = self.prefs.get('additional menu ' + batch_name)
+
         else:
             self.prefs['additional menu ' + batch_name] = []
             project_id = self.connector.sg_linked_project_id
@@ -3559,10 +3583,12 @@ class flameMenuBatchLoader(flameMenuApp):
                 task_filters,
                 ['entity']
             )
+            entity = {}
             for task in tasks:
-                entity = task.get('entity')
-                if entity:
-                    if entity.get('name') == batch_name:
+                current_entity = task.get('entity')
+                if current_entity:
+                    if current_entity.get('name') == batch_name:
+                        entity = current_entity
                         break
             if entity:
                 self.update_loader_list(entity)
@@ -3684,6 +3710,16 @@ class flameMenuBatchLoader(flameMenuApp):
 
         entity_type = entity.get('type')
         entity_id = entity.get('id')
+
+        found_entity = sg.find_one(
+                    entity_type,
+                    [['id', 'is', entity_id]],
+                    ['code']
+        )
+
+        if not found_entity:
+            return {}
+
         publishes = sg.find(
             'PublishedFile',
             [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
@@ -3699,12 +3735,6 @@ class flameMenuBatchLoader(flameMenuApp):
             ]
         )
         
-        found_entity = sg.find_one(
-                    entity_type,
-                    [['id', 'is', entity_id]],
-                    ['code']
-        )
-
         menu = {}
         menu['name'] = found_entity.get('code') + ':'
         menu['actions'] = []
