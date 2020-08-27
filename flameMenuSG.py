@@ -461,6 +461,7 @@ class flameShotgunConnector(object):
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(300, )))
+        self.loops.append(threading.Thread(target=self.batch_group_check, args=(1, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -478,11 +479,9 @@ class flameShotgunConnector(object):
 
     def loop_timeout(self, timeout, start):
         time_passed = int(time.time() - start)
-        self.log('sg_cache_loop took %s sec' % str(time.time() - start))
         if timeout <= time_passed:
             return
         else:
-            self.log('sleeping for %s sec' % (timeout - time_passed))
             for n in range((timeout - time_passed) * 10):
                 if not self.threads:
                     self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
@@ -583,6 +582,12 @@ class flameShotgunConnector(object):
                             pass
 
                 self.async_cache_state_check()
+
+                self.log('sg_cache_loop took %s sec' % str(time.time() - start))
+                time_passed = int(time.time() - start)
+                if timeout > time_passed:
+                    self.log('sg_cache_loop sleeping for %s sec' % (timeout - time_passed))
+                
                 self.loop_timeout(timeout, start)
 
     def update_human_user(self):
@@ -1043,6 +1048,15 @@ class flameShotgunConnector(object):
         self.sg_storage_root = {}
         return False
 
+    def batch_group_check(self, timeout):
+        import flame
+        self.batch_name = ''
+        while self.threads:
+            start = time.time()
+            current_batch_name = flame.batch.name.get_value()
+            if current_batch_name != self.batch_name:
+                self.rescan_flag = True
+            self.loop_timeout(timeout, start)
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -3333,7 +3347,10 @@ class flameMenuNewBatch(flameMenuApp):
                 return {}
             else:
                 if self.sequence_id == -1:
-                    shot_sequence = self.connector.sg.find_one('Sequence', [['code', 'is', 'DefaultSequence']])
+                    shot_sequence = self.connector.sg.find_one('Sequence',
+                        [['project', 'is', {'type': 'Project', 'id': self.connector.sg_linked_project_id}], 
+                        ['code', 'is', 'DefaultSequence']]
+                        )
                     if not shot_sequence:
                         sequence_data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
                         'code': 'DefaultSequence'}
@@ -3963,19 +3980,43 @@ class flameMenuPublisher(flameMenuApp):
 
         if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
+            for index, stored_entity in enumerate(add_menu_list):
+                stored_entity_type = stored_entity.get('type', 'Shot')
+                stored_entity_id = stored_entity.get('id', 0)
+                found_entity = sg.find_one(stored_entity_type, [['id', 'is', stored_entity_id]])
+                if not found_entity:
+                    add_menu_list.pop(index)
+
+            if not add_menu_list:
+                project_id = self.connector.sg_linked_project_id
+                tasks = sg.find('Task',
+                    [['project.Project.id', 'is', project_id]],
+                    ['entity']
+                )
+                entity = {}
+                for task in tasks:
+                    current_entity = task.get('entity')
+                    if current_entity:
+                        if current_entity.get('name') == batch_name:
+                            entity = current_entity
+                            break
+                if entity:
+                    self.update_loader_list(entity)
+                add_menu_list = self.prefs.get('additional menu ' + batch_name)
+
         else:
             self.prefs['additional menu ' + batch_name] = []
             project_id = self.connector.sg_linked_project_id
-            task_filters = [['project.Project.id', 'is', project_id]]
             tasks = sg.find('Task',
-                task_filters,
+                [['project.Project.id', 'is', project_id]],
                 ['entity']
             )
             entity = {}
             for task in tasks:
-                entity = task.get('entity')
-                if entity:
-                    if entity.get('name') == batch_name:
+                current_entity = task.get('entity')
+                if current_entity:
+                    if current_entity.get('name') == batch_name:
+                        entity = current_entity
                         break
             if entity:
                 self.update_loader_list(entity)
@@ -4031,7 +4072,10 @@ class flameMenuPublisher(flameMenuApp):
 
         if len(found_entities) == 0:
             menu_item = {}
-            menu_item['name'] = ' '*4 + 'No assigned tasks found'
+            if self.prefs['show_all']:
+                menu_item['name'] = ' '*4 + 'No tasks found'
+            else:
+                menu_item['name'] = ' '*4 + 'No assigned tasks found'
             menu_item['execute'] = self.rescan
             menu_item['isEnabled'] = False
             menu['actions'].append(menu_item)
@@ -4195,7 +4239,10 @@ class flameMenuPublisher(flameMenuApp):
         
         if len(tasks_by_step.values()) == 0:
             menu_item = {}
-            menu_item['name'] = ' '*4 + 'No assigned tasks found'
+            if self.prefs[entity_id]['show_all']:
+                menu_item['name'] = ' '*4 + 'No tasks found'
+            else:
+                menu_item['name'] = ' '*4 + 'No assigned tasks found'
             menu_item['execute'] = self.rescan
             menu_item['isEnabled'] = False
             menu['actions'].append(menu_item)            
