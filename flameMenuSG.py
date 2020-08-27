@@ -71,7 +71,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.10'
+__version__ = 'v0.0.11'
 
 
 class flameAppFramework(object):
@@ -516,7 +516,9 @@ class flameShotgunConnector(object):
         self.async_cache_state_check()
         return uid
     
-    def async_cache_unregister(self, uid):            
+    def async_cache_unregister(self, uid):
+        if not uid:
+            return False            
         if uid in self.async_cache.keys():
             del self.async_cache[uid]
             self.rescan_flag = True
@@ -2823,6 +2825,14 @@ class flameMenuNewBatch(flameMenuApp):
             menu_item['execute'] = self.create_shot_dialog
             menu_item['waitCursor'] = False
             menu_main_body.append(menu_item)
+        
+        if len(found_entities.keys()) == 1:
+            if 'Shot' in found_entities.keys():
+                menu_item = {}
+                menu_item['name'] = '- [ Assets ] [+]'
+                menu_item['execute'] = self.create_asset_dialog
+                menu_item['waitCursor'] = False
+                menu_main_body.append(menu_item)
 
         menu_ctrls_len = len(menu)
         menu_lenght = menu_ctrls_len
@@ -2857,6 +2867,14 @@ class flameMenuNewBatch(flameMenuApp):
 
                 self.dynamic_menu_data[str(id(entity))] = entity
                 menu_item['execute'] = getattr(self, str(id(entity)))
+                menu_main_body.append(menu_item)
+
+        if len(found_entities.keys()) == 1:
+            if 'Asset' in found_entities.keys():
+                menu_item = {}
+                menu_item['name'] = '- [ Shots ] [+]'
+                menu_item['execute'] = self.create_shot_dialog
+                menu_item['waitCursor'] = False
                 menu_main_body.append(menu_item)
 
         if menu_lenght < max_menu_lenght:
@@ -4121,6 +4139,21 @@ class flameMenuPublisher(flameMenuApp):
         self.log('publish menu: batch name is: %s' % batch_name)
         tasks = []
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        if not cached_tasks:
+
+            # try to unregister cache and register again
+
+            self.unregister_query()
+            self.register_query()
+
+            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+
+            if not cached_tasks:
+
+                # give up
+
+                return []
+
         for cached_task in cached_tasks:
             if not cached_task.get('entity'):
                 continue
@@ -4305,6 +4338,22 @@ class flameMenuPublisher(flameMenuApp):
 
         tasks = []
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        if not cached_tasks:
+
+            # try to unregister cache and register again
+
+            self.unregister_query()
+            self.register_query()
+
+            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+
+            if not cached_tasks:
+
+                # give up
+
+                return {}
+
+
         for cached_task in cached_tasks:
             if not cached_task.get('entity'):
                 continue
@@ -4314,6 +4363,23 @@ class flameMenuPublisher(flameMenuApp):
         
         versions = []
         cached_versions = self.connector.async_cache_get(self.current_versions_uid)
+
+        if not cached_versions:
+
+            # try to unregister cache and register again
+
+            self.unregister_query()
+            self.register_query()
+
+            cached_versions = self.connector.async_cache_get(self.current_versions_uid)
+
+            if not cached_versions:
+
+                # give up
+
+                return {}
+
+
         for cached_version in cached_versions:
             version_entity = cached_version.get('entity')
             if not version_entity:
@@ -5181,6 +5247,21 @@ class flameMenuPublisher(flameMenuApp):
         # get current tasks form async cache
 
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        if not cached_tasks:
+
+            # try to unregister cache and register again
+
+            self.unregister_query()
+            self.register_query()
+
+            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+
+            if not cached_tasks:
+
+                # give up
+
+                return {}
+
 
         # remove tasks without entities and filter if user_only
         
@@ -5726,8 +5807,11 @@ class flameMenuPublisher(flameMenuApp):
                 return False
 
             if project_id != self.connector.sg_linked_project_id:
-                # unregiter old id and register new one
-                self.connector.async_cache_unregister(self.current_tasks_uid)
+                
+                # unregister old id and register new one
+                
+                self.unregister_query()
+
                 self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
@@ -5788,6 +5872,13 @@ class flameMenuPublisher(flameMenuApp):
             return True
         else:
             return False
+
+    def unregister_query(self, *args, **kwargs):
+
+        # un-registers async cache requests
+        
+        self.connector.async_cache_unregister(self.current_tasks_uid)
+        self.connector.async_cache_unregister(self.current_versions_uid)
 
     def rescan(self, *args, **kwargs):
         if not self.flame:
@@ -5934,7 +6025,6 @@ def get_media_panel_custom_ui_actions():
     menu = []
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
-            app.register_query()
             app_menu = app.build_menu()
             if app_menu:
                 menu.append(app_menu)
