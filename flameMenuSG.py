@@ -119,6 +119,16 @@ class flameAppFramework(object):
 
         self.log('[%s] waking up' % self.__class__.__name__)
         self.load_prefs()
+
+        # menu auto-refresh defaults
+
+        if not self.prefs_global.get('menu_auto_refresh'):
+            self.prefs_global['menu_auto_refresh'] = {
+                'media_panel': True,
+                'batch': True,
+                'main_menu': True
+            }
+
         self.apps = []
 
     def log(self, message):
@@ -461,7 +471,7 @@ class flameShotgunConnector(object):
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(300, )))
-        self.loops.append(threading.Thread(target=self.batch_group_check, args=(1, )))
+        self.loops.append(threading.Thread(target=self.batch_group_check, args=(4, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -1762,6 +1772,83 @@ class flameMenuProjectconnect(flameMenuApp):
             action = btn_AssetTaskTemplate_menu.addAction(code)
             action.triggered[()].connect(lambda template_id=template_id: selectAssetTaskTemplate(template_id))
         btn_AssetTaskTemplate.setMenu(btn_AssetTaskTemplate_menu)
+
+        # General::AutoRefresh button Label
+
+        lbl_AutoRefresh = QtWidgets.QLabel('Refresh Menu Automatically', paneGeneral)
+        lbl_AutoRefresh.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
+        lbl_AutoRefresh.setMinimumSize(298, 28)
+        lbl_AutoRefresh.move(0, 170)
+        lbl_AutoRefresh.setAlignment(QtCore.Qt.AlignCenter)
+
+        lbl_AutoRefreshMsg = QtWidgets.QLabel('This may degrade right-click menu performance', paneGeneral)
+        lbl_AutoRefreshMsg.setStyleSheet('QFrame {color: #989898;}')
+        lbl_AutoRefreshMsg.setMinimumSize(36, 28)
+        lbl_AutoRefreshMsg.move(0, 204)
+
+        # General::AutoRefresh Main refresh button
+
+        def update_AutoRefreshMain():
+            menu_auto_refresh = self.framework.prefs_global.get('menu_auto_refresh', {})
+            main_menu = menu_auto_refresh.get('main_menu', False)
+            if main_menu:
+                btn_AutoRefreshMain.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_AutoRefreshMain.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        def clicked_AutoRefreshMain():
+            menu_auto_refresh = self.framework.prefs_global.get('menu_auto_refresh', {})
+            menu_auto_refresh['main_menu'] = not menu_auto_refresh.get('main_menu', False)
+            self.framework.prefs_global['menu_auto_refresh'] = menu_auto_refresh
+            update_AutoRefreshMain()
+        btn_AutoRefreshMain = QtWidgets.QPushButton('Main Menu', paneGeneral)
+        btn_AutoRefreshMain.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_AutoRefreshMain.setMinimumSize(94, 28)
+        btn_AutoRefreshMain.move(0, 238)
+        btn_AutoRefreshMain.clicked.connect(clicked_AutoRefreshMain)
+        update_AutoRefreshMain()
+
+        # General::AutoRefresh Batch refresh button
+
+        def update_AutoRefreshBatch():
+            menu_auto_refresh = self.framework.prefs_global.get('menu_auto_refresh', {})
+            batch = menu_auto_refresh.get('batch', False)
+            if batch:
+                btn_AutoRefreshBatch.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_AutoRefreshBatch.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        def clicked_AutoRefreshBatch():
+            menu_auto_refresh = self.framework.prefs_global.get('menu_auto_refresh', {})
+            menu_auto_refresh['batch'] = not menu_auto_refresh.get('batch', False)
+            self.framework.prefs_global['menu_auto_refresh'] = menu_auto_refresh
+            update_AutoRefreshBatch()
+        btn_AutoRefreshBatch = QtWidgets.QPushButton('Batch Menu', paneGeneral)
+        btn_AutoRefreshBatch.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_AutoRefreshBatch.setMinimumSize(94, 28)
+        btn_AutoRefreshBatch.move(100, 238)
+        btn_AutoRefreshBatch.clicked.connect(clicked_AutoRefreshBatch)
+        update_AutoRefreshBatch()
+
+        # General::AutoRefresh Media Panel refresh button
+
+        def update_AutoRefreshMediaPanel():
+            menu_auto_refresh = self.framework.prefs_global.get('menu_auto_refresh', {})
+            media_panel = menu_auto_refresh.get('media_panel', False)
+            if media_panel:
+                btn_AutoRefreshMediaPanel.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+            else:
+                btn_AutoRefreshMediaPanel.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        def clicked_AutoRefreshMediaPanel():
+            menu_auto_refresh = self.framework.prefs_global.get('menu_auto_refresh', {})
+            menu_auto_refresh['media_panel'] = not menu_auto_refresh.get('media_panel', False)
+            self.framework.prefs_global['menu_auto_refresh'] = menu_auto_refresh
+            update_AutoRefreshMediaPanel()
+        btn_AutoRefreshMediaPanel = QtWidgets.QPushButton('Media Panel', paneGeneral)
+        btn_AutoRefreshMediaPanel.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_AutoRefreshMediaPanel.setMinimumSize(94, 28)
+        btn_AutoRefreshMediaPanel.move(200, 238)
+        btn_AutoRefreshMediaPanel.clicked.connect(clicked_AutoRefreshMediaPanel)
+        update_AutoRefreshMediaPanel()
+
 
         #lbl_General = QtWidgets.QLabel('General', paneGeneral)
         #lbl_General.setStyleSheet('QFrame {color: #989898}')
@@ -5643,6 +5730,12 @@ def get_main_menu_custom_ui_actions():
         menu.append(flameMenuProjectconnectApp.build_menu())
     if menu:
         menu[0]['actions'].append({'name': __version__, 'isEnabled': False})
+
+    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+    if menu_auto_refresh.get('main_menu', False):
+        try:
+            import flame
+            flame.execute_shortcut('Rescan Python Hooks')
     return menu
 
 def get_media_panel_custom_ui_actions():
@@ -5651,10 +5744,21 @@ def get_media_panel_custom_ui_actions():
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
             app.register_query()
-            menu.append(app.build_menu())
+            app_menu = app.build_menu()
+            if app_menu:
+                menu.append(app_menu)
         if app.__class__.__name__ == 'flameMenuPublisher':
-            menu.extend(app.build_menu())
-    print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
+            app_menu = app.build_menu()
+            if app_menu:
+                menu.extend(app_menu)
+    if DEBUG:
+        print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
+
+    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+    if menu_auto_refresh.get('media_panel', False):
+        try:
+            import flame
+            flame.execute_shortcut('Rescan Python Hooks')
     return menu
 
 def get_batch_custom_ui_actions():
@@ -5667,6 +5771,12 @@ def get_batch_custom_ui_actions():
         flameMenuBatchLoaderApp.refresh()
         for menuitem in flameMenuBatchLoaderApp.build_menu():
             menu.append(menuitem)
+
+    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+    if menu_auto_refresh.get('batch', False):
+        try:
+            import flame
+            flame.execute_shortcut('Rescan Python Hooks')
     return menu
 
 def batch_render_begin(info, userData, *args, **kwargs):
