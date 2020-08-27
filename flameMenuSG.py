@@ -5721,6 +5721,7 @@ def project_saved(project_name, save_time, is_auto_save):
             shotgunConnector.rescan_flag = False
             
 def get_main_menu_custom_ui_actions():
+    start = time.time()
     menu = []
     flameMenuProjectconnectApp = None
     for app in apps:
@@ -5734,11 +5735,14 @@ def get_main_menu_custom_ui_actions():
     if DEBUG:
         print('main menu update took %s' % (time.time() - start))
 
-    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-    if menu_auto_refresh.get('main_menu', False):
-        try:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
+    if app_framework:
+        menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+        if menu_auto_refresh.get('main_menu', False):
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+            except:
+                pass
     return menu
 
 def get_media_panel_custom_ui_actions():
@@ -5757,14 +5761,18 @@ def get_media_panel_custom_ui_actions():
     if DEBUG:
         print('media panel menu update took %s' % (time.time() - start))
 
-    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-    if menu_auto_refresh.get('media_panel', False):
-        try:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
+    if app_framework:
+        menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+        if menu_auto_refresh.get('media_panel', False):
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+            except:
+                pass
     return menu
 
 def get_batch_custom_ui_actions():
+    start = time.time()
     menu = []
     flameMenuBatchLoaderApp = None
     for app in apps:
@@ -5778,11 +5786,14 @@ def get_batch_custom_ui_actions():
     if DEBUG:
         print('batch menu update took %s' % (time.time() - start))
 
-    menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-    if menu_auto_refresh.get('batch', False):
-        try:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
+    if app_framework:
+        menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
+        if menu_auto_refresh.get('batch', False):
+            try:
+                import flame
+                flame.execute_shortcut('Rescan Python Hooks')
+            except:
+                pass
     return menu
 
 def batch_render_begin(info, userData, *args, **kwargs):
