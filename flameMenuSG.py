@@ -1553,6 +1553,8 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # General::Loader PublishedFileTypes label
 
+        '''
+
         lbl_PublishedFileTypes = QtWidgets.QLabel('Loader Published File Types', paneGeneral)
         lbl_PublishedFileTypes.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_PublishedFileTypes.setMinimumSize(536, 28)
@@ -1619,7 +1621,6 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_PublishedFileType4_menu.addAction('Movie', set_presetTypeMovie)
         btn_PublishedFileType4.setMenu(btn_PublishedFileType1_menu)
 
-        '''
         # General::Loader PublishedFileTypes Button 5
 
         btn_PublishedFileType5 = QtWidgets.QPushButton(paneGeneral)
@@ -1679,7 +1680,9 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_PublishedFileType8_menu.addAction('File Sequence', set_presetTypeImage)
         btn_PublishedFileType8_menu.addAction('Movie', set_presetTypeMovie)
         btn_PublishedFileType8.setMenu(btn_PublishedFileType1_menu)
-        '''
+
+        ''' # end of loader PublishedFileType settings
+
         # General::Create Default Task Template Label
 
         lbl_DefTaskTemplate = QtWidgets.QLabel('Default Task Template', paneGeneral)
