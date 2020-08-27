@@ -522,10 +522,6 @@ class flameShotgunConnector(object):
         if not query:
             return False
 
-        # create separate sgotgun connection for cache
-
-        # sg = self.sg_user.create_sg_connection()
-
         if perform_query:
             query_body = query.get('query')
             entity = query_body.get('entity')
@@ -533,9 +529,7 @@ class flameShotgunConnector(object):
             fields = query_body.get('fields')
             self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
             self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
-        
-        # del sg
-        
+                
         return query.get(query_type)
 
     def async_cache_clear(self):
@@ -3530,13 +3524,14 @@ class flameMenuBatchLoader(flameMenuApp):
             return None
         if not self.connector.sg_linked_project:
             return None
+        
+        sg = self.connector.sg
 
         batch_name = self.flame.batch.name.get_value()
         if ('additional menu ' + batch_name) in self.prefs.keys():
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
         else:
             self.prefs['additional menu ' + batch_name] = []
-            sg = self.connector.sg_user.create_sg_connection()
             project_id = self.connector.sg_linked_project_id
             task_filters = [['project.Project.id', 'is', project_id]]
             tasks = sg.find('Task',
@@ -3664,7 +3659,8 @@ class flameMenuBatchLoader(flameMenuApp):
         return menu
 
     def build_batch_loader_menu(self, entity):
-        sg = self.connector.sg_user.create_sg_connection()
+        sg = self.connector.sg
+
         entity_type = entity.get('type')
         entity_id = entity.get('id')
         publishes = sg.find(
@@ -3776,7 +3772,7 @@ class flameMenuBatchLoader(flameMenuApp):
         self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
     def get_entities(self, user_only = True, filter_out=[]):
-        sg = self.connector.sg_user.create_sg_connection()
+        sg = self.connector.sg
         project_id = self.connector.sg_linked_project_id
         task_filters = [['project.Project.id', 'is', project_id]]
 
@@ -4955,7 +4951,8 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['additional menu ' + batch_name] = add_list
 
     def get_entities(self, user_only = True, filter_out=[]):
-        sg = self.connector.sg_user.create_sg_connection()
+        sg = self.connector.sg
+
         project_id = self.connector.sg_linked_project_id
         task_filters = [['project.Project.id', 'is', project_id]]
 
