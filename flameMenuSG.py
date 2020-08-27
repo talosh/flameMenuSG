@@ -125,7 +125,7 @@ class flameAppFramework(object):
         if not self.prefs_global.get('menu_auto_refresh'):
             self.prefs_global['menu_auto_refresh'] = {
                 'media_panel': True,
-                'batch': True,
+                'batch': False,
                 'main_menu': True
             }
 
