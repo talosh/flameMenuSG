@@ -5731,6 +5731,9 @@ def get_main_menu_custom_ui_actions():
     if menu:
         menu[0]['actions'].append({'name': __version__, 'isEnabled': False})
 
+    if DEBUG:
+        print('main menu update took %s' % (time.time() - start))
+
     menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
     if menu_auto_refresh.get('main_menu', False):
         try:
@@ -5752,7 +5755,7 @@ def get_media_panel_custom_ui_actions():
             if app_menu:
                 menu.extend(app_menu)
     if DEBUG:
-        print('get_media_panel_custom_ui_actions menu update took %s' % (time.time() - start))
+        print('media panel menu update took %s' % (time.time() - start))
 
     menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
     if menu_auto_refresh.get('media_panel', False):
@@ -5771,6 +5774,9 @@ def get_batch_custom_ui_actions():
         flameMenuBatchLoaderApp.refresh()
         for menuitem in flameMenuBatchLoaderApp.build_menu():
             menu.append(menuitem)
+
+    if DEBUG:
+        print('batch menu update took %s' % (time.time() - start))
 
     menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
     if menu_auto_refresh.get('batch', False):
