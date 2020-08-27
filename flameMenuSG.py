@@ -106,7 +106,7 @@ class flameAppFramework(object):
                  'Caches',
                  'Shotgun',
                  self.bundle_name)
-        elif sys.startswith('linux'):
+        elif sys.platform.startswith('linux'):
             self.prefs_folder = os.path.join(
                 os.path.expanduser('~'),
                 '.shotgun',
@@ -1017,7 +1017,7 @@ class flameShotgunConnector(object):
     def resolve_storage_root_path(self, path_cache_storage):
         if sys.platform == 'darwin':
             platform_path_field = 'mac_path'
-        elif sys.startswith('linux'):
+        elif sys.platform.startswith('linux'):
             platform_path_field = 'linux_path'
         else:
              message = 'Cannot resolve storage roots - unsupported platform:'
@@ -2359,6 +2359,22 @@ class flameMenuProjectconnect(flameMenuApp):
         pressPublish()
         window.exec_()
 
+    def rescan(self, *args, **kwargs):
+        if not self.flame:
+            try:
+                import flame
+                self.flame = flame
+            except:
+                self.flame = None
+
+        self.connector.async_cache_get(self.active_projects_uid, True)
+
+        if self.flame:
+            self.flame.execute_shortcut('Rescan Python Hooks')
+            self.log('Rescan Python Hooks')
+            if self.connector:
+                self.connector.rescan_flag = False
+
 
 class flameBatchBlessing(flameMenuApp):
     def __init__(self, framework):
@@ -2691,6 +2707,20 @@ class flameMenuNewBatch(flameMenuApp):
         user_only = not self.prefs['show_all']
         filter_out = ['Project', 'Sequence']
         found_entities = self.get_entities(user_only, filter_out)
+        menu_main_body = []
+
+        if not found_entities:
+            menu_item = {}
+            menu_item['name'] = '- [ Assets ] [+]'
+            menu_item['execute'] = self.create_asset_dialog
+            menu_item['waitCursor'] = False
+            menu_main_body.append(menu_item)
+
+            menu_item = {}
+            menu_item['name'] = '- [ Shots ] [+]'
+            menu_item['execute'] = self.create_shot_dialog
+            menu_item['waitCursor'] = False
+            menu_main_body.append(menu_item)
 
         menu_ctrls_len = len(menu)
         menu_lenght = menu_ctrls_len
@@ -2699,7 +2729,6 @@ class flameMenuNewBatch(flameMenuApp):
             menu_lenght += len(found_entities.get(entity_type))
         max_menu_lenght = self.prefs.get('menu_max_items_per_page')
 
-        menu_main_body = []
         for index, entity_type in enumerate(sorted(found_entities.keys())):
 
             menu_item = {}
@@ -2801,7 +2830,7 @@ class flameMenuNewBatch(flameMenuApp):
 
         return entities
 
-    def create_new_batch(self, entity):        
+    def create_new_batch(self, entity):
         sg = self.connector.sg
 
         # check if flame batch with entity name already in desktop
@@ -3452,6 +3481,22 @@ class flameMenuNewBatch(flameMenuApp):
         else:
             return False
 
+    def rescan(self, *args, **kwargs):
+        if not self.flame:
+            try:
+                import flame
+                self.flame = flame
+            except:
+                self.flame = None
+
+        self.connector.async_cache_get(self.current_tasks_uid, True)
+
+        if self.flame:
+            self.flame.execute_shortcut('Rescan Python Hooks')
+            self.log('Rescan Python Hooks')
+            if self.connector:
+                self.connector.rescan_flag = False
+
 
 class flameMenuBatchLoader(flameMenuApp):
     def __init__(self, framework, connector):
@@ -3911,12 +3956,19 @@ class flameMenuPublisher(flameMenuApp):
         if not self.connector.sg_linked_project:
             return None
 
+        sg = self.connector.sg
+
+
         batch_name = self.flame.batch.name.get_value()
-        if ('additional menu ' + batch_name) in self.prefs.keys():
+
+        self.log('publish menu: batch name is: %s' % batch_name)
+        
+        add_menu_list = []
+
+        if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
         else:
             self.prefs['additional menu ' + batch_name] = []
-            sg = self.connector.sg_user.create_sg_connection()
             project_id = self.connector.sg_linked_project_id
             task_filters = [['project.Project.id', 'is', project_id]]
             tasks = sg.find('Task',
@@ -4057,7 +4109,7 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def build_publish_menu(self, entity):
-        sg = self.connector.sg_user.create_sg_connection()
+        sg = self.connector.sg
 
         entity_type = entity.get('type')
         entity_id = entity.get('id')
@@ -4212,10 +4264,11 @@ class flameMenuPublisher(flameMenuApp):
         # we're going to get empty path if connector was not able to resolve it
 
         project_path = self.connector.resolve_project_path()
+
         if not project_path:
-            message = 'Publishing stopped:\nUnable to resolve project path.'
-            self.mbox.setText(message)
-            self.mbox.exec_()
+        #    message = 'Publishing stopped: Unable to resolve project path.'
+        #    self.mbox.setText(message)
+        #    self.mbox.exec_()
             return False
 
         # check if the project path is there and try to create if not
