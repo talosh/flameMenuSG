@@ -7,7 +7,7 @@ copy flameMenuSG.py into /opt/Autodesk/shared/python
 (for user-only installation use /opt/Autodesk/user/{FlameUserName}/python)
 
 ### GETTING STARTED
-placeholder for a video link
+https://vimeo.com/452727908
 
 ### CONFIGURATION
 ### Shotgun's "Local File Storage"
