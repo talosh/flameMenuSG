@@ -19,7 +19,7 @@ import sgtk
 from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = True
+DEBUG = False
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -4619,7 +4619,7 @@ class flameMenuPublisher(flameMenuApp):
                 for pb_info in pb_info_list:
                     detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
-        mbox.setStyleSheet('QLabel{min-width: 400px;}')
+        mbox.setStyleSheet('QLabel{min-width: 500px;}')
         mbox.exec_()
         
         return True
