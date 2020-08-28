@@ -5011,7 +5011,6 @@ class flameMenuPublisher(flameMenuApp):
             self.log('uploading preview %s' % preview_path)
             self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
 
-        
         # Create 'flame_render' PublishedFile
 
         self.log('creating flame_render published file in shotgun')
