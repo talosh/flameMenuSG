@@ -1,6 +1,6 @@
 # flameMenuSG
-Context-menu driven Shotgun integration for Autodesk Flame.
-It is lightweight single-file alternative to Shotgun Desktop / Pipeline Toolkit and allows a hassle-free integration out of the box.
+Minimalistic context-menu driven Shotgun integration for Autodesk Flame.
+It can be used stanalone without any special setup as well as alongside with Shotgun Pipeline Toolkit.
 
 ### INSTALLATION
 copy flameMenuSG.py into /opt/Autodesk/shared/python 
