@@ -3073,7 +3073,7 @@ class flameMenuNewBatch(flameMenuApp):
         for flame_path in flame_paths_to_import:
             self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
-        render_node = flame.batch.create_node('Render')
+        render_node = self.flame.batch.create_node('Render')
         render_node.name.set_value('<batch name>_comp_v<iteration###>')
 
         self.flame.batch.organize()
