@@ -2244,7 +2244,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
 
         # Publish::Templates::ShotPane: Version zero button
-
+        '''
         def update_shotVersionZero():
             publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
             version_zero = publish_prefs.get('version_zero', False)
@@ -2266,6 +2266,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionZero.move(450, 102)
         btn_shotVersionZero.clicked.connect(clicked_shotVersionZero)
         update_shotVersionZero()
+        '''
 
         '''
         # Publish::Templates::ShotPane: Poster Frame Label
@@ -2397,7 +2398,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
 
         # Publish::Templates::AssetPane: Version zero button
-
+        '''
         def update_assetVersionZero():
             publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
             version_zero = publish_prefs.get('version_zero', False)
@@ -2419,6 +2420,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionZero.move(450, 102)
         btn_assetVersionZero.clicked.connect(clicked_shotVersionZero)
         update_assetVersionZero()
+        '''
 
         # Publish::Templates::AssetPane: END OF SECTION
 
@@ -3058,7 +3060,7 @@ class flameMenuNewBatch(flameMenuApp):
         
         sg_tail_out = entity.get('sg_tail_out')
         if not sg_tail_out:
-            sg_tail_out = 1101
+            sg_tail_out = 1100
 
         sg_vfx_req = entity.get('sg_vfx_requirements')
         if not sg_vfx_req:
@@ -4590,9 +4592,9 @@ class flameMenuPublisher(flameMenuApp):
         elif (len(versions_published) == 0) and (len(versions_failed) > 0):
             msg = 'Failed to publish into %s versions' % len(versions_failed)
         elif (len(versions_published) > 0) and (len(versions_failed) == 0):
-            msg = 'Published into %s versions' % len(versions_published)
+            msg = 'Published %s version(s)' % len(versions_published)
         else:
-            msg = 'Published into %s versions, %s versions failed' % (len(versions_published), len(versions_failed))
+            msg = 'Published %s version(s), %s version(s) failed' % (len(versions_published), len(versions_failed))
 
         mbox = QtGui.QMessageBox()
         mbox.setText('flameMenuSG: ' + msg)
@@ -4738,9 +4740,9 @@ class flameMenuPublisher(flameMenuApp):
 
         if version_number == -1:
             self.log('can not parse version, looking for batch iterations')
-            version_number = len(self.flame.batch.batch_iterations)
-            if (version_number == 0) and (not self.prefs.get('version_zero', False)):
-                version_number = 1
+            version_number = len(self.flame.batch.batch_iterations) + 1
+            # if (version_number == 0) and (not self.prefs.get('version_zero', False)):
+            #    version_number = 1
             version_padding = 3
         
         self.log('version number: %s' % version_number)
