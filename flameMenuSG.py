@@ -3694,7 +3694,7 @@ class flameMenuBatchLoader(flameMenuApp):
     def build_menu(self):
         if not self.connector.sg_user:
             return None
-        if not self.connector.sg_linked_project:
+        if not self.connector.sg_linked_project_id:
             return None
         
         sg = self.connector.sg
@@ -6038,9 +6038,10 @@ def get_batch_custom_ui_actions():
         if app.__class__.__name__ == 'flameMenuBatchLoader':
             flameMenuBatchLoaderApp = app
     if flameMenuBatchLoaderApp:
-        flameMenuBatchLoaderApp.refresh()
-        for menuitem in flameMenuBatchLoaderApp.build_menu():
-            menu.append(menuitem)
+        app_menu = flameMenuBatchLoaderApp.build_menu()
+        if app_menu:
+            for menuitem in app_menu:
+                menu.append(menuitem)
 
     if DEBUG:
         print('batch menu update took %s' % (time.time() - start))
