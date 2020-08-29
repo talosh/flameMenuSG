@@ -15,8 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-import sgtk
-from sgtk.platform.qt import QtGui
+# from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
 DEBUG = False
@@ -71,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.11'
+__version__ = 'v0.0.12'
 
 
 class flameAppFramework(object):
@@ -298,7 +297,9 @@ class flameMenuApp(object):
         self.prefs = self.framework.prefs_dict(self.framework.prefs, self.name)
         self.prefs_user = self.framework.prefs_dict(self.framework.prefs_user, self.name)
         self.prefs_global = self.framework.prefs_dict(self.framework.prefs_global, self.name)
-        self.mbox = QtGui.QMessageBox()
+
+        from PySide2 import QtWidgets
+        self.mbox = QtWidgets.QMessageBox()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -476,8 +477,9 @@ class flameShotgunConnector(object):
         for loop in self.loops:
             loop.daemon = True
             loop.start()
-        
-        self.mbox = QtGui.QMessageBox()
+
+        from PySide2 import QtWidgets
+        self.mbox = QtWidgets.QMessageBox()
 
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
@@ -624,7 +626,9 @@ class flameShotgunConnector(object):
         except:
             return False
 
-    def get_user(self, *args, **kwargs):        
+    def get_user(self, *args, **kwargs):
+        import sgtk
+
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         try:
             self.sg_user = authenticator.get_user()
@@ -642,6 +646,8 @@ class flameShotgunConnector(object):
         return self.sg_user
 
     def clear_user(self, *args, **kwargs):
+        import sgtk
+
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         authenticator.clear_default_user()
         self.sg_user = None
@@ -807,6 +813,7 @@ class flameShotgunConnector(object):
         
     def project_path_dialog(self):
         from PySide2 import QtWidgets, QtCore
+
         window = None
         storage_root_paths = None
         sg_storage_data = self.get_sg_storage_roots()
@@ -835,16 +842,14 @@ class flameShotgunConnector(object):
             message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
             message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
             message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
-            mbox = QtGui.QMessageBox()
-            mbox.setText(message)
-            mbox.exec_()
+            self.mbox.setText(message)
+            self.mbox.exec_()
             return False
         
         if not self.connector.sg_linked_project_id:
             message = 'Please link Flame project to Shotgun first'
-            mbox = QtGui.QMessageBox()
-            mbox.setText(message)
-            mbox.exec_()
+            self.mbox.setText(message)
+            self.mbox.exec_()
             return False
 
         def calculate_project_path():
@@ -4117,7 +4122,6 @@ class flameMenuPublisher(flameMenuApp):
 
         self.flame_bug_message = False
         self.selected_clips = []
-        self.mbox = QtGui.QMessageBox()
         self.create_export_presets()
         
         # async cache related initialization
@@ -4596,7 +4600,7 @@ class flameMenuPublisher(flameMenuApp):
         else:
             msg = 'Published %s version(s), %s version(s) failed' % (len(versions_published), len(versions_failed))
 
-        mbox = QtGui.QMessageBox()
+        mbox = self.mbox
         mbox.setText('flameMenuSG: ' + msg)
 
         detailed_msg = ''
@@ -4642,7 +4646,9 @@ class flameMenuPublisher(flameMenuApp):
         # publish_clip will return the list of info dicts
         # along with the status. It is purely to be able
         # to inform user of the status after we processed multpile clips
-        
+
+        from PySide2 import QtWidgets
+
         pb_info = {
             'flame_clip_name': clip.name.get_value(),        # name of the clip selected in flame
             'version_name': '',     # name of a version in shotgun
@@ -4873,14 +4879,14 @@ class flameMenuPublisher(flameMenuApp):
                 # we don't need to move down to .batch file publishing.
                 
                 # inform user that published file already exists:
-                mbox = QtGui.QMessageBox()
+                mbox = QtWidgets.QMessageBox()
                 mbox.setText('Publish for flame clip %s already exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
                 detailed_msg = ''
                 detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
                 mbox.setDetailedText(detailed_msg)
-                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
 
@@ -4914,12 +4920,12 @@ class flameMenuPublisher(flameMenuApp):
             except:
                 clip.name.set_value(original_clip_name)
 
-                mbox = QtGui.QMessageBox()
+                mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
-                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
                 if mbox.clickedButton() == btn_Continue:
@@ -5008,12 +5014,12 @@ class flameMenuPublisher(flameMenuApp):
             version = self.connector.sg.create('Version', version_data)
             self.log('created Version: \n%s' % pformat(version))
         except Exception as e:
-            mbox = QtGui.QMessageBox()
+            mbox = QtWidgets.QMessageBox()
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
             if mbox.clickedButton() == btn_Continue:
@@ -5026,12 +5032,12 @@ class flameMenuPublisher(flameMenuApp):
             try:
                 self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
             except Exception as e:
-                mbox = QtGui.QMessageBox()
+                mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error uploading version thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
-                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
                 if mbox.clickedButton() == btn_Continue:
@@ -5044,12 +5050,12 @@ class flameMenuPublisher(flameMenuApp):
             try:
                 self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
             except Exception as e:
-                mbox = QtGui.QMessageBox()
+                mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error uploading version preview to Shotgun')
                 mbox.setDetailedText(pformat(e))
-                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
                 if mbox.clickedButton() == btn_Continue:
@@ -5077,12 +5083,12 @@ class flameMenuPublisher(flameMenuApp):
         try:
             published_file = self.connector.sg.create('PublishedFile', published_file_data)
         except Exception as e:
-            mbox = QtGui.QMessageBox()
+            mbox = QtWidgets.QMessageBox()
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
             if mbox.clickedButton() == btn_Continue:
@@ -5096,12 +5102,12 @@ class flameMenuPublisher(flameMenuApp):
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
         except Exception as e:
-            mbox = QtGui.QMessageBox()
+            mbox = QtWidgets.QMessageBox()
             mbox.setText('Error uploading thumbnail to Shotgun')
             mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
             if mbox.clickedButton() == btn_Continue:
@@ -5196,12 +5202,12 @@ class flameMenuPublisher(flameMenuApp):
             except:
                 clip.name.set_value(original_clip_name)
 
-                mbox = QtGui.QMessageBox()
+                mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
-                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
                 if mbox.clickedButton() == btn_Continue:
@@ -5223,12 +5229,12 @@ class flameMenuPublisher(flameMenuApp):
                     call(['cp', '-a', src, dest])
                     call(['cp', '-a', linked_batch_path, export_path])
                 except:
-                    mbox = QtGui.QMessageBox()
+                    mbox = QtWidgets.QMessageBox()
                     mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
                     mbox.setDetailedText('Path: ' + export_path)
-                    mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                    mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                     mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                    btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                    btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                     btn_Continue.setText('Continue')
                     mbox.exec_()
                     if mbox.clickedButton() == btn_Continue:
@@ -5255,12 +5261,12 @@ class flameMenuPublisher(flameMenuApp):
             try:
                 published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
             except Exception as e:
-                mbox = QtGui.QMessageBox()
+                mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error creating published file type in Shotgun')
                 mbox.setDetailedText(pformat(e))
-                mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
                 if mbox.clickedButton() == btn_Continue:
@@ -5282,12 +5288,12 @@ class flameMenuPublisher(flameMenuApp):
         try:
             published_file = self.connector.sg.create('PublishedFile', published_file_data)
         except Exception as e:
-            mbox = QtGui.QMessageBox()
+            mbox = QtWidgets.QMessageBox()
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
             if mbox.clickedButton() == btn_Continue:
@@ -5301,12 +5307,12 @@ class flameMenuPublisher(flameMenuApp):
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
         except Exception as e:
-            mbox = QtGui.QMessageBox()
+            mbox = QtWidgets.QMessageBox()
             mbox.setText('Error uploading thumbnail to Shotgun')
             mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtGui.QMessageBox.Ok|QtGui.QMessageBox.Cancel)
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtGui.QMessageBox.Ok)
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
             if mbox.clickedButton() == btn_Continue:
