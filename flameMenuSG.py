@@ -469,9 +469,14 @@ class flameShotgunConnector(object):
         self.check_sg_linked_project()
         self.update_sg_storage_root()
 
+        self.tk_engine = None
+
+        # loop threads init
+
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
+        self.loops.append(threading.Thread(target=self.bootstrap_toolkit))
         # self.loops.append(threading.Thread(target=self.batch_group_check, args=(4, )))
         
         for loop in self.loops:
@@ -480,6 +485,7 @@ class flameShotgunConnector(object):
 
         from PySide2 import QtWidgets
         self.mbox = QtWidgets.QMessageBox()
+
 
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
@@ -1078,6 +1084,17 @@ class flameShotgunConnector(object):
             if current_batch_name != self.batch_name:
                 self.rescan_flag = True
             self.loop_timeout(timeout, start)
+
+    def bootstrap_toolkit(self):
+        import sgtk
+
+        if not self.sg_linked_project_id:
+            return
+
+        mgr = sgtk.bootstrap.ToolkitManager(self.sg_user)
+        mgr.base_configuration = 'sgtk:descriptor:app_store?name=tk-config-flameplugin'
+        mgr.plugin_id = 'basic.flame'
+        self.tk_engine = mgr.bootstrap_engine("tk-flame", entity={"type": "Project", "id": self.sg_linked_project_id})
 
 
 class flameMenuProjectconnect(flameMenuApp):
