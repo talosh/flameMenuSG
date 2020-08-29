@@ -1094,7 +1094,26 @@ class flameShotgunConnector(object):
         mgr = sgtk.bootstrap.ToolkitManager(self.sg_user)
         mgr.base_configuration = 'sgtk:descriptor:app_store?name=tk-config-flameplugin'
         mgr.plugin_id = 'basic.flame'
+        os.environ["TOOLKIT_FLAME_ENGINE_MODE"] = "DCC"
         self.tk_engine = mgr.bootstrap_engine("tk-flame", entity={"type": "Project", "id": self.sg_linked_project_id})
+        del os.environ["TOOLKIT_FLAME_ENGINE_MODE"]
+        
+        python_binary = "%s/bin/python" % (sys.prefix)
+        self.tk_engine.set_python_executable(python_binary)
+        self.tk_engine.set_install_root('/opt/Autodesk')
+
+        # version blues from shotgun bootstrap
+
+        version_str = os.environ["SHOTGUN_FLAME_VERSION"]
+        maj_ver = os.environ["SHOTGUN_FLAME_MAJOR_VERSION"]
+        maj_ver = int(maj_ver) if maj_ver.isdigit() else 0
+        ext_ver = os.environ["SHOTGUN_FLAME_MINOR_VERSION"]
+        ext_ver = int(ext_ver) if ext_ver.isdigit() else 0
+        patch_ver = os.environ["SHOTGUN_FLAME_PATCH_VERSION"]
+        patch_ver = int(patch_ver) if patch_ver.isdigit() else 0
+
+        self.tk_engine.set_version_info(major_version_str=str(maj_ver), minor_version_str=str(ext_ver),
+                            patch_version_str=str(patch_ver), full_version_str=version_str)
 
 
 class flameMenuProjectconnect(flameMenuApp):
