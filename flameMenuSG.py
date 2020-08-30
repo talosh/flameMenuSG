@@ -469,23 +469,22 @@ class flameShotgunConnector(object):
         self.check_sg_linked_project()
         self.update_sg_storage_root()
 
-        self.tk_engine = None
-
         # loop threads init
 
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
-        self.loops.append(threading.Thread(target=self.bootstrap_toolkit))
         # self.loops.append(threading.Thread(target=self.batch_group_check, args=(4, )))
         
         for loop in self.loops:
             loop.daemon = True
             loop.start()
 
+        self.tk_engine = None
+        self.bootstrap_toolkit()
+
         from PySide2 import QtWidgets
         self.mbox = QtWidgets.QMessageBox()
-
 
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
@@ -565,8 +564,6 @@ class flameShotgunConnector(object):
             self.rescan_flag = True
             self.async_cache_hash = hash(pformat(self.async_cache))
     
-    # end of async cache methods
-
     def sg_cache_loop(self, timeout):
         while self.threads:
             start = time.time()
@@ -613,6 +610,8 @@ class flameShotgunConnector(object):
                     self.log('sg_cache_loop sleeping for %s sec' % (timeout - time_passed))
                 
                 self.loop_timeout(timeout, start)
+
+    # end of async cache methods
 
     def update_human_user(self):
         if not self.sg_user:
@@ -1087,34 +1086,121 @@ class flameShotgunConnector(object):
 
     def bootstrap_toolkit(self):
         import sgtk
-
-        if not self.sg_linked_project_id:
-            return
-
-        mgr = sgtk.bootstrap.ToolkitManager(self.sg_user)
-        mgr.base_configuration = 'sgtk:descriptor:app_store?name=tk-config-flameplugin'
-        mgr.plugin_id = 'basic.flame'
-        os.environ["TOOLKIT_FLAME_ENGINE_MODE"] = "DCC"
-        self.tk_engine = mgr.bootstrap_engine("tk-flame", entity={"type": "Project", "id": self.sg_linked_project_id})
-        del os.environ["TOOLKIT_FLAME_ENGINE_MODE"]
         
-        python_binary = "%s/bin/python" % (sys.prefix)
-        self.tk_engine.set_python_executable(python_binary)
-        self.tk_engine.set_install_root('/opt/Autodesk')
+        if sgtk.platform.current_engine():
+            self.tk_engine = sgtk.platform.current_engine()
+            return
+        
+        self.tk_bootstrap_thread = threading.Thread(target=self._bootstrap_toolkit)
+        self.tk_bootstrap_thread.daemon = True
+        self.tk_bootstrap_thread.start()
 
-        # version blues from shotgun bootstrap
+    def _bootstrap_toolkit(self):
+        while self.threads:
+            if not (self.sg_user and self.sg_linked_project_id):
+                time.sleep(0.1)
+            else:
+                # let the original engine to pick up
+                break
+        
+        import sgtk
+        self.destroy_toolkit_engine()
 
-        version_str = os.environ["SHOTGUN_FLAME_VERSION"]
-        maj_ver = os.environ["SHOTGUN_FLAME_MAJOR_VERSION"]
-        maj_ver = int(maj_ver) if maj_ver.isdigit() else 0
-        ext_ver = os.environ["SHOTGUN_FLAME_MINOR_VERSION"]
-        ext_ver = int(ext_ver) if ext_ver.isdigit() else 0
-        patch_ver = os.environ["SHOTGUN_FLAME_PATCH_VERSION"]
-        patch_ver = int(patch_ver) if patch_ver.isdigit() else 0
+        # resolve shotgun plugin path from python path
+        # use it for initializing basic options for
+        # built-in integration
 
-        self.tk_engine.set_version_info(major_version_str=str(maj_ver), minor_version_str=str(ext_ver),
-                            patch_version_str=str(patch_ver), full_version_str=version_str)
+        for python_path in sys.path:
+            if ('shotgun' in python_path) and ('flame_hooks' in python_path):
+                shotgun_plugin_path = os.path.join(
+                    os.path.dirname(python_path), 
+                    'python'
+                    )
 
+        if shotgun_plugin_path not in sys.path:
+            sys.path.append(shotgun_plugin_path)
+
+        if self.builtin_integration_status():
+
+            mgr = sgtk.bootstrap.ToolkitManager(self.sg_user)
+            mgr.base_configuration = 'sgtk:descriptor:app_store?name=tk-config-flameplugin'
+            mgr.plugin_id = 'basic.flame'
+            os.environ["TOOLKIT_FLAME_ENGINE_MODE"] = "DCC"
+            self.tk_engine = mgr.bootstrap_engine("tk-flame", entity={"type": "Project", "id": self.sg_linked_project_id})
+            del os.environ["TOOLKIT_FLAME_ENGINE_MODE"]
+            
+            python_binary = "%s/bin/python" % (sys.prefix)
+            self.tk_engine.set_python_executable(python_binary)
+            self.tk_engine.set_install_root('/opt/Autodesk')
+
+            # version blues from shotgun bootstrap
+
+            version_str = os.environ["SHOTGUN_FLAME_VERSION"]
+            maj_ver = os.environ["SHOTGUN_FLAME_MAJOR_VERSION"]
+            maj_ver = int(maj_ver) if maj_ver.isdigit() else 0
+            ext_ver = os.environ["SHOTGUN_FLAME_MINOR_VERSION"]
+            ext_ver = int(ext_ver) if ext_ver.isdigit() else 0
+            patch_ver = os.environ["SHOTGUN_FLAME_PATCH_VERSION"]
+            patch_ver = int(patch_ver) if patch_ver.isdigit() else 0
+
+            self.tk_engine.set_version_info(major_version_str=str(maj_ver), minor_version_str=str(ext_ver),
+                                patch_version_str=str(patch_ver), full_version_str=version_str)
+
+            project_url = "%s/page/project_overview?project_id=%d" % (self.sg.base_url, self.sg_linked_project_id)
+            import webbrowser
+            jump_to_sg = lambda: webbrowser.open_new(project_url)
+            self.tk_engine.register_command(
+                "Launch Shotgun in Web Browser",
+                jump_to_sg
+            )
+
+            def unlink_project():
+                import flame
+                flame.project.current_project.shotgun_project_name = ''
+                self.connector.sg_linked_project = None
+                self.connector.sg_linked_project_id = None
+            
+            self.tk_engine.register_command(
+                "Break Link to Shotgun Project",
+                unlink_project
+            )
+
+            def logout():
+                import sgtk  # Local import, see top of file explanation
+                from .managers import AuthenticationManagerWrapper
+
+                self.destroy_toolkit_engine()
+
+                authenticator = sgtk.authentication.ShotgunAuthenticator(AuthenticationManagerWrapper.get_manager())
+                authenticator.clear_default_user()
+            
+            self.tk_engine.register_command(
+                "Log Out",
+                logout
+            )
+
+    def destroy_toolkit_engine(self):
+        import sgtk
+        if sgtk.platform.current_engine():
+            sgtk.platform.current_engine().destroy()
+            self.tk_engine = None
+
+    def builtin_integration_status(self):
+        config_file_path = ''
+        config_file_path = os.environ["SHOTGUN_FLAME_CONFIGPATH"]
+        if not config_file_path:
+            return False
+        
+        if not os.access(config_file_path, os.R_OK):
+            return False
+
+        with open(config_file_path, 'r') as config_file:
+            for line in config_file:
+                if 'ShotgunPlugin' in line:
+                    if not line.startswith('#'):
+                        if 'Enabled' in line:
+                            return True
+        return False
 
 class flameMenuProjectconnect(flameMenuApp):
 
@@ -1223,12 +1309,15 @@ class flameMenuProjectconnect(flameMenuApp):
         return self.connector.async_cache_get(self.active_projects_uid)
 
     def unlink_project(self, *args, **kwargs):
+        self.connector.destroy_toolkit_engine()
         self.flame.project.current_project.shotgun_project_name = ''
         self.connector.sg_linked_project = None
         self.connector.sg_linked_project_id = None
         self.rescan()
+        self.connector.bootstrap_toolkit()
 
     def link_project(self, project):
+        self.connector.destroy_toolkit_engine()
         project_name = project.get('name')
         if project_name:
             self.flame.project.current_project.shotgun_project_name = project_name
@@ -1236,18 +1325,22 @@ class flameMenuProjectconnect(flameMenuApp):
             if 'id' in project.keys():
                 self.connector.sg_linked_project_id = project.get('id')
         self.rescan()
-
+        self.connector.bootstrap_toolkit()
+        
     def refresh(self, *args, **kwargs):        
         self.connector.async_cache_get(self.active_projects_uid, True)
         self.rescan()
 
     def sign_in(self, *args, **kwargs):
+        self.connector.destroy_toolkit_engine()
         self.connector.prefs_global['user signed out'] = False
         self.connector.get_user()
         self.framework.save_prefs()
         self.rescan()
+        self.connector.bootstrap_toolkit()
 
     def sign_out(self, *args, **kwargs):
+        self.connector.destroy_toolkit_engine()
         self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
         self.framework.save_prefs()
@@ -4164,6 +4257,8 @@ class flameMenuPublisher(flameMenuApp):
         self.current_tasks_uid = None
         self.current_versions_uid = None
         self.register_query()
+
+        self.progress = self.publish_progress_dialog()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -4177,7 +4272,9 @@ class flameMenuPublisher(flameMenuApp):
                     self.flip_assigned_for_entity(entity)
                 elif entity.get('caller') == 'publish':
                     self.publish(entity, args[0])
+                    self.connector.bootstrap_toolkit()
             self.rescan()
+            self.progress.hide()
         return method
 
     def create_uid(self):
@@ -4566,6 +4663,10 @@ class flameMenuPublisher(flameMenuApp):
     def publish(self, entity, selection):
         
         # Main publishing function
+
+        # temporary move built-in integration out of the way
+
+        self.connector.destroy_toolkit_engine()
         
         # First,let's check if the project folder is there
         # and if not - try to create one
@@ -4606,6 +4707,10 @@ class flameMenuPublisher(flameMenuApp):
 
         for clip in selection:
             pb_info, is_cancelled = self.publish_clip(clip, entity, project_path, export_preset_fields)
+
+            if not pb_info:
+                continue
+        
             if pb_info.get('status', False):
                 version_name = pb_info.get('version_name')
                 versions_published.add(version_name)
@@ -4636,6 +4741,8 @@ class flameMenuPublisher(flameMenuApp):
         else:
             msg = 'Published %s version(s), %s version(s) failed' % (len(versions_published), len(versions_failed))
 
+        self.connector.bootstrap_toolkit()
+
         mbox = self.mbox
         mbox.setText('flameMenuSG: ' + msg)
 
@@ -4663,6 +4770,7 @@ class flameMenuPublisher(flameMenuApp):
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 500px;}')
         mbox.exec_()
+
         
         return True
 
@@ -4980,8 +5088,8 @@ class flameMenuPublisher(flameMenuApp):
             clip.name.set_value(original_clip_name)
             return (pb_info, True)
 
+        
         # Export preview to temp folder
-
 
         # preset_dir = self.flame.PyExporter.get_presets_dir(
         #   self.flame.PyExporter.PresetVisibility.Shotgun,
@@ -5037,6 +5145,9 @@ class flameMenuPublisher(flameMenuApp):
 
         self.log('creating version in shotgun')
 
+        self.progress.show()
+        self.progress.set_progress(version_name, 'Creating version...')
+
         version_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
             code = version_name,
@@ -5065,6 +5176,7 @@ class flameMenuPublisher(flameMenuApp):
 
         if os.path.isfile(thumbnail_path) and update_version_thumbnail:
             self.log('uploading thumbnail %s' % thumbnail_path)
+            self.progress.set_progress(version_name, 'Uploading thumbnail...')
             try:
                 self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
             except Exception as e:
@@ -5083,6 +5195,7 @@ class flameMenuPublisher(flameMenuApp):
 
         if os.path.isfile(preview_path) and update_version_preview:
             self.log('uploading preview %s' % preview_path)
+            self.progress.set_progress(version_name, 'Uploading preview...')
             try:
                 self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
             except Exception as e:
@@ -5116,6 +5229,7 @@ class flameMenuPublisher(flameMenuApp):
             code = os.path.basename(path_cache),
             name = pb_file_name
         )
+        self.progress.set_progress(version_name, 'Registering main publish files...')
         try:
             published_file = self.connector.sg.create('PublishedFile', published_file_data)
         except Exception as e:
@@ -5135,6 +5249,7 @@ class flameMenuPublisher(flameMenuApp):
 
         self.log('created PublishedFile:\n%s' % pformat(published_file))
         self.log('uploading thumbnail %s' % thumbnail_path)
+        self.progress.set_progress(version_name, 'Uploading main publish files thumbnail...')
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
         except Exception as e:
@@ -5253,6 +5368,8 @@ class flameMenuPublisher(flameMenuApp):
 
         if linked_batch_path:
 
+            self.progress.set_progress(version_name, 'Copying linked batch...')
+
             self.log('copying linked .batch file')
             self.log('from %s' % linked_batch_path)
             slef.log('to %s' % export_path)
@@ -5284,6 +5401,7 @@ class flameMenuPublisher(flameMenuApp):
         else:
             self.log('no linked .batch file')
             self.log('saving current batch to: %s' % export_path)
+            self.progress.set_progress(version_name, 'Saving current batch...')
             self.flame.batch.save_setup(export_path)
 
         # get published file type for Flame Batch or create a published file type on the fly
@@ -5321,6 +5439,9 @@ class flameMenuPublisher(flameMenuApp):
         published_file_data['path_cache'] = path_cache
         published_file_data['code'] = os.path.basename(path_cache)
         published_file_data['name'] = task_entity_name
+
+        self.progress.set_progress(version_name, 'Registering batch...')
+
         try:
             published_file = self.connector.sg.create('PublishedFile', published_file_data)
         except Exception as e:
@@ -5340,6 +5461,8 @@ class flameMenuPublisher(flameMenuApp):
         self.log('created PublishedFile:\n%s' % pformat(published_file))
         self.log('uploading thumbnail %s' % thumbnail_path)
         
+        self.progress.set_progress(version_name, 'Uploading batch thumbnail...')
+
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
         except Exception as e:
@@ -5360,6 +5483,8 @@ class flameMenuPublisher(flameMenuApp):
 
         self.log('cleaning up preview and thumbnail files')
 
+        self.progress.set_progress(version_name, 'Cleaning up...')
+
         try:
             os.remove(thumbnail_path)
             os.remove(preview_path)
@@ -5368,7 +5493,108 @@ class flameMenuPublisher(flameMenuApp):
         
         self.log('returning info:\n%s' % pformat(pb_info))
 
+        self.progress.hide()
+
         return (pb_info, False)
+
+    def publish_progress_dialog(self):
+        from sgtk.platform.qt import QtCore, QtGui
+        
+        class Ui_Progress(object):
+            def setupUi(self, Progress):
+                Progress.setObjectName("Progress")
+                Progress.resize(211, 50)
+                Progress.setStyleSheet("#Progress {background-color: #181818;} #frame {background-color: rgb(0, 0, 0, 20); border: 1px solid rgb(255, 255, 255, 20); border-radius: 5px;}\n")
+                self.horizontalLayout_2 = QtGui.QHBoxLayout(Progress)
+                self.horizontalLayout_2.setSpacing(0)
+                self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
+                self.horizontalLayout_2.setObjectName("horizontalLayout_2")
+                self.frame = QtGui.QFrame(Progress)
+                self.frame.setFrameShape(QtGui.QFrame.StyledPanel)
+                self.frame.setFrameShadow(QtGui.QFrame.Raised)
+                self.frame.setObjectName("frame")
+
+                self.horizontalLayout = QtGui.QHBoxLayout(self.frame)
+                self.horizontalLayout.setSpacing(4)
+                self.horizontalLayout.setContentsMargins(4, 4, 4, 4)
+                self.horizontalLayout.setObjectName("horizontalLayout")
+                self.label = QtGui.QLabel(self.frame)
+                self.label.setMinimumSize(QtCore.QSize(40, 40))
+                self.label.setMaximumSize(QtCore.QSize(40, 40))
+                self.label.setAlignment(QtCore.Qt.AlignCenter)
+                self.label.setStyleSheet("color: #989898; border: 2px solid #4679A4; border-radius: 20px;") 
+                self.label.setText('[SG]')
+                # self.label.setPixmap(QtGui.QPixmap(":/tk_flame_basic/shotgun_logo_blue.png"))
+                self.label.setScaledContents(True)
+                self.label.setObjectName("label")
+                self.horizontalLayout.addWidget(self.label)
+                self.verticalLayout = QtGui.QVBoxLayout()
+                self.verticalLayout.setObjectName("verticalLayout")
+
+                self.progress_header = QtGui.QLabel(self.frame)
+                self.progress_header.setAlignment(QtCore.Qt.AlignBottom|QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft)
+                self.progress_header.setObjectName("progress_header")
+                self.progress_header.setStyleSheet("#progress_header {font-size: 10px; qproperty-alignment: \'AlignBottom | AlignLeft\'; font-weight: bold; font-family: Open Sans; font-style: Regular; color: #878787;}")
+
+                self.verticalLayout.addWidget(self.progress_header)
+                self.progress_message = QtGui.QLabel(self.frame)
+                self.progress_message.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignTop)
+                self.progress_message.setObjectName("progress_message")
+                self.progress_message.setStyleSheet("#progress_message {font-size: 10px; qproperty-alignment: \'AlignTop | AlignLeft\'; font-family: Open Sans; font-style: Regular; color: #58595A;}")
+                self.verticalLayout.addWidget(self.progress_message)
+                self.horizontalLayout.addLayout(self.verticalLayout)
+                self.horizontalLayout_2.addWidget(self.frame)
+
+                self.retranslateUi(Progress)
+                QtCore.QMetaObject.connectSlotsByName(Progress)
+
+            def retranslateUi(self, Progress):
+                Progress.setWindowTitle(QtGui.QApplication.translate("Progress", "Form", None, QtGui.QApplication.UnicodeUTF8))
+                self.progress_header.setText(QtGui.QApplication.translate("Progress", "Shotgun Integration", None, QtGui.QApplication.UnicodeUTF8))
+                self.progress_message.setText(QtGui.QApplication.translate("Progress", "Updating config....", None, QtGui.QApplication.UnicodeUTF8))
+
+        class Progress(QtGui.QWidget):
+            """
+            Overlay widget that reports toolkit bootstrap progress to the user.
+            """
+
+            PROGRESS_HEIGHT = 48
+            PROGRESS_WIDTH = 280
+            PROGRESS_PADDING = 40
+
+            def __init__(self):
+                """
+                Constructor
+                """
+                # first, call the base class and let it do its thing.
+                QtGui.QWidget.__init__(self)
+
+                # now load in the UI that was created in the UI designer
+                self.ui = Ui_Progress()
+                self.ui.setupUi(self)
+
+                # make it frameless and have it stay on top
+                self.setWindowFlags(
+                    QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.X11BypassWindowManagerHint
+                )
+
+                # place it in the lower left corner of the primary screen
+                primary_screen = QtGui.QApplication.desktop().primaryScreen()
+                rect_screen = QtGui.QApplication.desktop().availableGeometry(primary_screen)
+
+                self.setGeometry(
+                    ( rect_screen.left() + rect_screen.right() ) // 2 - self.PROGRESS_WIDTH // 2, 
+                    ( rect_screen.bottom() - rect_screen.top() ) // 2 - self.PROGRESS_PADDING,
+                    self.PROGRESS_WIDTH,
+                    self.PROGRESS_HEIGHT
+                )
+
+            def set_progress(self, header, msg):
+                self.ui.progress_header.setText(header)
+                self.ui.progress_message.setText(msg)
+                QtGui.QApplication.processEvents()
+
+        return Progress()
 
     def update_loader_list(self, entity):
         batch_name = self.flame.batch.name.get_value()
