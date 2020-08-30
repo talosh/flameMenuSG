@@ -1202,6 +1202,7 @@ class flameShotgunConnector(object):
                             return True
         return False
 
+
 class flameMenuProjectconnect(flameMenuApp):
 
     # flameMenuProjectconnect app takes care of the preferences dialog as well
@@ -5560,7 +5561,7 @@ class flameMenuPublisher(flameMenuApp):
 
             PROGRESS_HEIGHT = 48
             PROGRESS_WIDTH = 280
-            PROGRESS_PADDING = 40
+            PROGRESS_PADDING = 48
 
             def __init__(self):
                 """
