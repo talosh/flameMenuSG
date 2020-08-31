@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.12'
+__version__ = 'v0.0.13'
 
 
 class flameAppFramework(object):
@@ -474,7 +474,7 @@ class flameShotgunConnector(object):
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
-        # self.loops.append(threading.Thread(target=self.batch_group_check, args=(4, )))
+        self.loops.append(threading.Thread(target=self.flame_workspace_scan, args=(4, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -489,8 +489,70 @@ class flameShotgunConnector(object):
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
 
+    # background loops and related functions
+
+    def sg_cache_loop(self, timeout):
+        while self.threads:
+            start = time.time()
+
+            if not self.sg_user:
+                self.log('no shotgun user...')
+                time.sleep(1)
+            else:
+                results_by_hash = {}
+
+                for cache_request_uid in self.async_cache.keys():
+                    cache_request = self.async_cache.get(cache_request_uid)
+                    if not cache_request:
+                        continue
+                    query = cache_request.get('query')
+                    if not query:
+                        continue
+                    
+                    if hash(pformat(query)) in results_by_hash.keys():
+                        self.async_cache[cache_request_uid]['result'] = results_by_hash.get(hash(pformat(query)))
+                    else:
+                        entity = query.get('entity')
+                        if not entity:
+                            continue
+                        filters = query.get('filters')
+                        fields = query.get('fields')
+                        while not self.sg:
+                            time.sleep(1)
+                        
+                        try:
+                            sg = self.sg_user.create_sg_connection()
+                            result = sg.find(entity, filters, fields)
+                            del sg
+                            self.async_cache[cache_request_uid]['result'] = result
+                            results_by_hash[hash(pformat(query))] = result
+                        except:
+                            pass
+
+                self.async_cache_state_check()
+
+                self.log('sg_cache_loop took %s sec' % str(time.time() - start))
+                time_passed = int(time.time() - start)
+                if timeout > time_passed:
+                    self.log('sg_cache_loop sleeping for %s sec' % (timeout - time_passed))
+                
+                self.loop_timeout(timeout, start)
+
+    def flame_workspace_scan(self, timeout):
+        import flame
+        while self.threads:
+            start = time.time()
+
+            print ('flame workspace scanner heartbeat')
+
+            self.loop_timeout(timeout, start)
+
     def terminate_loops(self):
         self.threads = False
+        
+        # give threads a bit of a time to digest the pill
+        time.sleep(0.5)
+
         for loop in self.loops:
             loop.join()
 
@@ -564,53 +626,6 @@ class flameShotgunConnector(object):
             self.rescan_flag = True
             self.async_cache_hash = hash(pformat(self.async_cache))
     
-    def sg_cache_loop(self, timeout):
-        while self.threads:
-            start = time.time()
-
-            if not self.sg_user:
-                self.log('no shotgun user...')
-                time.sleep(1)
-            else:
-                results_by_hash = {}
-
-                for cache_request_uid in self.async_cache.keys():
-                    cache_request = self.async_cache.get(cache_request_uid)
-                    if not cache_request:
-                        continue
-                    query = cache_request.get('query')
-                    if not query:
-                        continue
-                    
-                    if hash(pformat(query)) in results_by_hash.keys():
-                        self.async_cache[cache_request_uid]['result'] = results_by_hash.get(hash(pformat(query)))
-                    else:
-                        entity = query.get('entity')
-                        if not entity:
-                            continue
-                        filters = query.get('filters')
-                        fields = query.get('fields')
-                        while not self.sg:
-                            time.sleep(1)
-                        
-                        try:
-                            sg = self.sg_user.create_sg_connection()
-                            result = sg.find(entity, filters, fields)
-                            del sg
-                            self.async_cache[cache_request_uid]['result'] = result
-                            results_by_hash[hash(pformat(query))] = result
-                        except:
-                            pass
-
-                self.async_cache_state_check()
-
-                self.log('sg_cache_loop took %s sec' % str(time.time() - start))
-                time_passed = int(time.time() - start)
-                if timeout > time_passed:
-                    self.log('sg_cache_loop sleeping for %s sec' % (timeout - time_passed))
-                
-                self.loop_timeout(timeout, start)
-
     # end of async cache methods
 
     def update_human_user(self):
@@ -1074,15 +1089,7 @@ class flameShotgunConnector(object):
         self.sg_storage_root = {}
         return False
 
-    def batch_group_check(self, timeout):
-        import flame
-        self.batch_name = ''
-        while self.threads:
-            start = time.time()
-            current_batch_name = flame.batch.name.get_value()
-            if current_batch_name != self.batch_name:
-                self.rescan_flag = True
-            self.loop_timeout(timeout, start)
+    # toolkit related methods
 
     def bootstrap_toolkit(self):
         import sgtk
@@ -4499,6 +4506,9 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs[entity_id]['show_all'] = True
         prefs = self.prefs.get(entity_id)
 
+        version_template = self.prefs.get('templates', {}).get(entity_type, {}).get('version_name', {}).get('value', '')
+        # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
+
         tasks = []
         cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
         
@@ -4525,7 +4535,6 @@ class flameMenuPublisher(flameMenuApp):
                 continue
             tasks.append(cached_task)
         
-
         versions = []
         cached_versions = self.connector.async_cache_get(self.current_versions_uid)
 
@@ -4620,7 +4629,18 @@ class flameMenuPublisher(flameMenuApp):
                 menu_item['execute'] = self.rescan
                 menu['actions'].append(menu_item)
 
-            for task in tasks_by_step[step_name]:                
+            for task in tasks_by_step[step_name]:
+
+                # fill in template fields from task
+                task_Sequence = task.get('entity.Shot.sg_sequence', {})
+                task_Sequence_name = task_Sequence.get('name')
+                task_Shot = entity.get('code')
+                task_Asset = entity.get('code')
+                task_sg_Asset_type = task.get('entity.Asset.sg_asset_type')
+                task_Step = task.get('step.Step.code')
+                task_Step_code = task.get('step.Step.short_name')
+                
+
                 task_name = task.get('content')
                 menu_item = {}
                 if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
@@ -4631,10 +4651,29 @@ class flameMenuPublisher(flameMenuApp):
                 menu['actions'].append(menu_item)
 
                 task_id = task.get('id')
+
                 version_names = []
                 version_name_lenghts = set()
                 for version in versions:
                     if task_id == version.get('sg_task.Task.id'):
+                        
+                        '''
+                        # try to get the name of he clip used to create version
+
+                        resolved_template = version_template
+                        if task_Sequence_name: resolved_template = resolved_template.replace('{Sequence}', task_Sequence_name) 
+                        if task_Shot: resolved_template = resolved_template.replace('{Shot}', task_Shot) 
+                        if task_Asset: resolved_template = resolved_template.replace('{Asset}', task_Asset) 
+                        if task_sg_Asset_type: resolved_template = resolved_template.replace('{sg_asset_type}', task_sg_Asset_type) 
+                        if task_Step: resolved_template = resolved_template.replace('{Step}', task_Step) 
+                        if task_Step_code: resolved_template = resolved_template.replace('{Step_code}', task_Step_code)
+                        resolved_template = resolved_template.replace('{version}', '(\d{3})')
+                        resolved_template = resolved_template.replace('{name}', '(.*)')
+                        pattern = re.compile(resolved_template)
+                        match = re.search(pattern, version.get('code'))
+                        pprint (match.group(2))
+                        '''
+                        
                         version_names.append('* ' + version.get('code'))
                         version_name_lenghts.add(len('* ' + version.get('code')))
                 
@@ -4925,7 +4964,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('\n%s' % pformat(template_fields))
 
         # compose version name from template
-
+        
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
 
         self.log('version name template: %s' % version_name)
@@ -6234,7 +6273,7 @@ class flameMenuPublisher(flameMenuApp):
                     'fields': [
                         'code',
                         'sg_task.Task.id',
-                        'entity'
+                        'entity',
                     ]
             })          
             return True
@@ -6268,6 +6307,7 @@ class flameMenuPublisher(flameMenuApp):
             self.log('Rescan Python Hooks')
             if self.connector:
                 self.connector.rescan_flag = False
+
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
