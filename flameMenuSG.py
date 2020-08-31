@@ -466,15 +466,19 @@ class flameShotgunConnector(object):
         self.async_cache_hash = hash(pformat(self.async_cache))
         self.rescan_flag = False
 
+        self.flame_workspace_state = self.prefs.get('wks_state')
+        if not self.flame_workspace_state:
+            self.flame_workspace_state = {}
+
         self.check_sg_linked_project()
         self.update_sg_storage_root()
 
-        # loop threads init
+        # loop threads init. first arg in args is loop cycle time in seconds
 
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
-        self.loops.append(threading.Thread(target=self.flame_workspace_scan, args=(4, )))
+        self.loops.append(threading.Thread(target=self.flame_workspace_scan, args=(8, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -540,19 +544,167 @@ class flameShotgunConnector(object):
 
     def flame_workspace_scan(self, timeout):
         import flame
+        
         while self.threads:
             start = time.time()
+            # list of fresh workspace uid(s) to clean up old uid(s) and cache queries
 
-            print ('flame workspace scanner heartbeat')
+            # Annoingly we need to check current_project constantly and decorate every access
+            # to flame object values with try::except to prevent crash message due to
+            # object we're trying to access has already been cleared from memory
+            
+            wks_state = {}
+            current_wokrspace_uids = []
 
+            try:
+                batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups 
+                reel_groups = flame.project.current_project.current_workspace.desktop.reel_groups 
+                libraries = flame.project.current_project.current_workspace.libraries
+            except:
+                break                
+
+            # Scan Batch Groups, Batch Reels and Libraries of current workspace
+            # The items we're specifically interested in are Batch Groups, Clips and Sequences
+            # Top-level clips are complicated matter and may consist of multiple items
+
+            # We want to create a structure that represents current workspace
+            # Will need to figure out the best way to link to async cache queries 
+            # { wiretap_id: {
+            #       'type': 'BatchGroup',
+            #       'name': 'Name of the batch group',
+            #       'shot_name': '' # shotgun uses shot name field in clips
+            #       'entities': [{'type': 'Shot, 'id': 123}, {'type': 'Sequence', 'id': 456}] # list of shotgun entities it linked to
+            # }
+            # }
+
+            # scan batch groups
+
+            for xb in range(0, len(batch_groups)):
+                try:
+                    project = flame.project.current_project
+                    batch_group_reels = batch_groups[xb].reels
+                    batch_group_shelf_reels = batch_groups[xb].shelf_reels
+                    batch_uid = batch_groups[xb].uid.get_value()
+                    batch_name = batch_groups[xb].name.get_value()
+                except:
+                    break
+
+                current_wokrspace_uids.append(batch_uid)
+                if batch_uid not in wks_state.keys():
+                    wks_state[batch_uid] = {'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}
+                else:
+                    wks_state[batch_uid]['name'] = batch_name
+            
+                for xr in range(0, len(batch_group_reels)):
+                    try:
+                        project = flame.project.current_project
+                        reel_clips = batch_group_reels[xr].clips
+                        reel_sequences = batch_group_reels[xr].sequences
+                    except:
+                        break
+                    
+                    if len(reel_clips) == 0:
+                        continue
+
+                    for xc in range(0, len(reel_clips)):
+                        try:
+                            project = flame.project.current_project
+                            name = reel_clips[xc].name.get_value()
+                            uid = reel_clips[xc].uid.get_value()
+                            shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
+                        except:
+                            break
+
+                        current_wokrspace_uids.append(uid)
+                        if uid not in wks_state.keys():
+                            wks_state[uid] = {'type': 'Clip', 'name': name, 'shot_name': shot_name, 'parent': batch_uid}
+                        else:
+                            wks_state[uid]['name'] = name
+                            wks_state[uid]['shot_name'] = shot_name
+                            wks_state[uid]['parent'] = batch_uid
+
+                for xr in range(0, len(batch_group_shelf_reels)):
+                    try:
+                        project = flame.project.current_project
+                        reel_clips = batch_group_shelf_reels[xr].clips
+                        reel_sequences = batch_group_shelf_reels[xr].sequences
+                    except:
+                        break
+
+                    if len(reel_clips) == 0:
+                        continue
+
+                    for xc in range(0, len(reel_clips)):
+                        try:
+                            project = flame.project.current_project
+                            name = reel_clips[xc].name.get_value()
+                            uid = reel_clips[xc].uid.get_value()
+                            shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
+                        except:
+                            break
+
+                        current_wokrspace_uids.append(uid)
+                        if uid not in wks_state.keys():
+                            wks_state[uid] = {'type': 'Clip', 'name': name, 'shot_name': shot_name, 'parent': batch_uid}
+                        else:
+                            wks_state[uid]['name'] = name
+                            wks_state[uid]['shot_name'] = shot_name
+                            wks_state[uid]['parent'] = batch_uid
+
+
+
+            # out of loops project checks and breaks
+            
+                try:
+                    project = flame.project.current_project
+                except:
+                    break
+            try:
+                project = flame.project.current_project
+            except:
+                break
+
+
+            '''
+                    print ('clips:')
+                    for clip in reel_clips:
+                        if not self.threads: break
+                        # print ('name: %s uid: %s' % (clip.name.get_value(), clip.uid.get_value()))
+                    print ('sequences:')
+                    for sequence in reel_sequences:
+                        if not self.threads: break
+                        # print ('name: %s uid: %s' % (sequence.name.get_value(), sequence.uid.get_value()))
+                
+            '''
+
+            '''
+
+                for reel in batch_group.shelf_reels:
+                    print ('clips:')
+                    for clip in reel.clips:
+                        print ('name: %s uid: %s' % (clip.name.get_value(), clip.uid.get_value()))
+                    print ('sequences:')
+                    for sequence in reel.sequences:
+                        print ('name: %s uid: %s' % (sequence.name.get_value(), sequence.uid.get_value()))
+            '''
+
+            self.flame_workspace_state = dict(wks_state)
+
+            pprint (self.flame_workspace_state)
+
+            # put it in preferences
+            self.prefs['wks_state'] = wks_state
+
+            print('workspace scan took %s' % (time.time() - start))
             self.loop_timeout(timeout, start)
+            
+            # time.sleep(0.1)
+        
+        print ('flame scan loop end')
 
     def terminate_loops(self):
         self.threads = False
         
-        # give threads a bit of a time to digest the pill
-        time.sleep(0.5)
-
         for loop in self.loops:
             loop.join()
 
@@ -569,8 +721,13 @@ class flameShotgunConnector(object):
 
     # async cache related methods
 
-    def async_cache_register(self, query, perform_query = True):
+    def async_cache_register(self, query, perform_query = True, sg = None):
         import uuid
+
+        # use main thread shotgun connection if not given
+
+        if not sg:
+            sg = self.sg
 
         uid = (str(uuid.uuid1()).replace('-', '')).upper()
         self.async_cache[uid] = {'query': query, 'result': []}
@@ -580,7 +737,7 @@ class flameShotgunConnector(object):
             entity = query.get('entity')
             filters = query.get('filters')
             fields = query.get('fields')
-            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
         
         self.async_cache_state_check()
         return uid
@@ -595,12 +752,17 @@ class flameShotgunConnector(object):
         else:
             return False
 
-    def async_cache_get(self, uid, perform_query = False, query_type = 'result'):
+    def async_cache_get(self, uid, perform_query = False, query_type = 'result', sg = None):
         if not uid in self.async_cache.keys():
             return False
         query = self.async_cache.get(uid)
         if not query:
             return False
+
+        # use main thread shotgun connection if not given
+
+        if not sg:
+            sg = self.sg
 
         if perform_query:
             query_body = query.get('query')
@@ -608,7 +770,7 @@ class flameShotgunConnector(object):
             filters = query_body.get('filters')
             fields = query_body.get('fields')
             self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
-            self.async_cache[uid]['result'] = self.sg.find(entity, filters, fields)
+            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
         
         query = self.async_cache.get(uid)
         if query_type == 'result':
@@ -2665,8 +2827,7 @@ class flameBatchBlessing(flameMenuApp):
                 return False
         return flame_batch_path
 
-    def collect_clip_uids(self, render_dest):
-        import flame
+    def collect_clip_uids(self, render_dest):        
         # collects clip uids from locations specified in render_dest dictionary
         # returns:    dictionary of lists of clip uid's at the locations specified
         #            in render_dest dictionary.
@@ -2693,6 +2854,8 @@ class flameBatchBlessing(flameMenuApp):
         #
         #                        }
         #            }
+
+        import flame
 
         collected_uids = dict()
         for dest in render_dest.keys():
@@ -6346,6 +6509,8 @@ sys.excepthook = exeption_handler
 
 # register clean up logic to be called at Flame exit
 def cleanup(apps, app_framework, shotgunConnector):
+    if shotgunConnector: shotgunConnector.terminate_loops()
+    
     if apps:
         if DEBUG:
             print ('[DEBUG %s] unloading apps:\n%s' % ('flameMenuSG', pformat(apps)))
@@ -6356,9 +6521,7 @@ def cleanup(apps, app_framework, shotgunConnector):
             del app        
         del apps
 
-    if shotgunConnector:
-        shotgunConnector.terminate_loops()
-        del shotgunConnector
+    if shotgunConnector: del shotgunConnector
 
     if app_framework:
         print ('PYTHON\t: %s cleaning up' % app_framework.bundle_name)
