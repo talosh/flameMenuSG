@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -75,6 +75,65 @@ __version__ = 'v0.0.13'
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
+
+    class prefs_dict(dict):
+        # subclass of a dict() in order to directly link it 
+        # to main framework prefs dictionaries
+        # when accessed directly it will operate on a dictionary under a 'name'
+        # key in master dictionary.
+        # master = {}
+        # p = prefs(master, 'app_name')
+        # p['key'] = 'value'
+        # master - {'app_name': {'key', 'value'}}
+            
+        def __init__(self, master, name, **kwargs):
+            self.name = name
+            self.master = master
+            if not self.master.get(self.name):
+                self.master[self.name] = {}
+            self.master[self.name].__init__()
+
+        def __getitem__(self, k):
+            return self.master[self.name].__getitem__(k)
+        
+        def __setitem__(self, k, v):
+            return self.master[self.name].__setitem__(k, v)
+
+        def __delitem__(self, k):
+            return self.master[self.name].__delitem__(k)
+        
+        def get(self, k, default=None):
+            return self.master[self.name].get(k, default)
+        
+        def setdefault(self, k, default=None):
+            return self.master[self.name].setdefault(k, default)
+
+        def pop(self, k, v=object()):
+            if v is object():
+                return self.master[self.name].pop(k)
+            return self.master[self.name].pop(k, v)
+        
+        def update(self, mapping=(), **kwargs):
+            self.master[self.name].update(mapping, **kwargs)
+        
+        def __contains__(self, k):
+            return self.master[self.name].__contains__(k)
+
+        def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
+            return type(self)(self)
+        
+        def keys(self):
+            return self.master[self.name].keys()
+
+        @classmethod
+        def fromkeys(cls, keys, v=None):
+            return self.master[self.name].fromkeys(keys, v)
+        
+        def __repr__(self):
+            return '{0}({1})'.format(type(self).__name__, self.master[self.name].__repr__())
+
+        def master_keys(self):
+            return self.master.keys()
 
     def __init__(self):
         self.name = self.__class__.__name__
@@ -216,64 +275,169 @@ class flameAppFramework(object):
             
         return True
 
-    class prefs_dict(dict):
-        # subclass of a dict() in order to directly link it 
-        # to main framework prefs dictionaries
-        # when accessed directly it will operate on a dictionary under a 'name'
-        # key in master dictionary.
-        # master = {}
-        # p = prefs(master, 'app_name')
-        # p['key'] = 'value'
-        # master - {'app_name': {'key', 'value'}}
+    def flame_workspace_scan(self):
+        import flame
+        
+        start = time.time()
+        
+        # list of fresh workspace uid(s) to clean up old uid(s) and cache queries
+
+        # Annoingly we need to check current_project constantly and decorate every access
+        # to flame object values with try::except to prevent crash message due to
+        # object we're trying to access has already been cleared from memory
+        
+        # flame.schedule_idle_event(self.rescan)
+
+        wks_state = {}
+        selected_uids = set()
+
+        try:
+            project = flame.project.current_project
+            batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups 
+            reel_groups = flame.project.current_project.current_workspace.desktop.reel_groups 
+            libraries = flame.project.current_project.current_workspace.libraries
+        except:
+            return
+        
+        '''
+        try:
+            media_panel = flame.media_panel
+        except:
+            media_panel = None
+            print ('no media panel')
+        if media_panel:
+            pprint(media_panel.selected_entries)
+        '''
+
+        # Scan Batch Groups, Batch Reels and Libraries of current workspace
+        # The items we're specifically interested in are Batch Groups, Clips and Sequences
+        # Parent for Clips is BatchGroup
+
+        # We want to create a structure that represents current workspace
+        # Will need to figure out the best way to link to async cache queries 
+        # { wiretap_id: {
+        #       'type': 'BatchGroup',
+        #       'name': 'Name of the batch group',
+        #       'shot_name': '' # shotgun uses shot name field in clips
+        #       'entities': [{'type': 'Shot, 'id': 123}, {'type': 'Sequence', 'id': 456}] # list of shotgun entities it linked to
+        # }
+        # }
+
+        # scan batch groups
+
+        for xb in range(0, len(batch_groups)):
+            if not batch_groups: continue
+            try:
+                project = flame.project.current_project
+                batch_group_reels = batch_groups[xb].reels
+                batch_group_shelf_reels = batch_groups[xb].shelf_reels
+                batch_uid = batch_groups[xb].uid.get_value()
+                batch_name = batch_groups[xb].name.get_value()
+            except:
+                break
             
-        def __init__(self, master, name, **kwargs):
-            self.name = name
-            self.master = master
-            if not self.master.get(self.name):
-                self.master[self.name] = {}
-            self.master[self.name].__init__()
+            # Process and register BatchGroup
 
-        def __getitem__(self, k):
-            return self.master[self.name].__getitem__(k)
-        
-        def __setitem__(self, k, v):
-            return self.master[self.name].__setitem__(k, v)
+            if batch_uid not in wks_state.keys():
+                wks_state[batch_uid] = {'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}
+            else:
+                wks_state[batch_uid]['name'] = batch_name
+            wks_state[batch_uid]['name_hash'] = hash(pformat({'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}))
+            
 
-        def __delitem__(self, k):
-            return self.master[self.name].__delitem__(k)
-        
-        def get(self, k, default=None):
-            return self.master[self.name].get(k, default)
-        
-        def setdefault(self, k, default=None):
-            return self.master[self.name].setdefault(k, default)
+            # we don't have to distinquish between batch reels and shelf reels at the moment
 
-        def pop(self, k, v=object()):
-            if v is object():
-                return self.master[self.name].pop(k)
-            return self.master[self.name].pop(k, v)
-        
-        def update(self, mapping=(), **kwargs):
-            self.master[self.name].update(mapping, **kwargs)
-        
-        def __contains__(self, k):
-            return self.master[self.name].__contains__(k)
+            batch_reels = batch_group_reels + batch_group_shelf_reels
 
-        def copy(self): # don't delegate w/ super - dict.copy() -> dict :(
-            return type(self)(self)
-        
-        def keys(self):
-            return self.master[self.name].keys()
+            # process batch and shelf reels together
+            
+            for xr in range(0, len(batch_reels)):
+                try:
+                    project = flame.project.current_project
+                    reel_clips = batch_reels[xr].clips
+                except:
+                    break
+                
+                try:
+                    project = flame.project.current_project
+                    reel_sequences = batch_reels[xr].sequences
+                except:
+                    break
+                # Process Clips found on Reel
+                # Clips have single segment (hopefully)
+                # So we're going to take 'shot_name' field 
+                # from first segment and take it as a clips 'shot_name'
 
-        @classmethod
-        def fromkeys(cls, keys, v=None):
-            return self.master[self.name].fromkeys(keys, v)
-        
-        def __repr__(self):
-            return '{0}({1})'.format(type(self).__name__, self.master[self.name].__repr__())
+                for xc in range(0, len(reel_clips)):
+                    try:
+                        project = flame.project.current_project
+                    except:
+                        break
+                    
+                    clip_name = reel_clips[xc].name.get_value()
+                    clip_uid = reel_clips[xc].uid.get_value()
+                    shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
+                    selected = reel_clips[xc].selected.get_value()
 
-        def master_keys(self):
-            return self.master.keys()
+                    if selected:
+                        selected_uids.add(clip_uid)
+
+                    if clip_uid not in wks_state.keys():
+                        wks_state[clip_uid] = {'type': 'Clip', 'name': clip_name, 'shot_name': shot_name, 'parent': batch_uid}
+                    else:
+                        wks_state[clip_uid]['name'] = clip_name
+                        wks_state[clip_uid]['shot_name'] = shot_name
+                        wks_state[clip_uid]['parent'] = batch_uid
+                    wks_state[clip_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
+
+
+                # Process Sequences found on Reel
+                # Sequences may have more than one segment
+                # Each of a segments has its own 'shot_name' field
+
+                for xs in range(0, len(reel_sequences)):
+                    try:
+                        project = flame.project.current_project
+                    except:
+                        break
+                    
+                    seq_name = reel_sequences[xs].name.get_value()
+                    seq_uid = reel_sequences[xs].uid.get_value()
+                    selected = reel_sequences[xc].selected.get_value()
+
+                    if selected:
+                        selected_uids.add(seq_uid)
+
+                    if seq_uid not in wks_state.keys():
+                        wks_state[seq_uid] = {'type': 'Sequence', 'name': seq_name, 'shot_name': '', 'parent': batch_uid}
+                    else:
+                        wks_state[seq_uid]['name'] = seq_name
+                        wks_state[seq_uid]['shot_name'] = ''
+                        wks_state[seq_uid]['parent'] = batch_uid
+                    wks_state[seq_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': seq_name, 'shot_name': ''}))
+        '''
+        # out of loops project checks and breaks
+        
+            try:
+                project = flame.project.current_project
+            except:
+                break
+        try:
+            project = flame.project.current_project
+        except:
+            break
+
+        self.flame_workspace_state = dict(wks_state)
+
+        # pprint (self.flame_workspace_state)
+        # pprint (selected_uids)
+
+        # put it in preferences
+        self.prefs['wks_state'] = dict(wks_state)
+
+        # print('workspace scan took %s' % (time.time() - start))
+        #self.loop_timeout(timeout, start)
+        '''
 
 
 class flameMenuApp(object):
@@ -478,7 +642,8 @@ class flameShotgunConnector(object):
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
-        self.loops.append(threading.Thread(target=self.flame_workspace_scan, args=(8, )))
+        # self.loops.append(threading.Thread(target=self.flame_scan_loop))
+        # self.loops.append(threading.Thread(target=self.flame_workspace_scan, args=(2, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -542,167 +707,19 @@ class flameShotgunConnector(object):
                 
                 self.loop_timeout(timeout, start)
 
-    def flame_workspace_scan(self, timeout):
+    def flame_scan_loop(self):
         import flame
-        
+
         while self.threads:
-            start = time.time()
-            # list of fresh workspace uid(s) to clean up old uid(s) and cache queries
-
-            # Annoingly we need to check current_project constantly and decorate every access
-            # to flame object values with try::except to prevent crash message due to
-            # object we're trying to access has already been cleared from memory
-            
-            wks_state = {}
-            current_wokrspace_uids = []
-
-            try:
-                batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups 
-                reel_groups = flame.project.current_project.current_workspace.desktop.reel_groups 
-                libraries = flame.project.current_project.current_workspace.libraries
-            except:
-                break                
-
-            # Scan Batch Groups, Batch Reels and Libraries of current workspace
-            # The items we're specifically interested in are Batch Groups, Clips and Sequences
-            # Parent for Clips is BatchGroup
-
-            # We want to create a structure that represents current workspace
-            # Will need to figure out the best way to link to async cache queries 
-            # { wiretap_id: {
-            #       'type': 'BatchGroup',
-            #       'name': 'Name of the batch group',
-            #       'shot_name': '' # shotgun uses shot name field in clips
-            #       'entities': [{'type': 'Shot, 'id': 123}, {'type': 'Sequence', 'id': 456}] # list of shotgun entities it linked to
-            # }
-            # }
-
-            # scan batch groups
-
-            for xb in range(0, len(batch_groups)):
-                if not batch_groups: continue
-                try:
-                    project = flame.project.current_project
-                    batch_group_reels = batch_groups[xb].reels
-                    batch_group_shelf_reels = batch_groups[xb].shelf_reels
-                    batch_uid = batch_groups[xb].uid.get_value()
-                    batch_name = batch_groups[xb].name.get_value()
-                except:
-                    break
-                
-                # Process and register BatchGroup
-
-                current_wokrspace_uids.append(batch_uid)
-                if batch_uid not in wks_state.keys():
-                    wks_state[batch_uid] = {'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}
-                else:
-                    wks_state[batch_uid]['name'] = batch_name
-                wks_state[batch_uid]['name_hash'] = hash(pformat({'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}))
-
-                # we don't have to distinquish between batch reels and shelf reels at the moment
-
-                batch_reels = batch_group_reels + batch_group_shelf_reels                
-                for xr in range(0, len(batch_reels)):
-                    if not batch_reels: continue
-                    try:
-                        project = flame.project.current_project
-                    except:
-                        break
-                    
-                    reel_clips = batch_reels[xr].clips
-                    reel_sequences = batch_reels[xr].sequences
-                    
-                    # Process Clips found on Reel
-                    # Clips have single segment (hopefully)
-                    # So we're going to take 'shot_name' field 
-                    # from first segment and take it as a clips 'shot_name'
-
-                    for xc in range(0, len(reel_clips)):
-                        print ('batch %s, reel_clips: %s, index: %s' % (batch_name, pformat(reel_clips), xc))
-                        # if not reel_clips: continue
-                        try:
-                            project = flame.project.current_project
-                        except:
-                            break
-                        
-                        clip_name = reel_clips[xc].name.get_value()
-                        clip_uid = reel_clips[xc].uid.get_value()
-                        shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
-
-                        current_wokrspace_uids.append(clip_uid)
-                        if clip_uid not in wks_state.keys():
-                            wks_state[clip_uid] = {'type': 'Clip', 'name': clip_name, 'shot_name': shot_name, 'parent': batch_uid}
-                        else:
-                            wks_state[clip_uid]['name'] = clip_name
-                            wks_state[clip_uid]['shot_name'] = shot_name
-                            wks_state[clip_uid]['parent'] = batch_uid
-                        wks_state[clip_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
-
-                    # Process Sequences found on Reel
-                    # Sequences may have more than one segment
-                    # Each of a segments has its own 'shot_name' field
-                    
-                    for xs in range(0, len(reel_sequences)):
-                        try:
-                            project = flame.project.current_project
-                        except:
-                            break
-                        
-                        # seq_name = reel_clips[xs].name.get_value()
-                        # seq_uid = reel_clips[xs].uid.get_value()
-
-                        # current_wokrspace_uids.append(seq_uid)
-                        # pprint ('sequence: name: %s, uid: %s' % (seq_name, seq_uid))
-
-            # out of loops project checks and breaks
-            
-                try:
-                    project = flame.project.current_project
-                except:
-                    break
             try:
                 project = flame.project.current_project
             except:
                 break
-
-
-            '''
-                    print ('clips:')
-                    for clip in reel_clips:
-                        if not self.threads: break
-                        # print ('name: %s uid: %s' % (clip.name.get_value(), clip.uid.get_value()))
-                    print ('sequences:')
-                    for sequence in reel_sequences:
-                        if not self.threads: break
-                        # print ('name: %s uid: %s' % (sequence.name.get_value(), sequence.uid.get_value()))
-                
-            '''
-
-            '''
-
-                for reel in batch_group.shelf_reels:
-                    print ('clips:')
-                    for clip in reel.clips:
-                        print ('name: %s uid: %s' % (clip.name.get_value(), clip.uid.get_value()))
-                    print ('sequences:')
-                    for sequence in reel.sequences:
-                        print ('name: %s uid: %s' % (sequence.name.get_value(), sequence.uid.get_value()))
-            '''
-
-            self.flame_workspace_state = dict(wks_state)
-
-            # pprint (self.flame_workspace_state)
-
-            # put it in preferences
-            self.prefs['wks_state'] = dict(wks_state)
-
-            print('workspace scan took %s' % (time.time() - start))
-            self.loop_timeout(timeout, start)
             
-            # time.sleep(0.1)
-        
-        print ('flame scan loop end')
-
+            flame.schedule_idle_event(self.flame_workspace_scan)
+            time.sleep(0.05)
+        print ('end of selected loop')
+                                
     def terminate_loops(self):
         self.threads = False
         
@@ -6608,8 +6625,6 @@ def get_media_panel_custom_ui_actions():
             app_menu = app.build_menu()
             if app_menu:
                 menu.extend(app_menu)
-    if DEBUG:
-        print('media panel menu update took %s' % (time.time() - start))
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
@@ -6619,6 +6634,10 @@ def get_media_panel_custom_ui_actions():
                 flame.execute_shortcut('Rescan Python Hooks')
             except:
                 pass
+    
+    if DEBUG:
+        print('media panel menu update took %s' % (time.time() - start))
+    
     return menu
 
 def get_batch_custom_ui_actions():
