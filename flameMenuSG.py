@@ -565,7 +565,7 @@ class flameShotgunConnector(object):
 
             # Scan Batch Groups, Batch Reels and Libraries of current workspace
             # The items we're specifically interested in are Batch Groups, Clips and Sequences
-            # Top-level clips are complicated matter and may consist of multiple items
+            # Parent for Clips is BatchGroup
 
             # We want to create a structure that represents current workspace
             # Will need to figure out the best way to link to async cache queries 
@@ -580,6 +580,7 @@ class flameShotgunConnector(object):
             # scan batch groups
 
             for xb in range(0, len(batch_groups)):
+                if not batch_groups: continue
                 try:
                     project = flame.project.current_project
                     batch_group_reels = batch_groups[xb].reels
@@ -588,70 +589,70 @@ class flameShotgunConnector(object):
                     batch_name = batch_groups[xb].name.get_value()
                 except:
                     break
+                
+                # Process and register BatchGroup
 
                 current_wokrspace_uids.append(batch_uid)
                 if batch_uid not in wks_state.keys():
                     wks_state[batch_uid] = {'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}
                 else:
                     wks_state[batch_uid]['name'] = batch_name
-            
-                for xr in range(0, len(batch_group_reels)):
+                wks_state[batch_uid]['name_hash'] = hash(pformat({'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}))
+
+                # we don't have to distinquish between batch reels and shelf reels at the moment
+
+                batch_reels = batch_group_reels + batch_group_shelf_reels                
+                for xr in range(0, len(batch_reels)):
+                    if not batch_reels: continue
                     try:
                         project = flame.project.current_project
-                        reel_clips = batch_group_reels[xr].clips
-                        reel_sequences = batch_group_reels[xr].sequences
                     except:
                         break
                     
-                    if len(reel_clips) == 0:
-                        continue
+                    reel_clips = batch_reels[xr].clips
+                    reel_sequences = batch_reels[xr].sequences
+                    
+                    # Process Clips found on Reel
+                    # Clips have single segment (hopefully)
+                    # So we're going to take 'shot_name' field 
+                    # from first segment and take it as a clips 'shot_name'
 
                     for xc in range(0, len(reel_clips)):
+                        print ('batch %s, reel_clips: %s, index: %s' % (batch_name, pformat(reel_clips), xc))
+                        # if not reel_clips: continue
                         try:
                             project = flame.project.current_project
-                            name = reel_clips[xc].name.get_value()
-                            uid = reel_clips[xc].uid.get_value()
-                            shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
                         except:
                             break
+                        
+                        clip_name = reel_clips[xc].name.get_value()
+                        clip_uid = reel_clips[xc].uid.get_value()
+                        shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
 
-                        current_wokrspace_uids.append(uid)
-                        if uid not in wks_state.keys():
-                            wks_state[uid] = {'type': 'Clip', 'name': name, 'shot_name': shot_name, 'parent': batch_uid}
+                        current_wokrspace_uids.append(clip_uid)
+                        if clip_uid not in wks_state.keys():
+                            wks_state[clip_uid] = {'type': 'Clip', 'name': clip_name, 'shot_name': shot_name, 'parent': batch_uid}
                         else:
-                            wks_state[uid]['name'] = name
-                            wks_state[uid]['shot_name'] = shot_name
-                            wks_state[uid]['parent'] = batch_uid
+                            wks_state[clip_uid]['name'] = clip_name
+                            wks_state[clip_uid]['shot_name'] = shot_name
+                            wks_state[clip_uid]['parent'] = batch_uid
+                        wks_state[clip_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
 
-                for xr in range(0, len(batch_group_shelf_reels)):
-                    try:
-                        project = flame.project.current_project
-                        reel_clips = batch_group_shelf_reels[xr].clips
-                        reel_sequences = batch_group_shelf_reels[xr].sequences
-                    except:
-                        break
-
-                    if len(reel_clips) == 0:
-                        continue
-
-                    for xc in range(0, len(reel_clips)):
+                    # Process Sequences found on Reel
+                    # Sequences may have more than one segment
+                    # Each of a segments has its own 'shot_name' field
+                    
+                    for xs in range(0, len(reel_sequences)):
                         try:
                             project = flame.project.current_project
-                            name = reel_clips[xc].name.get_value()
-                            uid = reel_clips[xc].uid.get_value()
-                            shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
                         except:
                             break
+                        
+                        # seq_name = reel_clips[xs].name.get_value()
+                        # seq_uid = reel_clips[xs].uid.get_value()
 
-                        current_wokrspace_uids.append(uid)
-                        if uid not in wks_state.keys():
-                            wks_state[uid] = {'type': 'Clip', 'name': name, 'shot_name': shot_name, 'parent': batch_uid}
-                        else:
-                            wks_state[uid]['name'] = name
-                            wks_state[uid]['shot_name'] = shot_name
-                            wks_state[uid]['parent'] = batch_uid
-
-
+                        # current_wokrspace_uids.append(seq_uid)
+                        # pprint ('sequence: name: %s, uid: %s' % (seq_name, seq_uid))
 
             # out of loops project checks and breaks
             
@@ -690,10 +691,10 @@ class flameShotgunConnector(object):
 
             self.flame_workspace_state = dict(wks_state)
 
-            pprint (self.flame_workspace_state)
+            # pprint (self.flame_workspace_state)
 
             # put it in preferences
-            self.prefs['wks_state'] = wks_state
+            self.prefs['wks_state'] = dict(wks_state)
 
             print('workspace scan took %s' % (time.time() - start))
             self.loop_timeout(timeout, start)
