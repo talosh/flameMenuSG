@@ -276,20 +276,26 @@ class flameAppFramework(object):
         return True
 
     def flame_workspace_scan(self):
+        
+        # Scans Flame workscpase and returns dictionary that contains workspace status
+        # with uids as keys and a list of currently selected objects uids
+        # { uid: {
+        #       'type': 'BatchGroup',
+        #       'name': 'Name of the batch group',
+        #       'shot_name': '' # shotgun uses shot name field in clips
+        #       'name_hash': hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
+        # }
+        # }
+        # returns tuple (dict(wks_state), list(selected_uids))
+
         import flame
         
-        start = time.time()
-        
-        # list of fresh workspace uid(s) to clean up old uid(s) and cache queries
-
-        # Annoingly we need to check current_project constantly and decorate every access
-        # to flame object values with try::except to prevent crash message due to
-        # object we're trying to access has already been cleared from memory
-        
-        # flame.schedule_idle_event(self.rescan)
-
         wks_state = {}
         selected_uids = set()
+
+        # Annoingly we need to check current_project constantly and decorate every access
+        # to flame object values with try::except to reduce chances of crash message to 
+        # appear on flame exit due to object we're trying to access has already been cleared from memory
 
         try:
             project = flame.project.current_project
@@ -297,36 +303,15 @@ class flameAppFramework(object):
             reel_groups = flame.project.current_project.current_workspace.desktop.reel_groups 
             libraries = flame.project.current_project.current_workspace.libraries
         except:
-            return
+            return (wks_state, list(selected_uids))
         
-        '''
-        try:
-            media_panel = flame.media_panel
-        except:
-            media_panel = None
-            print ('no media panel')
-        if media_panel:
-            pprint(media_panel.selected_entries)
-        '''
-
         # Scan Batch Groups, Batch Reels and Libraries of current workspace
         # The items we're specifically interested in are Batch Groups, Clips and Sequences
         # Parent for Clips is BatchGroup
 
-        # We want to create a structure that represents current workspace
-        # Will need to figure out the best way to link to async cache queries 
-        # { wiretap_id: {
-        #       'type': 'BatchGroup',
-        #       'name': 'Name of the batch group',
-        #       'shot_name': '' # shotgun uses shot name field in clips
-        #       'entities': [{'type': 'Shot, 'id': 123}, {'type': 'Sequence', 'id': 456}] # list of shotgun entities it linked to
-        # }
-        # }
-
         # scan batch groups
 
         for xb in range(0, len(batch_groups)):
-            if not batch_groups: continue
             try:
                 project = flame.project.current_project
                 batch_group_reels = batch_groups[xb].reels
@@ -334,7 +319,7 @@ class flameAppFramework(object):
                 batch_uid = batch_groups[xb].uid.get_value()
                 batch_name = batch_groups[xb].name.get_value()
             except:
-                break
+                return (wks_state, list(selected_uids))
             
             # Process and register BatchGroup
 
@@ -344,7 +329,6 @@ class flameAppFramework(object):
                 wks_state[batch_uid]['name'] = batch_name
             wks_state[batch_uid]['name_hash'] = hash(pformat({'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}))
             
-
             # we don't have to distinquish between batch reels and shelf reels at the moment
 
             batch_reels = batch_group_reels + batch_group_shelf_reels
@@ -354,15 +338,12 @@ class flameAppFramework(object):
             for xr in range(0, len(batch_reels)):
                 try:
                     project = flame.project.current_project
-                    reel_clips = batch_reels[xr].clips
                 except:
-                    break
+                    return (wks_state, list(selected_uids))
                 
-                try:
-                    project = flame.project.current_project
-                    reel_sequences = batch_reels[xr].sequences
-                except:
-                    break
+                reel_clips = batch_reels[xr].clips
+                reel_sequences = batch_reels[xr].sequences
+
                 # Process Clips found on Reel
                 # Clips have single segment (hopefully)
                 # So we're going to take 'shot_name' field 
@@ -372,7 +353,7 @@ class flameAppFramework(object):
                     try:
                         project = flame.project.current_project
                     except:
-                        break
+                        return (wks_state, list(selected_uids))
                     
                     clip_name = reel_clips[xc].name.get_value()
                     clip_uid = reel_clips[xc].uid.get_value()
@@ -390,20 +371,20 @@ class flameAppFramework(object):
                         wks_state[clip_uid]['parent'] = batch_uid
                     wks_state[clip_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
 
-
                 # Process Sequences found on Reel
                 # Sequences may have more than one segment
-                # Each of a segments has its own 'shot_name' field
+                # Each of a segments has its own 'shot_name' field but do not have uid
 
                 for xs in range(0, len(reel_sequences)):
                     try:
                         project = flame.project.current_project
                     except:
-                        break
+                        return (wks_state, list(selected_uids))
                     
                     seq_name = reel_sequences[xs].name.get_value()
                     seq_uid = reel_sequences[xs].uid.get_value()
                     selected = reel_sequences[xc].selected.get_value()
+                    versions = reel_sequences[xc].versions
 
                     if selected:
                         selected_uids.add(seq_uid)
@@ -415,29 +396,24 @@ class flameAppFramework(object):
                         wks_state[seq_uid]['shot_name'] = ''
                         wks_state[seq_uid]['parent'] = batch_uid
                     wks_state[seq_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': seq_name, 'shot_name': ''}))
-        '''
-        # out of loops project checks and breaks
-        
-            try:
-                project = flame.project.current_project
-            except:
-                break
-        try:
-            project = flame.project.current_project
-        except:
-            break
 
-        self.flame_workspace_state = dict(wks_state)
+                    # Process sequence segments
+                    wks_state[seq_uid]['segments'] = []
 
-        # pprint (self.flame_workspace_state)
-        # pprint (selected_uids)
+                    try:
+                        project = flame.project.current_project
+                    except:
+                        return (wks_state, list(selected_uids))
 
-        # put it in preferences
-        self.prefs['wks_state'] = dict(wks_state)
-
-        # print('workspace scan took %s' % (time.time() - start))
-        #self.loop_timeout(timeout, start)
-        '''
+                    for version in versions:
+                        for track in version.tracks:
+                            for segment in track.segments:
+                                seg_name = segment.name.get_value()
+                                seg_shot_name = segment.shot_name.get_value()
+                                selected = segment.selected.get_value()
+                                wks_state[seq_uid]['segments'].append({'type': 'Segment', 'name': seg_name, 'shot_name': seg_shot_name})
+                                
+        return (wks_state, list(selected_uids))
 
 
 class flameMenuApp(object):
@@ -642,8 +618,8 @@ class flameShotgunConnector(object):
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
+        self.loops.append(threading.Thread(target=self.flame_workspace_loop, args=(4, )))
         # self.loops.append(threading.Thread(target=self.flame_scan_loop))
-        # self.loops.append(threading.Thread(target=self.flame_workspace_scan, args=(2, )))
         
         for loop in self.loops:
             loop.daemon = True
@@ -707,18 +683,13 @@ class flameShotgunConnector(object):
                 
                 self.loop_timeout(timeout, start)
 
-    def flame_scan_loop(self):
-        import flame
-
+    def flame_workspace_loop(self, timeout):
         while self.threads:
-            try:
-                project = flame.project.current_project
-            except:
-                break
-            
-            flame.schedule_idle_event(self.flame_workspace_scan)
-            time.sleep(0.05)
-        print ('end of selected loop')
+            start = time.time()
+            wks_state, selected_uids = self.framework.flame_workspace_scan()
+            pprint (wks_state)
+            print ('selected: %s' % pformat(selected_uids))
+            self.loop_timeout(timeout, start)
                                 
     def terminate_loops(self):
         self.threads = False
@@ -6669,7 +6640,7 @@ def get_batch_custom_ui_actions():
                 flame.schedule_idle_event(rescan_hooks)
             except:
                 pass
-            
+
     if DEBUG:
         print('batch menu update took %s' % (time.time() - start))
 
