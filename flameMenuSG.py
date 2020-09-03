@@ -747,12 +747,17 @@ class flameShotgunConnector(object):
             if not (self.sg_user and self.sg_linked_project_id):
                 time.sleep(1)
             else:
+                sg = None
+
                 try:
                     sg = self.sg_user.create_sg_connection()
-                    self.async_cache_hardupdate(sg)
-                    del sg
+                    self.async_cache_hardupdate(sg)                    
                 except Exception as e:
                     self.log('error hard updating cache in sg_cache_loop %s' % e)
+                
+                if sg:
+                    sg.close()
+                    del sg
                 
                 self.log('sg_cache_loop took %s sec' % str(time.time() - start))
                 time_passed = int(time.time() - start)
