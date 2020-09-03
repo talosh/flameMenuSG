@@ -702,6 +702,8 @@ class flameShotgunConnector(object):
         self.sg_linked_project_id = None
 
         self.async_cache = {}
+        self.async_cache_last_event_id = None
+
         self.async_cache_hash = hash(pformat(self.async_cache))
         self.rescan_flag = False
 
@@ -822,6 +824,7 @@ class flameShotgunConnector(object):
                     pass
 
             delta = time.time() - start
+            print ('latest event id: %s' % self.async_cache_last_event_id)
             print ('flame ws map took %s sec' % str(delta))
             self.loop_timeout(timeout, start)
                                 
@@ -860,7 +863,26 @@ class flameShotgunConnector(object):
             entity = query.get('entity')
             filters = query.get('filters')
             fields = query.get('fields')
-            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+            
+            # update shotgun's last event id
+
+            try:
+                event = sg.find_one('EventLogEntry', 
+                    filters=[], 
+                    fields=['id'], 
+                    order=[{'column': 'id', 'direction': 'desc'}]
+                )
+                if event:
+                    self.async_cache_last_event_id = event.get('id')
+            except Exception as e:
+                self.log('error getting last event id while hard updating cache %s' % e)
+
+            # perform actual shotgun query
+
+            try:
+                self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+            except Exception as e:
+                self.log('error performing query on register %s' % e)
         
         return uid
     
@@ -892,7 +914,26 @@ class flameShotgunConnector(object):
             filters = query_body.get('filters')
             fields = query_body.get('fields')
             self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
-            self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+
+            # update shotgun's last event id
+
+            try:
+                event = sg.find_one('EventLogEntry', 
+                    filters=[], 
+                    fields=['id'], 
+                    order=[{'column': 'id', 'direction': 'desc'}]
+                )
+                if event:
+                    self.async_cache_last_event_id = event.get('id')
+            except Exception as e:
+                self.log('error getting last event id while hard updating cache %s' % e)
+
+            # perform actual shotgun query
+
+            try:
+                self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+            except Exception as e:
+                self.log('error performing query on async_cache_get %s' % e)
         
         query = self.async_cache.get(uid)
         if query_type == 'result':
@@ -999,6 +1040,17 @@ class flameShotgunConnector(object):
             sg = self.sg
 
         results_by_hash = {}
+
+        try:
+            event = sg.find_one('EventLogEntry', 
+                filters=[], 
+                fields=['id'], 
+                order=[{'column': 'id', 'direction': 'desc'}]
+            )
+            if event:
+                self.async_cache_last_event_id = event.get('id')
+        except Exception as e:
+            self.log('error getting last event id while hard updating cache %s' % e)
 
         for cache_request_uid in self.async_cache.keys():
             cache_request = self.async_cache.get(cache_request_uid)
