@@ -776,8 +776,6 @@ class flameShotgunConnector(object):
                         except:
                             pass
 
-                self.async_cache_state_check()
-
                 self.log('sg_cache_loop took %s sec' % str(time.time() - start))
                 time_passed = int(time.time() - start)
                 if timeout > time_passed:
@@ -809,7 +807,7 @@ class flameShotgunConnector(object):
                     del self.flame_workspace_state[old_uid]
 
                 else:
-                    old_hash = self.flame_workspace_state.[old_uid].get('name_hash')
+                    old_hash = self.flame_workspace_state[old_uid].get('name_hash')
                     new_hash = wks_state[old_uid].get('name_hash')
                     if old_hash != new_hash:
 
@@ -841,7 +839,6 @@ class flameShotgunConnector(object):
                     pass
 
             delta = time.time() - start
-            pprint (entities_by_name)
             print ('flame ws map took %s sec' % str(delta))
             self.loop_timeout(timeout, start)
                                 
@@ -882,7 +879,6 @@ class flameShotgunConnector(object):
             fields = query.get('fields')
             self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
         
-        self.async_cache_state_check()
         return uid
     
     def async_cache_unregister(self, uid):
@@ -925,11 +921,6 @@ class flameShotgunConnector(object):
         self.async_cache = {}
         self.rescan_flag = True
         return True
-
-    def async_cache_state_check(self):
-        if hash(pformat(self.async_cache)) != self.async_cache_hash:
-            self.rescan_flag = True
-            self.async_cache_hash = hash(pformat(self.async_cache))
     
     def register_query(self):
         if self.connector.sg_linked_project_id and self.current_tasks_uid:
@@ -1013,6 +1004,11 @@ class flameShotgunConnector(object):
         
         self.connector.async_cache_unregister(self.current_tasks_uid)
         self.connector.async_cache_unregister(self.current_versions_uid)
+
+    def async_cache_softupdate(self, sg):
+        pass
+    
+    def async_cache_hardupdate(self, sg):
 
 
     # end of async cache methods
