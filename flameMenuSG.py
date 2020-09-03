@@ -275,15 +275,18 @@ class flameAppFramework(object):
             
         return True
 
-    def flame_workspace_scan(self):
+    def flame_workspace_map(self):
+
+        #  Libraries are not yet implemented
         
         # Scans Flame workscpase and returns dictionary that contains workspace status
         # with uids as keys and a list of currently selected objects uids
         # { uid: {
         #       'type': 'BatchGroup',
         #       'name': 'Name of the batch group',
-        #       'shot_name': '' # shotgun uses shot name field in clips
+        #       'shot_name': ''                         # shotgun uses shot name field in clips
         #       'name_hash': hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
+        #       'master': uid                       # use to identify master flame object in terms of integration logic, i.e batch group for clip on its reels
         # }
         # }
         # returns tuple (dict(wks_state), list(selected_uids))
@@ -299,120 +302,216 @@ class flameAppFramework(object):
 
         try:
             project = flame.project.current_project
-            batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups 
-            reel_groups = flame.project.current_project.current_workspace.desktop.reel_groups 
-            libraries = flame.project.current_project.current_workspace.libraries
         except:
             return (wks_state, list(selected_uids))
+
+        dsk_batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups
+        dsk_reel_groups = flame.project.current_project.current_workspace.desktop.reel_groups
+        libraries = flame.project.current_project.current_workspace.libraries
         
         # Scan Batch Groups, Batch Reels and Libraries of current workspace
         # The items we're specifically interested in are Batch Groups, Clips and Sequences
         # Parent for Clips is BatchGroup
 
-        # scan batch groups
+        def map_clips(clips = [], master_uid = ''):
 
-        for xb in range(0, len(batch_groups)):
-            try:
-                project = flame.project.current_project
-                batch_group_reels = batch_groups[xb].reels
-                batch_group_shelf_reels = batch_groups[xb].shelf_reels
-                batch_uid = batch_groups[xb].uid.get_value()
-                batch_name = batch_groups[xb].name.get_value()
-            except:
-                return (wks_state, list(selected_uids))
-            
-            # Process and register BatchGroup
+            # Process Clips list
+            # Clips have single segment (hopefully)
+            # So we're going to take 'shot_name' field 
+            # from first segment and take it as a clips 'shot_name'
 
-            if batch_uid not in wks_state.keys():
-                wks_state[batch_uid] = {'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}
-            else:
-                wks_state[batch_uid]['name'] = batch_name
-            wks_state[batch_uid]['name_hash'] = hash(pformat({'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}))
-            
-            # we don't have to distinquish between batch reels and shelf reels at the moment
-
-            batch_reels = batch_group_reels + batch_group_shelf_reels
-
-            # process batch and shelf reels together
-            
-            for xr in range(0, len(batch_reels)):
+            for xc in range(0, len(clips)):
                 try:
                     project = flame.project.current_project
                 except:
                     return (wks_state, list(selected_uids))
                 
-                reel_clips = batch_reels[xr].clips
-                reel_sequences = batch_reels[xr].sequences
+                clip_name = clips[xc].name.get_value()
+                clip_uid = clips[xc].uid.get_value()
+                try:
+                    shot_name = clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
+                except:
+                    shot_name = ''
+                selected = clips[xc].selected.get_value()
 
-                # Process Clips found on Reel
-                # Clips have single segment (hopefully)
-                # So we're going to take 'shot_name' field 
-                # from first segment and take it as a clips 'shot_name'
+                if selected:
+                    selected_uids.add(clip_uid)
 
-                for xc in range(0, len(reel_clips)):
+                if clip_uid not in wks_state.keys():
+                    wks_state[clip_uid] = {'type': 'Clip', 'name': clip_name, 'shot_name': shot_name, 'master': master_uid}
+                else:
+                    wks_state[clip_uid]['name'] = clip_name
+                    wks_state[clip_uid]['shot_name'] = shot_name
+                    wks_state[clip_uid]['master'] = master_uid
+                wks_state[clip_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
+
+        def map_sequences(sequences = [], master_uid = ''):
+
+            # Process Sequences found on Reel
+            # Sequences may have more than one segment
+            # Each of a segments has its own 'shot_name' field but do not have uid
+
+            for xs in range(0, len(sequences)):
+                try:
+                    project = flame.project.current_project
+                except:
+                    return (wks_state, list(selected_uids))
+                
+                seq_name = sequences[xs].name.get_value()
+                seq_uid = sequences[xs].uid.get_value()
+                selected = sequences[xs].selected.get_value()
+                versions = sequences[xs].versions
+
+                if selected:
+                    selected_uids.add(seq_uid)
+
+                if seq_uid not in wks_state.keys():
+                    wks_state[seq_uid] = {'type': 'Sequence', 'name': seq_name, 'shot_name': '', 'master': master_uid}
+                else:
+                    wks_state[seq_uid]['name'] = seq_name
+                    wks_state[seq_uid]['shot_name'] = ''
+                    wks_state[seq_uid]['master'] = master_uid
+                wks_state[seq_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': seq_name, 'shot_name': ''}))
+
+                # I don't know how to use sequence segments at the moment
+                # but worth to have a bit of this code in order to check scan speed
+
+                '''
+                # Process sequence segments
+                wks_state[seq_uid]['segments'] = []
+
+                try:
+                    project = flame.project.current_project
+                except:
+                    return (wks_state, list(selected_uids))
+
+                for version in versions:
+                    try:
+                        project = flame.project.current_project
+                    except:
+                        return (wks_state, list(selected_uids))
+
+                    for track in version.tracks:
+                        try:
+                            project = flame.project.current_project
+                        except:
+                            return (wks_state, list(selected_uids))
+                        
+                        for segment in track.segments:
+                            try:
+                                project = flame.project.current_project
+                            except:
+                                return (wks_state, list(selected_uids))
+
+                            seg_name = segment.name.get_value()
+                            seg_shot_name = segment.shot_name.get_value()
+                            selected = segment.selected.get_value()
+                            wks_state[seq_uid]['segments'].append({'type': 'Segment', 'name': seg_name, 'shot_name': seg_shot_name})
+                '''
+
+        def map_batchgroups(batch_groups = []):
+
+            # scan batch groups
+
+            for xb in range(0, len(batch_groups)):
+                try:
+                    project = flame.project.current_project
+                    batch_group_reels = batch_groups[xb].reels
+                    batch_group_shelf_reels = batch_groups[xb].shelf_reels
+                    batch_uid = batch_groups[xb].uid.get_value()
+                    batch_name = batch_groups[xb].name.get_value()
+                except:
+                    return (wks_state, list(selected_uids))
+                
+                # Process and register BatchGroup
+
+                if batch_uid not in wks_state.keys():
+                    wks_state[batch_uid] = {'type': 'BatchGroup', 'name': batch_name, 'shot_name': '', 'master': ''}
+                else:
+                    wks_state[batch_uid]['name'] = batch_name
+                wks_state[batch_uid]['name_hash'] = hash(pformat({'type': 'BatchGroup', 'name': batch_name, 'shot_name': ''}))
+                
+                # we don't have to distinquish between batch reels and shelf reels at the moment
+
+                batch_reels = batch_group_reels + batch_group_shelf_reels
+
+                # process batch and shelf reels together
+                
+                for xr in range(0, len(batch_reels)):
                     try:
                         project = flame.project.current_project
                     except:
                         return (wks_state, list(selected_uids))
                     
-                    clip_name = reel_clips[xc].name.get_value()
-                    clip_uid = reel_clips[xc].uid.get_value()
-                    shot_name = reel_clips[xc].versions[0].tracks[0].segments[0].shot_name.get_value()
-                    selected = reel_clips[xc].selected.get_value()
+                    reel_clips = batch_reels[xr].clips
+                    reel_sequences = batch_reels[xr].sequences
 
-                    if selected:
-                        selected_uids.add(clip_uid)
+                    map_clips(reel_clips, batch_uid)
+                    map_sequences(reel_sequences, batch_uid)
 
-                    if clip_uid not in wks_state.keys():
-                        wks_state[clip_uid] = {'type': 'Clip', 'name': clip_name, 'shot_name': shot_name, 'parent': batch_uid}
-                    else:
-                        wks_state[clip_uid]['name'] = clip_name
-                        wks_state[clip_uid]['shot_name'] = shot_name
-                        wks_state[clip_uid]['parent'] = batch_uid
-                    wks_state[clip_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': clip_name, 'shot_name': shot_name}))
+        def map_reelgroups(reel_groups = []):
 
-                # Process Sequences found on Reel
-                # Sequences may have more than one segment
-                # Each of a segments has its own 'shot_name' field but do not have uid
+            for reel_group in reel_groups:
+                try:
+                    project = flame.project.current_project
+                except:
+                    return (wks_state, list(selected_uids))
+                
+                reel_group_reels = reel_group.reels
+                reel_group_uid = reel_group.uid.get_value()
+                reel_group_name = reel_group.name.get_value()
 
-                for xs in range(0, len(reel_sequences)):
+                for reel in reel_group_reels:
                     try:
                         project = flame.project.current_project
                     except:
                         return (wks_state, list(selected_uids))
                     
-                    seq_name = reel_sequences[xs].name.get_value()
-                    seq_uid = reel_sequences[xs].uid.get_value()
-                    selected = reel_sequences[xc].selected.get_value()
-                    versions = reel_sequences[xc].versions
+                    reel_clips = reel.clips
+                    reel_sequences = reel.sequences
 
-                    if selected:
-                        selected_uids.add(seq_uid)
+                    map_clips(reel_clips)
+                    map_sequences(reel_sequences)
 
-                    if seq_uid not in wks_state.keys():
-                        wks_state[seq_uid] = {'type': 'Sequence', 'name': seq_name, 'shot_name': '', 'parent': batch_uid}
-                    else:
-                        wks_state[seq_uid]['name'] = seq_name
-                        wks_state[seq_uid]['shot_name'] = ''
-                        wks_state[seq_uid]['parent'] = batch_uid
-                    wks_state[seq_uid]['name_hash'] = hash(pformat({'type': 'Clip', 'name': seq_name, 'shot_name': ''}))
+        def map_libraries(libraries = []):
+            
+            # Library is a complex structure that may content several types
+            # 1) folder
+            # 2) desktop
+            # 3) 
+            
+            # we're not interested in hierarchy here
+            # so we collect objects of the same king into respective lists
 
-                    # Process sequence segments
-                    wks_state[seq_uid]['segments'] = []
+            all_folders = []
+            all_desktops = []
+            
+            def recursive_folders(folder):
+                rec_folders = []
+                for f in folder.folders:
+                    rec_folders.append(f)
+                    rec_folders += recursive_folders(f)
+                return rec_folders
 
-                    try:
-                        project = flame.project.current_project
-                    except:
-                        return (wks_state, list(selected_uids))
+            for library in libraries:
+                if library.name.get_value() == 'Grabbed References':
+                    continue
+                
+                # first collect all the folders in the library
 
-                    for version in versions:
-                        for track in version.tracks:
-                            for segment in track.segments:
-                                seg_name = segment.name.get_value()
-                                seg_shot_name = segment.shot_name.get_value()
-                                selected = segment.selected.get_value()
-                                wks_state[seq_uid]['segments'].append({'type': 'Segment', 'name': seg_name, 'shot_name': seg_shot_name})
-                                
+                for folder in library.folders:
+                    all_folders.append(folder)
+                    all_folders += recursive_folders(folder)
+
+                
+
+            pprint (all_folders)
+
+        map_batchgroups(dsk_batch_groups)
+        map_reelgroups(dsk_reel_groups)
+        # map_libraries(libraries)
+
+        
         return (wks_state, list(selected_uids))
 
 
@@ -613,6 +712,8 @@ class flameShotgunConnector(object):
         self.check_sg_linked_project()
         self.update_sg_storage_root()
 
+        self.current_tasks_uid = []
+
         # loop threads init. first arg in args is loop cycle time in seconds
 
         self.loops = []
@@ -628,6 +729,9 @@ class flameShotgunConnector(object):
         self.tk_engine = None
         self.bootstrap_toolkit()
 
+        # register tasks query for async cache loop
+        self.register_query()
+
         from PySide2 import QtWidgets
         self.mbox = QtWidgets.QMessageBox()
 
@@ -640,8 +744,7 @@ class flameShotgunConnector(object):
         while self.threads:
             start = time.time()
 
-            if not self.sg_user:
-                self.log('no shotgun user...')
+            if not (self.sg_user and self.sg_linked_project_id):
                 time.sleep(1)
             else:
                 results_by_hash = {}
@@ -664,7 +767,6 @@ class flameShotgunConnector(object):
                         fields = query.get('fields')
                         while not self.sg:
                             time.sleep(1)
-                        
                         try:
                             sg = self.sg_user.create_sg_connection()
                             result = sg.find(entity, filters, fields)
@@ -686,9 +788,61 @@ class flameShotgunConnector(object):
     def flame_workspace_loop(self, timeout):
         while self.threads:
             start = time.time()
-            wks_state, selected_uids = self.framework.flame_workspace_scan()
-            pprint (wks_state)
-            print ('selected: %s' % pformat(selected_uids))
+            
+            if not (self.sg_user and self.sg_linked_project_id):
+                self.loop_timeout(timeout, start)
+                continue
+
+            wks_state, selected_uids = self.framework.flame_workspace_map()
+
+            # remove old keys and unregister their queries if any
+            # if name hash has changed we need to remove uid as well
+            # and unregister its queries
+            
+            for old_uid in self.flame_workspace_state.keys():
+                if old_uid not in wks_state.keys():
+            
+                    # unregister queries
+
+                    # remove uid record
+
+                    del self.flame_workspace_state[old_uid]
+
+                else:
+                    old_hash = self.flame_workspace_state.[old_uid].get('name_hash')
+                    new_hash = wks_state[old_uid].get('name_hash')
+                    if old_hash != new_hash:
+
+                        # unregister queries
+
+                        # remove uid record
+
+                        del self.flame_workspace_state[old_uid]
+
+
+            # add the new keys to the dictionary and register their queries
+            # if there's a match to shotgun entities
+
+            current_tasks = self.async_cache_get(self.current_tasks_uid)
+            if not current_tasks:
+                self.loop_timeout(timeout, start)
+                continue
+
+            entities_by_name = {}
+            for current_task in current_tasks:
+                entity = current_task.get('entity')
+                if entity:
+                    entity_name = entity.get('name')
+                    if entity_name:
+                        entities_by_name[entity_name] = entity
+
+            for new_uid in wks_state.keys():
+                if new_uid not in self.flame_workspace_state.keys():
+                    pass
+
+            delta = time.time() - start
+            pprint (entities_by_name)
+            print ('flame ws map took %s sec' % str(delta))
             self.loop_timeout(timeout, start)
                                 
     def terminate_loops(self):
@@ -777,6 +931,90 @@ class flameShotgunConnector(object):
             self.rescan_flag = True
             self.async_cache_hash = hash(pformat(self.async_cache))
     
+    def register_query(self):
+        if self.connector.sg_linked_project_id and self.current_tasks_uid:
+            # check if project id match
+            try:
+                filters = self.connector.async_cache.get(self.current_tasks_uid).get('query').get('filters')
+                project_id = filters[0][2]
+            except:
+                return False
+
+            if project_id != self.connector.sg_linked_project_id:
+                
+                # unregister old id and register new one
+                
+                self.unregister_query()
+
+                self.current_tasks_uid = self.connector.async_cache_register({
+                    'entity': 'Task',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
+                })
+
+                self.current_versions_uid = self.connector.async_cache_register({
+                    'entity': 'Version',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'code',
+                        'sg_task.Task.id',
+                        'entity'
+                    ]
+                })
+                return True
+            else:
+                return False
+            
+        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
+            # register new query from scratch
+            self.current_tasks_uid = self.connector.async_cache_register({
+                    'entity': 'Task',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'content',
+                        'step.Step.code',
+                        'step.Step.short_name',
+                        'task_assignees',
+                        'project.Project.id',
+                        'entity',
+                        'entity.Asset.sg_asset_type',
+                        'entity.Shot.sg_sequence'
+                    ]
+            # ['entity', 'task_assignees']
+            })
+            self.current_versions_uid = self.connector.async_cache_register({
+                    'entity': 'Version',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'code',
+                        'sg_task.Task.id',
+                        'entity',
+                    ]
+            })          
+            return True
+        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
+            # unregister current uid
+            self.connector.async_cache_unregister(self.current_tasks_uid)
+            return True
+        else:
+            return False        
+
+    def unregister_query(self):
+        # un-registers async cache requests
+        
+        self.connector.async_cache_unregister(self.current_tasks_uid)
+        self.connector.async_cache_unregister(self.current_versions_uid)
+
+
     # end of async cache methods
 
     def update_human_user(self):
@@ -1473,6 +1711,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.sg_linked_project = None
         self.connector.sg_linked_project_id = None
         self.rescan()
+        self.connector.register_query()
         self.connector.bootstrap_toolkit()
 
     def link_project(self, project):
@@ -1484,6 +1723,7 @@ class flameMenuProjectconnect(flameMenuApp):
             if 'id' in project.keys():
                 self.connector.sg_linked_project_id = project.get('id')
         self.rescan()
+        self.connector.register_query()
         self.connector.bootstrap_toolkit()
         
     def refresh(self, *args, **kwargs):        
@@ -1496,10 +1736,12 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.get_user()
         self.framework.save_prefs()
         self.rescan()
+        self.connector.register_query()
         self.connector.bootstrap_toolkit()
 
     def sign_out(self, *args, **kwargs):
         self.connector.destroy_toolkit_engine()
+        self.connector.unregister_query()
         self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
         self.framework.save_prefs()
