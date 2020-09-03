@@ -747,35 +747,13 @@ class flameShotgunConnector(object):
             if not (self.sg_user and self.sg_linked_project_id):
                 time.sleep(1)
             else:
-                results_by_hash = {}
-
-                for cache_request_uid in self.async_cache.keys():
-                    cache_request = self.async_cache.get(cache_request_uid)
-                    if not cache_request:
-                        continue
-                    query = cache_request.get('query')
-                    if not query:
-                        continue
-                    
-                    if hash(pformat(query)) in results_by_hash.keys():
-                        self.async_cache[cache_request_uid]['result'] = results_by_hash.get(hash(pformat(query)))
-                    else:
-                        entity = query.get('entity')
-                        if not entity:
-                            continue
-                        filters = query.get('filters')
-                        fields = query.get('fields')
-                        while not self.sg:
-                            time.sleep(1)
-                        try:
-                            sg = self.sg_user.create_sg_connection()
-                            result = sg.find(entity, filters, fields)
-                            del sg
-                            self.async_cache[cache_request_uid]['result'] = result
-                            results_by_hash[hash(pformat(query))] = result
-                        except:
-                            pass
-
+                try:
+                    sg = self.sg_user.create_sg_connection()
+                    self.async_cache_hardupdate(sg)
+                    del sg
+                except Exception as e:
+                    self.log('error hard updating cache in sg_cache_loop %s' % e)
+                
                 self.log('sg_cache_loop took %s sec' % str(time.time() - start))
                 time_passed = int(time.time() - start)
                 if timeout > time_passed:
@@ -1005,11 +983,41 @@ class flameShotgunConnector(object):
         self.connector.async_cache_unregister(self.current_tasks_uid)
         self.connector.async_cache_unregister(self.current_versions_uid)
 
-    def async_cache_softupdate(self, sg):
+    def async_cache_softupdate(self, sg = None):
         pass
     
-    def async_cache_hardupdate(self, sg):
+    def async_cache_hardupdate(self, sg = None):
+        
+        # use main thread shotgun connection if not given
 
+        if not sg:
+            sg = self.sg
+
+        results_by_hash = {}
+
+        for cache_request_uid in self.async_cache.keys():
+            cache_request = self.async_cache.get(cache_request_uid)
+            if not cache_request:
+                continue
+            query = cache_request.get('query')
+            if not query:
+                continue
+            
+            if hash(pformat(query)) in results_by_hash.keys():
+                self.async_cache[cache_request_uid]['result'] = results_by_hash.get(hash(pformat(query)))
+            else:
+                entity = query.get('entity')
+                if not entity:
+                    continue
+                filters = query.get('filters')
+                fields = query.get('fields')
+
+                try:
+                    result = sg.find(entity, filters, fields)
+                    self.async_cache[cache_request_uid]['result'] = result
+                    results_by_hash[hash(pformat(query))] = result
+                except Exception as e:
+                    self.log('error hard updating cache %s' % e)
 
     # end of async cache methods
 
