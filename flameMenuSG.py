@@ -726,7 +726,8 @@ class flameShotgunConnector(object):
 
         # UID for all tasks in async cache
 
-        self.current_tasks_uid = []
+        self.current_tasks_uid = None
+        self.current_versions_uid = None
 
         # loop threads init. first arg in args is loop cycle time in seconds
 
@@ -744,7 +745,7 @@ class flameShotgunConnector(object):
         self.bootstrap_toolkit()
 
         # register tasks query for async cache loop
-        self.register_query()
+        self.register_common_queries()
 
         from PySide2 import QtWidgets
         self.mbox = QtWidgets.QMessageBox()
@@ -785,21 +786,19 @@ class flameShotgunConnector(object):
             start = time.time()
             
             if not (self.sg_user and self.sg_linked_project_id):
-                self.loop_timeout(timeout, start)
+                time.sleep(1)
                 continue
 
             sg = None
+
 
             try:
                 sg = self.sg_user.create_sg_connection()
                 self.async_cache_softupdate(sg)                    
             except Exception as e:
                 self.log('error soft updating cache in flame_workspace_loop: %s' % e)
-
-            if sg:
-                sg.close()
-                del sg
-
+            
+            wks_state = {}
             wks_state, selected_uids = self.framework.flame_workspace_map()
 
             # remove old keys and unregister their queries if any
@@ -832,6 +831,7 @@ class flameShotgunConnector(object):
 
             current_tasks = self.async_cache_get(self.current_tasks_uid)
             if not current_tasks:
+                print ('no current tasks')
                 self.loop_timeout(timeout, start)
                 continue
 
@@ -846,6 +846,12 @@ class flameShotgunConnector(object):
             for new_uid in wks_state.keys():
                 if new_uid not in self.flame_workspace_state.keys():
                     pass
+            
+            if sg:
+                sg.close()
+                del sg
+
+            print ('short loop')
 
             delta = time.time() - start
             self.log('latest event id: %s' % self.async_cache_last_event_id)
@@ -892,14 +898,15 @@ class flameShotgunConnector(object):
 
             try:
                 event = sg.find_one('EventLogEntry', 
-                    filters=[['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
-                    fields=['id'], 
-                    order=[{'column': 'id', 'direction': 'desc'}]
+                    # filters=[['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]],
+                    filters = [], 
+                    fields = ['id'], 
+                    order = [{'column': 'id', 'direction': 'desc'}]
                 )
                 if event:
                     self.async_cache_last_event_id = event.get('id')
             except Exception as e:
-                self.log('error getting last event id while hard updating cache %s' % e)
+                self.log('error getting last event id in async_cache_register: %s' % e)
 
             # perform actual shotgun query
 
@@ -943,14 +950,15 @@ class flameShotgunConnector(object):
 
             try:
                 event = sg.find_one('EventLogEntry', 
-                    filters=[['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
-                    fields=['id'], 
-                    order=[{'column': 'id', 'direction': 'desc'}]
+                    # filters=[['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]],
+                    filters = [], 
+                    fields = ['id'], 
+                    order = [{'column': 'id', 'direction': 'desc'}]
                 )
                 if event:
                     self.async_cache_last_event_id = event.get('id')
             except Exception as e:
-                self.log('error getting last event id while hard updating cache %s' % e)
+                self.log('error getting last event id in async_cache_get %s' % e)
 
             # perform actual shotgun query
 
@@ -970,20 +978,33 @@ class flameShotgunConnector(object):
         self.rescan_flag = True
         return True
     
-    def register_query(self):
+    def register_common_queries(self):
         if self.connector.sg_linked_project_id and self.current_tasks_uid:
-            # check if project id match
-            try:
-                filters = self.connector.async_cache.get(self.current_tasks_uid).get('query').get('filters')
-                project_id = filters[0][2]
-            except:
-                return False
+            
+            # check if project id in cache query matches current one
+            
+            current_tasks_cache_entry = self.connector.async_cache.get(self.current_tasks_uid)
+            if current_tasks_cache_entry:
+                query = current_tasks_cache_entry.get('query')
+                if query:
+                    filters = query.get('filters')
+                    if filters:
+                        try:
+                            project_id = filters[0][2]
+                        except:
+                            project_id = 0
+                    else:
+                        project_id = 0
+                else:
+                    project_id = 0
+            else:
+                project_id = 0
 
             if project_id != self.connector.sg_linked_project_id:
                 
                 # unregister old id and register new one
                 
-                self.unregister_query()
+                self.unregister_common_queries()
 
                 self.current_tasks_uid = self.connector.async_cache_register({
                     'entity': 'Task',
@@ -1043,11 +1064,12 @@ class flameShotgunConnector(object):
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
             # unregister current uid
             self.connector.async_cache_unregister(self.current_tasks_uid)
+            self.connector.async_cache_unregister(self.current_versions_uid)
             return True
         else:
             return False        
 
-    def unregister_query(self):
+    def unregister_common_queries(self):
         # un-registers async cache requests
         
         self.connector.async_cache_unregister(self.current_tasks_uid)
@@ -1128,7 +1150,8 @@ class flameShotgunConnector(object):
 
         try:
             event = sg.find_one('EventLogEntry', 
-                filters = [['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
+                # filters = [['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
+                filters = [],
                 fields = ['id'], 
                 order = [{'column': 'id', 'direction': 'desc'}]
             )
@@ -1234,6 +1257,8 @@ class flameShotgunConnector(object):
             project = self.sg.find_one('Project', [['name', 'is', self.sg_linked_project.get_value()]])
             if project:
                 self.sg_linked_project_id = project.get('id')
+            else:
+                self.log('no project id found for project name: %s' % flame.project.current_project.shotgun_project_name)
 
         return True
 
@@ -1853,11 +1878,11 @@ class flameMenuProjectconnect(flameMenuApp):
 
     def unlink_project(self, *args, **kwargs):
         self.connector.destroy_toolkit_engine()
+        self.connector.unregister_common_queries()
         self.flame.project.current_project.shotgun_project_name = ''
         self.connector.sg_linked_project = None
         self.connector.sg_linked_project_id = None
         self.rescan()
-        self.connector.register_query()
         self.connector.bootstrap_toolkit()
 
     def link_project(self, project):
@@ -1869,7 +1894,7 @@ class flameMenuProjectconnect(flameMenuApp):
             if 'id' in project.keys():
                 self.connector.sg_linked_project_id = project.get('id')
         self.rescan()
-        self.connector.register_query()
+        self.connector.register_common_queries()
         self.connector.bootstrap_toolkit()
         
     def refresh(self, *args, **kwargs):        
@@ -1882,12 +1907,12 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.get_user()
         self.framework.save_prefs()
         self.rescan()
-        self.connector.register_query()
+        self.connector.register_common_queries()
         self.connector.bootstrap_toolkit()
 
     def sign_out(self, *args, **kwargs):
         self.connector.destroy_toolkit_engine()
-        self.connector.unregister_query()
+        self.connector.unregister_common_queries()
         self.connector.prefs_global['user signed out'] = True
         self.connector.clear_user()
         self.framework.save_prefs()
@@ -6945,12 +6970,10 @@ except:
 
 # --- FLAME OPERATIONAL HOOKS ---
 def project_saved(project_name, save_time, is_auto_save):
-    global shotgunConnector
-    if shotgunConnector:
-        if shotgunConnector.rescan_flag:
-            import flame
-            flame.execute_shortcut('Rescan Python Hooks')
-            shotgunConnector.rescan_flag = False
+    global app_framework
+
+    if app_framework:
+        app_framework.save_prefs()
             
 def get_main_menu_custom_ui_actions():
     start = time.time()
