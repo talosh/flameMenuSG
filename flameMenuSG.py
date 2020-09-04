@@ -829,7 +829,7 @@ class flameShotgunConnector(object):
             # add the new keys to the dictionary and register their queries
             # if there's a match to shotgun entities
 
-            current_tasks = self.async_cache_get(self.current_tasks_uid)
+            current_tasks = self.async_cache_get('current_tasks')
             if not current_tasks:
                 print ('no current tasks')
                 self.loop_timeout(timeout, start)
@@ -850,8 +850,6 @@ class flameShotgunConnector(object):
             if sg:
                 sg.close()
                 del sg
-
-            print ('short loop')
 
             delta = time.time() - start
             self.log('latest event id: %s' % self.async_cache_last_event_id)
@@ -887,6 +885,8 @@ class flameShotgunConnector(object):
 
         if not uid:
             uid = (str(uuid.uuid1()).replace('-', '')).upper()
+        
+        self.log ('registering %s under uid: %s' % (pformat(query), uid))
 
         self.async_cache[uid] = {'query': query, 'result': []}
         if not self.sg_user:
@@ -1021,7 +1021,7 @@ class flameShotgunConnector(object):
                         'entity.Asset.sg_asset_type',
                         'entity.Shot.sg_sequence'
                     ]
-                })
+                }, uid = 'current_tasks')
 
                 self.current_versions_uid = self.connector.async_cache_register({
                     'entity': 'Version',
@@ -1031,7 +1031,7 @@ class flameShotgunConnector(object):
                         'sg_task.Task.id',
                         'entity'
                     ]
-                })
+                }, uid = 'current_versions')
                 return True
             else:
                 return False
@@ -1051,8 +1051,7 @@ class flameShotgunConnector(object):
                         'entity.Asset.sg_asset_type',
                         'entity.Shot.sg_sequence'
                     ]
-            # ['entity', 'task_assignees']
-            })
+            }, uid = 'current_tasks')
             self.current_versions_uid = self.connector.async_cache_register({
                     'entity': 'Version',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
@@ -1061,12 +1060,12 @@ class flameShotgunConnector(object):
                         'sg_task.Task.id',
                         'entity',
                     ]
-            })          
+            }, uid = 'current_versions')          
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
             # unregister current uid
-            self.connector.async_cache_unregister(self.current_tasks_uid)
-            self.connector.async_cache_unregister(self.current_versions_uid)
+            self.connector.async_cache_unregister('current_tasks')
+            self.connector.async_cache_unregister('current_versions')
             return True
         else:
             return False        
@@ -1074,8 +1073,8 @@ class flameShotgunConnector(object):
     def unregister_common_queries(self):
         # un-registers async cache requests
         
-        self.connector.async_cache_unregister(self.current_tasks_uid)
-        self.connector.async_cache_unregister(self.current_versions_uid)
+        self.connector.async_cache_unregister('current_tasks')
+        self.connector.async_cache_unregister('current_versions')
 
     def async_cache_softupdate(self, sg = None):
 
@@ -1136,7 +1135,7 @@ class flameShotgunConnector(object):
         # update current tasks in cache if there was anything related to tasks
 
         if task_events:
-            self.async_cache_get(self.current_tasks_uid, 
+            self.async_cache_get('current_tasks', 
                 perform_query = True,
                 sg = sg
             )
@@ -3428,8 +3427,6 @@ class flameMenuNewBatch(flameMenuApp):
         # app constructor
         flameMenuApp.__init__(self, framework)
         self.connector = connector
-        self.current_tasks_uid = None
-        self.register_query()
 
         if not self.prefs.master.get(self.name):
             self.prefs['show_all'] = True
@@ -3632,7 +3629,7 @@ class flameMenuNewBatch(flameMenuApp):
         return menu
 
     def get_entities(self, user_only = True, filter_out=[]):
-        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        cached_tasks = self.connector.async_cache_get('current_tasks')
 
         if not isinstance(cached_tasks, list):
             
@@ -3641,7 +3638,7 @@ class flameMenuNewBatch(flameMenuApp):
             self.unregister_query()
             self.register_query()
 
-            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+            cached_tasks = self.connector.async_cache_get('current_tasks')
 
             if not isinstance(cached_tasks, list):
 
@@ -3910,8 +3907,8 @@ class flameMenuNewBatch(flameMenuApp):
                 self.log('creating new asset...')
                 new_asset = self.connector.sg.create('Asset', data)
                 self.log('new asset:\n%s' % pformat(new_asset))
-                self.log('updating async cache for uid: %s' % self.current_tasks_uid)
-                self.connector.async_cache_get(self.current_tasks_uid, True)
+                self.log('updating async cache for cuttent_tasks')
+                self.connector.async_cache_get('current_tasks', True)
                 self.log('creating new batch')
                 self.create_new_batch(new_asset)
 
@@ -4209,8 +4206,8 @@ class flameMenuNewBatch(flameMenuApp):
                 self.log('creating new shot...')
                 new_shot = self.connector.sg.create('Shot', data)
                 self.log('new shot:\n%s' % pformat(new_shot))
-                self.log('updating async cache for uid: %s' % self.current_tasks_uid)
-                self.connector.async_cache_get(self.current_tasks_uid, True)
+                self.log('updating async cache for current tasks')
+                self.connector.async_cache_get('current_tasks', True)
                 self.log('creating new batch')
                 self.create_new_batch(new_shot)
 
@@ -4304,60 +4301,6 @@ class flameMenuNewBatch(flameMenuApp):
     def page_bkw(self, *args, **kwargs):
         self.prefs['current_page'] = max(self.prefs['current_page'] - 1, 0)
 
-    def register_query(self, *args, **kwargs):
-        if self.connector.sg_linked_project_id and self.current_tasks_uid:
-            # check if project id match
-            try:
-                filters = self.connector.async_cache.get(self.current_tasks_uid).get('query').get('filters')
-                project_id = filters[0][2]
-            except:
-                return False
-
-            if project_id != self.connector.sg_linked_project_id:
-                # unregiter old id and register new one
-                self.connector.async_cache_unregister(self.current_tasks_uid)
-                self.current_tasks_uid = self.connector.async_cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-                })
-                return True
-            else:
-                return False
-            
-        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
-            # register new query from scratch
-            self.current_tasks_uid = self.connector.async_cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ] 
-            })
-            return True
-        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
-            # unregister current uid
-            self.connector.async_cache_unregister(self.current_tasks_uid)
-            return True
-        else:
-            return False
-
     def rescan(self, *args, **kwargs):
         if not self.flame:
             try:
@@ -4366,7 +4309,7 @@ class flameMenuNewBatch(flameMenuApp):
             except:
                 self.flame = None
 
-        self.connector.async_cache_get(self.current_tasks_uid, True)
+        self.connector.async_cache_get('current_tasks', True)
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
@@ -5063,7 +5006,9 @@ class flameMenuPublisher(flameMenuApp):
 
     def build_publish_menu(self, entity):
 
-        entity['code'] = entity.get('name', 'no_name')
+        if not entity.get('code'):
+            entity['code'] = entity.get('name', 'no_name')
+        
         entity_type = entity.get('type')
         entity_id = entity.get('id')
         if entity_id not in self.prefs.keys():
