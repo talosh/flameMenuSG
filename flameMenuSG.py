@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.13'
+__version__ = 'v0.0.14'
 
 
 class flameAppFramework(object):
@@ -877,7 +877,7 @@ class flameShotgunConnector(object):
 
     # async cache related methods
 
-    def async_cache_register(self, query, perform_query = True, sg = None):
+    def async_cache_register(self, query, perform_query = True, sg = None, uid = None):
         import uuid
 
         # use main thread shotgun connection if not given
@@ -885,7 +885,9 @@ class flameShotgunConnector(object):
         if not sg:
             sg = self.sg
 
-        uid = (str(uuid.uuid1()).replace('-', '')).upper()
+        if not uid:
+            uid = (str(uuid.uuid1()).replace('-', '')).upper()
+
         self.async_cache[uid] = {'query': query, 'result': []}
         if not self.sg_user:
             return uid
