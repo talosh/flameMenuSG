@@ -851,7 +851,7 @@ class flameShotgunConnector(object):
                 sg.close()
                 del sg
 
-            print ('short loop')
+            # print ('short loop')
 
             delta = time.time() - start
             self.log('latest event id: %s' % self.async_cache_last_event_id)
