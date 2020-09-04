@@ -22,7 +22,7 @@ Linux. flameMenuSG.prefs file contains global scope preferences, while flameMenu
 
 ### Known issues
 * Flame occationaly crashes on exit
-* In Media Panel max menu items is 160
+* In Media Panel max menu items is 160 ( at least on 2020.2 )
 * Context menus speed might degrade depending on an actual set of other python hooks in the system.
 This is due to Flame current limitation with refreshing context menus that forces other python hooks to be refreshed as well.
 If you experience context menu slowdown try to turn off Auto Refresh setting for this menu in flameMenuSG Preferences->General.
