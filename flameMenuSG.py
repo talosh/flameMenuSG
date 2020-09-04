@@ -848,8 +848,8 @@ class flameShotgunConnector(object):
                     pass
 
             delta = time.time() - start
-            print ('latest event id: %s' % self.async_cache_last_event_id)
-            print ('flame ws map took %s sec' % str(delta))
+            self.log('latest event id: %s' % self.async_cache_last_event_id)
+            self.log('flame ws map took %s sec' % str(delta))
             self.loop_timeout(timeout, start)
                                 
     def terminate_loops(self):
