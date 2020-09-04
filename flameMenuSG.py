@@ -1116,7 +1116,6 @@ class flameShotgunConnector(object):
                 perform_query = True,
                 sg = sg
             )
-
         
     def async_cache_hardupdate(self, sg = None):
         
@@ -4799,9 +4798,11 @@ class flameMenuPublisher(flameMenuApp):
         self.create_export_presets()
         
         # async cache related initialization
-        self.current_tasks_uid = None
-        self.current_versions_uid = None
-        self.register_query()
+        # current tasks and versions are now centralized in sg connector
+
+        self.current_tasks_uid = self.connector.current_tasks_uid
+        self.current_versions_uid = self.connector.current_versions_uid
+        #  self.register_query()
 
         self.progress = self.publish_progress_dialog()
         
