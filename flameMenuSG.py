@@ -7085,8 +7085,6 @@ def get_media_panel_custom_ui_actions():
     except:
         pass
 
-    pprint (selection)
-
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
             if scope_desktop(selection):
