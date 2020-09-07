@@ -21,7 +21,6 @@ Preferences for flameMenuSG are stored next to Shotgun preferences, \~/Library/C
 Linux. flameMenuSG.prefs file contains global scope preferences, while flameMenuSG.<flame_user>.prefs and flameMenuSG.<flame_user>.<flame_project>.prefs are user scope and project scope preferences.
 
 ### Known issues
-* Flame occationaly crashes on exit
 * In Media Panel max menu items is 160 ( at least on 2020.2 )
 * Context menus speed might degrade depending on an actual set of other python hooks in the system.
 This is due to Flame current limitation with refreshing context menus that forces other python hooks to be refreshed as well.
