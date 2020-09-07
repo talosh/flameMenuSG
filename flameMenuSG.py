@@ -788,7 +788,6 @@ class flameShotgunConnector(object):
 
             sg = None
 
-
             try:
                 sg = self.sg_user.create_sg_connection()
             except Exception as e:
@@ -920,6 +919,22 @@ class flameShotgunConnector(object):
                 self.log('query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
             def quick_fetch(query, uid, flag):
+                entity = query.get('entity')
+                filters = query.get('filters')
+                fields = query.get('fields')
+
+                start = time.time()
+
+                try:
+                    sg = self.sg_user.create_sg_connection()
+                    result = sg.find(entity, filters, fields, limit=99)
+                    result_by_id = {e.get('id'):e for e in result}
+                except Exception as e:
+                    self.log('error performing query on register %s' % e)
+
+                delta = time.time() - start
+                self.log('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+
                 day = 0
                 max_days = 99
                 while not flag:
@@ -927,7 +942,7 @@ class flameShotgunConnector(object):
                     time.sleep(0.2)
                     if abs(day) > max_days:
                         break
-                print ('quick fetch ended with day %s' % day)
+                # print ('quick fetch ended with day %s' % day)
 
             flag = []
             loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
@@ -3646,8 +3661,8 @@ class flameMenuNewBatch(flameMenuApp):
                 menu_item['execute'] = self.page_fwd
                 menu['actions'].append(menu_item)
 
-        for action in menu['actions']:
-            action['isVisible'] = self.scope_desktop
+        # for action in menu['actions']:
+        #    action['isVisible'] = self.scope_desktop
 
         return menu
 
@@ -4900,15 +4915,15 @@ class flameMenuPublisher(flameMenuApp):
         menus = []
 
         add_remove_menu = self.build_addremove_menu()
-        for action in add_remove_menu['actions']:
-            action['isVisible'] = self.scope_clip
+        # for action in add_remove_menu['actions']:
+        #     action['isVisible'] = self.scope_clip
         menus.append(add_remove_menu)
 
         for entity in add_menu_list:
             publish_menu = self.build_publish_menu(entity)
             if publish_menu:
-                for action in publish_menu['actions']:
-                    action['isVisible'] = self.scope_clip
+                # for action in publish_menu['actions']:
+                #     action['isVisible'] = self.scope_clip
                 menus.append(publish_menu)
 
         return menus
@@ -6977,20 +6992,44 @@ def get_main_menu_custom_ui_actions():
 
 def get_media_panel_custom_ui_actions():
     
+    def scope_desktop(selection):
+        import flame
+        for item in selection:
+            if isinstance(item, (flame.PyDesktop)):
+                return True
+        return False
+
+    def scope_clip(selection):
+        import flame
+        for item in selection:
+            if isinstance(item, (flame.PyClip)):
+                return True
+        return False
+
     start = time.time()
     menu = []
 
-    for app in apps:
+    selection = []
+    try:
+        import flame
+        selection = flame.media_panel.selected_entries
+    except:
+        pass
 
+    pprint (selection)
+
+    for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
-            app_menu = app.build_menu()
-            if app_menu:
-                menu.append(app_menu)
+            if scope_desktop(selection):
+                app_menu = app.build_menu()
+                if app_menu:
+                    menu.append(app_menu)
 
         if app.__class__.__name__ == 'flameMenuPublisher':
-            app_menu = app.build_menu()
-            if app_menu:
-                menu.extend(app_menu)
+            if scope_clip(selection):
+                app_menu = app.build_menu()
+                if app_menu:
+                    menu.extend(app_menu)
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
