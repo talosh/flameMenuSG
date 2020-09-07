@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.14'
+__version__ = 'v0.0.15'
 
 
 class flameAppFramework(object):
@@ -569,8 +569,6 @@ class flameMenuApp(object):
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
-            if self.connector:
-                self.connector.rescan_flag = False
 
     def get_export_preset_fields(self, preset):
         
@@ -712,10 +710,8 @@ class flameShotgunConnector(object):
         self.sg_linked_project_id = None
 
         self.async_cache = {}
-        self.async_cache_last_event_id = None
 
         self.async_cache_hash = hash(pformat(self.async_cache))
-        self.rescan_flag = False
 
         self.flame_workspace_state = self.prefs.get('wks_state')
         if not self.flame_workspace_state:
@@ -733,8 +729,8 @@ class flameShotgunConnector(object):
 
         self.loops = []
         self.threads = True
-        self.loops.append(threading.Thread(target=self.sg_cache_loop, args=(45, )))
-        self.loops.append(threading.Thread(target=self.flame_workspace_loop, args=(4, )))
+        self.loops.append(threading.Thread(target=self.cache_long_loop, args=(45, )))
+        self.loops.append(threading.Thread(target=self.cache_short_loop, args=(4, )))
         # self.loops.append(threading.Thread(target=self.flame_scan_loop))
         
         for loop in self.loops:
@@ -755,33 +751,34 @@ class flameShotgunConnector(object):
 
     # background loops and related functions
 
-    def sg_cache_loop(self, timeout):
+    def cache_long_loop(self, timeout):
         while self.threads:
             start = time.time()
 
             if not (self.sg_user and self.sg_linked_project_id):
                 time.sleep(1)
-            else:
-                sg = None
+                continue
 
-                try:
-                    sg = self.sg_user.create_sg_connection()
-                    self.async_cache_hardupdate(sg)                    
-                except Exception as e:
-                    self.log('error hard updating cache in sg_cache_loop: %s' % e)
-                
-                if sg:
-                    sg.close()
-                    del sg
-                
-                self.log('sg_cache_loop took %s sec' % str(time.time() - start))
-                time_passed = int(time.time() - start)
-                if timeout > time_passed:
-                    self.log('sg_cache_loop sleeping for %s sec' % (timeout - time_passed))
-                
-                self.loop_timeout(timeout, start)
+            sg = None
 
-    def flame_workspace_loop(self, timeout):
+            try:
+                sg = self.sg_user.create_sg_connection()
+                self.cache_hardupdate(sg = sg)
+            except Exception as e:
+                self.log('error hard updating cache in cache_long_loop: %s' % e)
+            
+            if sg:
+                sg.close()
+                del sg
+            
+            self.log('cache_long_loop took %s sec' % str(time.time() - start))
+            time_passed = int(time.time() - start)
+            if timeout > time_passed:
+                self.log('cache_long_loop sleeping for %s sec' % (timeout - time_passed))
+            
+            self.loop_timeout(timeout, start)
+
+    def cache_short_loop(self, timeout):
         while self.threads:
             start = time.time()
             
@@ -794,10 +791,10 @@ class flameShotgunConnector(object):
 
             try:
                 sg = self.sg_user.create_sg_connection()
-                self.async_cache_softupdate(sg)                    
             except Exception as e:
-                self.log('error soft updating cache in flame_workspace_loop: %s' % e)
+                self.log('error soft updating cache in cache_short_loop: %s' % e)
             
+            '''
             wks_state = {}
             wks_state, selected_uids = self.framework.flame_workspace_map()
 
@@ -829,7 +826,7 @@ class flameShotgunConnector(object):
             # add the new keys to the dictionary and register their queries
             # if there's a match to shotgun entities
 
-            current_tasks = self.async_cache_get('current_tasks')
+            current_tasks = self.cache_retrive_result('current_tasks')
             if not current_tasks:
                 print ('no current tasks')
                 self.loop_timeout(timeout, start)
@@ -846,14 +843,14 @@ class flameShotgunConnector(object):
             for new_uid in wks_state.keys():
                 if new_uid not in self.flame_workspace_state.keys():
                     pass
-            
+            '''
+
             if sg:
                 sg.close()
                 del sg
 
-            delta = time.time() - start
-            self.log('latest event id: %s' % self.async_cache_last_event_id)
-            self.log('flame ws map took %s sec' % str(delta))
+            # delta = time.time() - start
+            # self.log('flame ws map took %s sec' % str(delta))
             self.loop_timeout(timeout, start)
                                 
     def terminate_loops(self):
@@ -875,61 +872,89 @@ class flameShotgunConnector(object):
 
     # async cache related methods
 
-    def async_cache_register(self, query, perform_query = True, sg = None, uid = None):
+    def cache_register(self, query, perform_query = True, uid = None):
         import uuid
-
-        # use main thread shotgun connection if not given
-
-        if not sg:
-            sg = self.sg
 
         if not uid:
             uid = (str(uuid.uuid1()).replace('-', '')).upper()
         
-        self.log ('registering %s under uid: %s' % (pformat(query), uid))
+        self.log ('registering\n %s under uid: %s' % (pformat(query), uid))
 
         self.async_cache[uid] = {'query': query, 'result': []}
+        
         if not self.sg_user:
             return uid
-        if perform_query:
-            entity = query.get('entity')
-            filters = query.get('filters')
-            fields = query.get('fields')
-            
-            # update shotgun's last event id
 
-            try:
-                event = sg.find_one('EventLogEntry', 
-                    # filters=[['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]],
-                    filters = [], 
-                    fields = ['id'], 
-                    order = [{'column': 'id', 'direction': 'desc'}]
-                )
-                if event:
-                    self.async_cache_last_event_id = event.get('id')
-            except Exception as e:
-                self.log('error getting last event id in async_cache_register: %s' % e)
-
+        if perform_query:            
             # perform actual shotgun query
+            # Cached results are stored as a dictionary with entity id as a key.
 
-            try:
-                self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
-            except Exception as e:
-                self.log('error performing query on register %s' % e)
+            # TODO:
+            # Queries on register are performed in two separate threads each with its own
+            # shotgun connection. One thread performs full query while other perform looped
+            # queries limited by one day with days counting backwards from current one.
+            # That allows us to fill the cache faster with some recent data during
+            # long initial queries
+
+            def loong_fetch(query, uid, flag):
+                entity = query.get('entity')
+                filters = query.get('filters')
+                fields = query.get('fields')
+
+                start = time.time()
+                result = []
+                result_by_id = {}
+                
+                try:
+                    sg = self.sg_user.create_sg_connection()
+                    result = sg.find(entity, filters, fields)
+                    result_by_id = {e.get('id'):e for e in result}
+                except Exception as e:
+                    self.log('error performing query on register %s' % e)
+
+                flag.append(True)
+                self.async_cache[uid]['result'] = result_by_id
+                if sg: sg.close()
+
+                delta = time.time() - start
+                self.log('query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+
+            def quick_fetch(query, uid, flag):
+                day = 0
+                max_days = 99
+                while not flag:
+                    day -= 1
+                    time.sleep(0.2)
+                    if abs(day) > max_days:
+                        break
+                print ('quick fetch ended with day %s' % day)
+
+            flag = []
+            loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
+            quick_fetch_thread = threading.Thread(target=quick_fetch, args=(query, uid, flag, ))
+            loong_fetch_thread.daemon = True
+            quick_fetch_thread.daemon = True
+            loong_fetch_thread.start()
+            quick_fetch_thread.start()
         
         return uid
     
-    def async_cache_unregister(self, uid):
+    def cache_unregister(self, uid):
         if not uid:
             return False            
         if uid in self.async_cache.keys():
             del self.async_cache[uid]
-            self.rescan_flag = True
             return True
         else:
             return False
 
-    def async_cache_get(self, uid, perform_query = False, query_type = 'result', sg = None):
+    def cache_retrive_result(self, uid, perform_query = False, sg = None):
+        
+        # Cached results are stored as a dictionary with entity id as a key.
+        # cache_retrive_result unpacks it back to the list of dictionaries to match the
+        # standart Shotgun's find() result. Returned list is currently always 
+        # sorted form lower to higher id
+
         if not uid in self.async_cache.keys():
             return False
         query = self.async_cache.get(uid)
@@ -948,36 +973,37 @@ class flameShotgunConnector(object):
             fields = query_body.get('fields')
             self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
 
-            # update shotgun's last event id
-
-            try:
-                event = sg.find_one('EventLogEntry', 
-                    # filters=[['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]],
-                    filters = [], 
-                    fields = ['id'], 
-                    order = [{'column': 'id', 'direction': 'desc'}]
-                )
-                if event:
-                    self.async_cache_last_event_id = event.get('id')
-            except Exception as e:
-                self.log('error getting last event id in async_cache_get %s' % e)
-
             # perform actual shotgun query
-
+            
+            current_result = []
+            current_result_by_id = {}
             try:
-                self.async_cache[uid]['result'] = sg.find(entity, filters, fields)
+                current_result = sg.find(entity, filters, fields)
             except Exception as e:
-                self.log('error performing query on async_cache_get %s' % e)
-        
-        query = self.async_cache.get(uid)
-        if query_type == 'result':
-            return list(query.get('result'))
-        
-        return query.get(query_type)
+                self.log('error performing query on cache_retrive_result %s' % e)
+            
+            if current_result:
+                try:
+                    current_result_by_id = {e.get('id'):e for e in current_result}
+                except Exception as e:
+                    self.log('error grouping shotgun query result by uid in cache_retrive_result: %s' % e)
 
-    def async_cache_clear(self):
+            if current_result_by_id:
+                self.async_cache[uid]['result'] = current_result_by_id
+                return current_result
+
+        query = self.async_cache.get(uid)
+        result = []
+        if query:
+            result_by_id = query.get('result')
+            if result_by_id and isinstance(result_by_id, dict):
+                for entity_uid in sorted(result_by_id.keys()):
+                    result.append(result_by_id.get(entity_uid))
+
+        return result
+
+    def cache_clear(self):
         self.async_cache = {}
-        self.rescan_flag = True
         return True
     
     def register_common_queries(self):
@@ -1008,7 +1034,7 @@ class flameShotgunConnector(object):
                 
                 self.unregister_common_queries()
 
-                self.current_tasks_uid = self.connector.async_cache_register({
+                self.current_tasks_uid = self.connector.cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -1023,7 +1049,7 @@ class flameShotgunConnector(object):
                     ]
                 }, uid = 'current_tasks')
 
-                self.current_versions_uid = self.connector.async_cache_register({
+                self.current_versions_uid = self.connector.cache_register({
                     'entity': 'Version',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -1032,13 +1058,45 @@ class flameShotgunConnector(object):
                         'entity'
                     ]
                 }, uid = 'current_versions')
+
+                self.current_pbfiles = self.connector.cache_register({
+                    'entity': 'PublishedFile',
+                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                        'name',
+                        'created_at',
+                        'sg_colourspace',
+                    #    'sg_image_file_type',
+                        'published_file_type',
+                        'path_cache',
+                        'path_cache_storage',
+                    #    'path',
+                    #    'project.Project.id',
+                    #    'project.Project.name',
+                    #    'project.Project.tank_name',
+                    #    'project.Project.sg_status',
+                        'sg_source_location',
+                        'task.Task.entity',
+                    #    'task.Task.content',
+                    #    'task.Task.entity.Entity.id',
+                    #    'task.Task.entity.Entity.type',
+                    #    'task.Task.step.Step.short_name',
+                        'task.Task.step.Step.id',
+                        'version.Version.id',
+                        'version.Version.code',
+                    #    'version.Version.name',
+                        'version_number',
+                        'version.Version.sg_status_list'
+                    ]
+                }, uid = 'current_pbfiles')
+
                 return True
             else:
                 return False
             
         elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
             # register new query from scratch
-            self.current_tasks_uid = self.connector.async_cache_register({
+            self.current_tasks_uid = self.connector.cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -1052,7 +1110,7 @@ class flameShotgunConnector(object):
                         'entity.Shot.sg_sequence'
                     ]
             }, uid = 'current_tasks')
-            self.current_versions_uid = self.connector.async_cache_register({
+            self.current_versions_uid = self.connector.cache_register({
                     'entity': 'Version',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -1060,12 +1118,44 @@ class flameShotgunConnector(object):
                         'sg_task.Task.id',
                         'entity',
                     ]
-            }, uid = 'current_versions')          
+            }, uid = 'current_versions')
+
+            self.current_pbfiles = self.connector.cache_register({
+                'entity': 'PublishedFile',
+                'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+                'fields': [
+                    'name',
+                    'created_at',
+                    'sg_colourspace',
+                #    'sg_image_file_type',
+                    'published_file_type',
+                    'path_cache',
+                    'path_cache_storage',
+                #    'path',
+                #    'project.Project.id',
+                #    'project.Project.name',
+                #    'project.Project.tank_name',
+                #    'project.Project.sg_status',
+                    'sg_source_location',
+                    'task.Task.entity',
+                #    'task.Task.content',
+                #    'task.Task.entity.Entity.id',
+                #    'task.Task.entity.Entity.type',
+                #    'task.Task.step.Step.short_name',
+                    'task.Task.step.Step.id',
+                    'version.Version.id',
+                    'version.Version.code',
+                #    'version.Version.name',
+                    'version_number',
+                    'version.Version.sg_status_list'
+                ]
+            }, uid = 'current_pbfiles')
+
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
             # unregister current uid
-            self.connector.async_cache_unregister('current_tasks')
-            self.connector.async_cache_unregister('current_versions')
+            self.conne('current_tasks')
+            self.conne('current_versions')
             return True
         else:
             return False        
@@ -1073,74 +1163,13 @@ class flameShotgunConnector(object):
     def unregister_common_queries(self):
         # un-registers async cache requests
         
-        self.connector.async_cache_unregister('current_tasks')
-        self.connector.async_cache_unregister('current_versions')
+        self.conne('current_tasks')
+        self.conne('current_versions')
 
-    def async_cache_softupdate(self, sg = None):
+    def cache_softupdate(self, sg = None):
+        pass
 
-        # try to do hardupdate once if there's no last event id found.
-        # give up if it did not help
-
-        if not self.async_cache_last_event_id:
-            self.async_cache_hardupdate(sg)
-        if not self.async_cache_last_event_id:
-            return False
-
-        # types we're interested in
-        task_events = []
-        shot_events = []
-        asset_events = []
-        sequence_events = []
-
-        # query events from last recorded
-
-        events = []
-        try:
-            events = sg.find('EventLogEntry',
-                filters = [
-                    ['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}],
-                    ['id', 'greater_than', self.async_cache_last_event_id],
-                    ],
-                fields = [
-                    'id',
-                    "event_type",
-                    "entity",
-                ]
-            )
-        except Exception as e:
-            self.log('error getting event stream while soft updating cache, error: %s' % e)
-
-        event_id = self.async_cache_last_event_id
-
-        for event in events:
-            event_type = event.get('event_type', '')
-            event_id = event.get('id')
-            if 'Shotgun_Task' in event_type:
-                task_events.append(event)
-                continue
-            elif 'Shotgun_Shot' in event_type:
-                shot_events.append(event)
-                continue
-            elif 'Shotgun_Asset' in event_type:
-                asset_events.append(event)
-                continue
-            elif 'Shotgun_Sequence' in event_type:
-                sequence_events.append(event)
-                continue
-            else:
-                continue
-
-        self.async_cache_last_event_id = event_id
-
-        # update current tasks in cache if there was anything related to tasks
-
-        if task_events:
-            self.async_cache_get('current_tasks', 
-                perform_query = True,
-                sg = sg
-            )
-        
-    def async_cache_hardupdate(self, sg = None):
+    def cache_hardupdate(self, sg = None):
         
         # use main thread shotgun connection if not given
 
@@ -1148,18 +1177,6 @@ class flameShotgunConnector(object):
             sg = self.sg
 
         results_by_hash = {}
-
-        try:
-            event = sg.find_one('EventLogEntry', 
-                # filters = [['project', 'is', {'type': 'Project', 'id': self.sg_linked_project_id}]], 
-                filters = [],
-                fields = ['id'], 
-                order = [{'column': 'id', 'direction': 'desc'}]
-            )
-            if event:
-                self.async_cache_last_event_id = event.get('id')
-        except Exception as e:
-            self.log('error getting last event id while hard updating cache, error: %s' % e)
 
         for cache_request_uid in self.async_cache.keys():
             cache_request = self.async_cache.get(cache_request_uid)
@@ -1178,12 +1195,20 @@ class flameShotgunConnector(object):
                 filters = query.get('filters')
                 fields = query.get('fields')
 
+                # Cached results are stored as a dictionary with entity id as a key.
+
+                result = []
+                result_by_id = {}
+
                 try:
                     result = sg.find(entity, filters, fields)
-                    self.async_cache[cache_request_uid]['result'] = result
-                    results_by_hash[hash(pformat(query))] = result
+                    if result:
+                        result_by_id =  {e.get('id'):e for e in result}
                 except Exception as e:
                     self.log('error hard updating cache %s' % e)
+
+                self.async_cache[cache_request_uid]['result'] = result_by_id
+                results_by_hash[hash(pformat(query))] = result_by_id
 
     # end of async cache methods
 
@@ -1780,7 +1805,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector = connector
 
         # register async cache query
-        self.active_projects_uid = self.connector.async_cache_register({
+        self.active_projects_uid = self.connector.cache_register({
                     'entity': 'Project',
                     'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
@@ -1875,7 +1900,7 @@ class flameMenuProjectconnect(flameMenuApp):
         return menu
 
     def get_projects(self, *args, **kwargs):
-        return self.connector.async_cache_get(self.active_projects_uid)
+        return self.connector.cache_retrive_result(self.active_projects_uid)
 
     def unlink_project(self, *args, **kwargs):
         self.connector.destroy_toolkit_engine()
@@ -1899,7 +1924,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.bootstrap_toolkit()
         
     def refresh(self, *args, **kwargs):        
-        self.connector.async_cache_get(self.active_projects_uid, True)
+        self.connector.cache_retrive_result(self.active_projects_uid, True)
         self.rescan()
 
     def sign_in(self, *args, **kwargs):
@@ -3181,13 +3206,11 @@ class flameMenuProjectconnect(flameMenuApp):
             except:
                 self.flame = None
 
-        self.connector.async_cache_get(self.active_projects_uid, True)
+        self.connector.cache_retrive_result(self.active_projects_uid, True)
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
-            if self.connector:
-                self.connector.rescan_flag = False
 
 
 class flameBatchBlessing(flameMenuApp):
@@ -3629,7 +3652,7 @@ class flameMenuNewBatch(flameMenuApp):
         return menu
 
     def get_entities(self, user_only = True, filter_out=[]):
-        cached_tasks = self.connector.async_cache_get('current_tasks')
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
 
         if not isinstance(cached_tasks, list):
             
@@ -3638,7 +3661,7 @@ class flameMenuNewBatch(flameMenuApp):
             self.unregister_query()
             self.register_query()
 
-            cached_tasks = self.connector.async_cache_get('current_tasks')
+            cached_tasks = self.connector.cache_retrive_result('current_tasks')
 
             if not isinstance(cached_tasks, list):
 
@@ -3908,7 +3931,7 @@ class flameMenuNewBatch(flameMenuApp):
                 new_asset = self.connector.sg.create('Asset', data)
                 self.log('new asset:\n%s' % pformat(new_asset))
                 self.log('updating async cache for cuttent_tasks')
-                self.connector.async_cache_get('current_tasks', True)
+                self.connector.cache_retrive_result('current_tasks', True)
                 self.log('creating new batch')
                 self.create_new_batch(new_asset)
 
@@ -4207,7 +4230,7 @@ class flameMenuNewBatch(flameMenuApp):
                 new_shot = self.connector.sg.create('Shot', data)
                 self.log('new shot:\n%s' % pformat(new_shot))
                 self.log('updating async cache for current tasks')
-                self.connector.async_cache_get('current_tasks', True)
+                self.connector.cache_retrive_result('current_tasks', True)
                 self.log('creating new batch')
                 self.create_new_batch(new_shot)
 
@@ -4309,13 +4332,11 @@ class flameMenuNewBatch(flameMenuApp):
             except:
                 self.flame = None
 
-        self.connector.async_cache_get('current_tasks', True)
+        self.connector.cache_retrive_result('current_tasks', True)
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
-            if self.connector:
-                self.connector.rescan_flag = False
 
 
 class flameMenuBatchLoader(flameMenuApp):
@@ -4816,7 +4837,7 @@ class flameMenuPublisher(flameMenuApp):
 
         batch_name = self.flame.batch.name.get_value()
         tasks = []
-        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
         if not isinstance(cached_tasks, list):
             
@@ -4825,7 +4846,7 @@ class flameMenuPublisher(flameMenuApp):
             self.unregister_query()
             self.register_query()
 
-            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+            cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
             if not isinstance(cached_tasks, list):
 
@@ -5020,7 +5041,7 @@ class flameMenuPublisher(flameMenuApp):
         # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
 
         tasks = []
-        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
         
         if not isinstance(cached_tasks, list):
 
@@ -5029,7 +5050,7 @@ class flameMenuPublisher(flameMenuApp):
             self.unregister_query()
             self.register_query()
 
-            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+            cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
             if not isinstance(cached_tasks, list):
 
@@ -5046,7 +5067,7 @@ class flameMenuPublisher(flameMenuApp):
             tasks.append(cached_task)
         
         versions = []
-        cached_versions = self.connector.async_cache_get(self.current_versions_uid)
+        cached_versions = self.connector.cache_retrive_result(self.current_versions_uid)
 
         if not isinstance(cached_versions, list):
 
@@ -5055,7 +5076,7 @@ class flameMenuPublisher(flameMenuApp):
             self.unregister_query()
             self.register_query()
 
-            cached_versions = self.connector.async_cache_get(self.current_versions_uid)
+            cached_versions = self.connector.cache_retrive_result(self.current_versions_uid)
 
             if not isinstance(cached_versions, list):
 
@@ -5613,7 +5634,6 @@ class flameMenuPublisher(flameMenuApp):
                 os.makedirs(export_dir)
             except:
                 clip.name.set_value(original_clip_name)
-
                 mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
@@ -5711,6 +5731,7 @@ class flameMenuPublisher(flameMenuApp):
             version = self.connector.sg.create('Version', version_data)
             self.log('created Version: \n%s' % pformat(version))
         except Exception as e:
+            self.progress.hide()
             mbox = QtWidgets.QMessageBox()
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
@@ -5730,6 +5751,7 @@ class flameMenuPublisher(flameMenuApp):
             try:
                 self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
             except Exception as e:
+                self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error uploading version thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
@@ -5749,6 +5771,7 @@ class flameMenuPublisher(flameMenuApp):
             try:
                 self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
             except Exception as e:
+                self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error uploading version preview to Shotgun')
                 mbox.setDetailedText(pformat(e))
@@ -5783,6 +5806,7 @@ class flameMenuPublisher(flameMenuApp):
         try:
             published_file = self.connector.sg.create('PublishedFile', published_file_data)
         except Exception as e:
+            self.progress.hide()
             mbox = QtWidgets.QMessageBox()
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
@@ -5803,6 +5827,7 @@ class flameMenuPublisher(flameMenuApp):
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
         except Exception as e:
+            self.progress.hide()
             mbox = QtWidgets.QMessageBox()
             mbox.setText('Error uploading thumbnail to Shotgun')
             mbox.setDetailedText(pformat(e))
@@ -5902,7 +5927,7 @@ class flameMenuPublisher(flameMenuApp):
                 os.makedirs(export_dir)
             except:
                 clip.name.set_value(original_clip_name)
-
+                self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
@@ -5932,6 +5957,7 @@ class flameMenuPublisher(flameMenuApp):
                     call(['cp', '-a', src, dest])
                     call(['cp', '-a', linked_batch_path, export_path])
                 except:
+                    self.progress.hide()
                     mbox = QtWidgets.QMessageBox()
                     mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
                     mbox.setDetailedText('Path: ' + export_path)
@@ -5965,6 +5991,7 @@ class flameMenuPublisher(flameMenuApp):
             try:
                 published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
             except Exception as e:
+                self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
                 mbox.setText('Error creating published file type in Shotgun')
                 mbox.setDetailedText(pformat(e))
@@ -5995,6 +6022,7 @@ class flameMenuPublisher(flameMenuApp):
         try:
             published_file = self.connector.sg.create('PublishedFile', published_file_data)
         except Exception as e:
+            self.progress.hide()
             mbox = QtWidgets.QMessageBox()
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
@@ -6016,6 +6044,7 @@ class flameMenuPublisher(flameMenuApp):
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
         except Exception as e:
+            self.progress.hide()
             mbox = QtWidgets.QMessageBox()
             mbox.setText('Error uploading thumbnail to Shotgun')
             mbox.setDetailedText(pformat(e))
@@ -6165,7 +6194,7 @@ class flameMenuPublisher(flameMenuApp):
         
         # get current tasks form async cache
 
-        cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+        cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
         if not isinstance(cached_tasks, list):
 
@@ -6174,7 +6203,7 @@ class flameMenuPublisher(flameMenuApp):
             self.unregister_query()
             self.register_query()
 
-            cached_tasks = self.connector.async_cache_get(self.current_tasks_uid)
+            cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
             if not isinstance(cached_tasks, list):
 
@@ -6733,7 +6762,7 @@ class flameMenuPublisher(flameMenuApp):
                 
                 self.unregister_query()
 
-                self.current_tasks_uid = self.connector.async_cache_register({
+                self.current_tasks_uid = self.connector.cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -6747,7 +6776,7 @@ class flameMenuPublisher(flameMenuApp):
                         'entity.Shot.sg_sequence'
                     ]
                 })
-                self.current_versions_uid = self.connector.async_cache_register({
+                self.current_versions_uid = self.connector.cache_register({
                     'entity': 'Version',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -6762,7 +6791,7 @@ class flameMenuPublisher(flameMenuApp):
             
         elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
             # register new query from scratch
-            self.current_tasks_uid = self.connector.async_cache_register({
+            self.current_tasks_uid = self.connector.cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -6777,7 +6806,7 @@ class flameMenuPublisher(flameMenuApp):
                     ]
             # ['entity', 'task_assignees']
             })
-            self.current_versions_uid = self.connector.async_cache_register({
+            self.current_versions_uid = self.connector.cache_register({
                     'entity': 'Version',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -6789,7 +6818,7 @@ class flameMenuPublisher(flameMenuApp):
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
             # unregister current uid
-            self.connector.async_cache_unregister(self.current_tasks_uid)
+            self.conne(self.current_tasks_uid)
             return True
         else:
             return False
@@ -6798,8 +6827,8 @@ class flameMenuPublisher(flameMenuApp):
 
         # un-registers async cache requests
         
-        self.connector.async_cache_unregister(self.current_tasks_uid)
-        self.connector.async_cache_unregister(self.current_versions_uid)
+        self.conne(self.current_tasks_uid)
+        self.conne(self.current_versions_uid)
 
     def rescan(self, *args, **kwargs):
         if not self.flame:
@@ -6809,14 +6838,12 @@ class flameMenuPublisher(flameMenuApp):
             except:
                 self.flame = None
 
-        self.connector.async_cache_get(self.current_tasks_uid, True)
+        self.connector.cache_retrive_result(self.current_tasks_uid, True)
         self.connector.async_cache.get(self.current_versions_uid, True)
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
-            if self.connector:
-                self.connector.rescan_flag = False
 
 
 # --- FLAME STARTUP SEQUENCE ---
@@ -6949,18 +6976,22 @@ def get_main_menu_custom_ui_actions():
     return menu
 
 def get_media_panel_custom_ui_actions():
+    
     start = time.time()
     menu = []
+
     for app in apps:
+
         if app.__class__.__name__ == 'flameMenuNewBatch':
             app_menu = app.build_menu()
             if app_menu:
                 menu.append(app_menu)
+
         if app.__class__.__name__ == 'flameMenuPublisher':
             app_menu = app.build_menu()
             if app_menu:
                 menu.extend(app_menu)
-    
+
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
         if menu_auto_refresh.get('media_panel', False):
