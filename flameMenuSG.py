@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = True
+DEBUG = False
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -790,6 +790,7 @@ class flameShotgunConnector(object):
 
             try:
                 sg = self.sg_user.create_sg_connection()
+                self.cache_softupdate(sg = sg)
             except Exception as e:
                 self.log('error soft updating cache in cache_short_loop: %s' % e)
             
@@ -844,12 +845,10 @@ class flameShotgunConnector(object):
                     pass
             '''
 
-            if sg:
-                sg.close()
-                del sg
+            if sg: sg.close()
 
-            # delta = time.time() - start
-            # self.log('flame ws map took %s sec' % str(delta))
+            delta = time.time() - start
+            self.log('cache_short_loop took %s sec' % str(delta))
             self.loop_timeout(timeout, start)
                                 
     def terminate_loops(self):
@@ -879,7 +878,7 @@ class flameShotgunConnector(object):
         
         self.log ('registering\n %s under uid: %s' % (pformat(query), uid))
 
-        self.async_cache[uid] = {'query': query, 'result': []}
+        self.async_cache[uid] = {'query': query, 'result': {}}
         
         if not self.sg_user:
             return uid
@@ -930,7 +929,10 @@ class flameShotgunConnector(object):
                     result = sg.find(entity, filters, fields, limit=99)
                     result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
-                    self.log('error performing query on register %s' % e)
+                    self.log('error performing quick_fetch query on register %s' % e)
+
+                for entity_id in result_by_id.keys():
+                    self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
 
                 delta = time.time() - start
                 self.log('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
@@ -938,11 +940,27 @@ class flameShotgunConnector(object):
                 day = 0
                 max_days = 99
                 while not flag:
+                    start = time.time()
+                    day_filters = list(filters)
+                    day_filters.append(['updated_at', 'in_calendar_day', day])
+                    
+                    try:
+                        result = sg.find(entity, day_filters, fields)
+                        result_by_id = {e.get('id'):e for e in result}
+                    except Exception as e:
+                        self.log('error performing quick_fetch query on register %s' % e)
+
+                    for entity_id in result_by_id.keys():
+                        self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
+
+                    delta = time.time() - start
+                    self.log('quick_fetch for day %s: query: %s, len: %s took %s' % (abs(day), entity, len(result_by_id.keys()), delta))
+
                     day -= 1
-                    time.sleep(0.2)
                     if abs(day) > max_days:
                         break
-                # print ('quick fetch ended with day %s' % day)
+
+                if sg: sg.close()
 
             flag = []
             loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
@@ -1182,7 +1200,54 @@ class flameShotgunConnector(object):
         self.conne('current_versions')
 
     def cache_softupdate(self, sg = None):
-        pass
+        if not sg:
+            sg = self.sg
+
+        results_by_hash = {}
+
+        for cache_request_uid in self.async_cache.keys():
+            cache_request = self.async_cache.get(cache_request_uid)
+            if not cache_request:
+                continue
+            query = cache_request.get('query')
+            if not query:
+                continue
+
+            result = []
+            result_by_id = {}
+            
+            if hash(pformat(query)) in results_by_hash.keys():
+                result_by_id = results_by_hash.get(hash(pformat(query)))
+                # for entity_id in result_by_id:
+                #    self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
+            else:
+                start = time.time()
+                
+                entity = query.get('entity')
+                if not entity:
+                    continue
+                filters = query.get('filters')
+                fields = query.get('fields')
+
+                hour_filters = list(filters)
+                hour_filters.append(['updated_at', 'in_last', 1, 'HOUR'])
+
+                # Cached results are stored as a dictionary with entity id as a key.
+
+                try:
+                    result = sg.find(entity, hour_filters, fields)
+                    if result:
+                        result_by_id =  {e.get('id'):e for e in result}
+                except Exception as e:
+                    self.log('error hard updating cache %s' % e)
+
+                # for entity_id in result_by_id:
+                #    self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
+    
+                results_by_hash[hash(pformat(query))] = result_by_id
+
+                delta = time.time() - start
+                self.log('softupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
     def cache_hardupdate(self, sg = None):
         
@@ -1204,6 +1269,7 @@ class flameShotgunConnector(object):
             if hash(pformat(query)) in results_by_hash.keys():
                 self.async_cache[cache_request_uid]['result'] = results_by_hash.get(hash(pformat(query)))
             else:
+                start = time.time()
                 entity = query.get('entity')
                 if not entity:
                     continue
@@ -1214,16 +1280,19 @@ class flameShotgunConnector(object):
 
                 result = []
                 result_by_id = {}
-
+                
                 try:
                     result = sg.find(entity, filters, fields)
                     if result:
-                        result_by_id =  {e.get('id'):e for e in result}
+                        result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
                     self.log('error hard updating cache %s' % e)
-
+                
                 self.async_cache[cache_request_uid]['result'] = result_by_id
                 results_by_hash[hash(pformat(query))] = result_by_id
+                
+                delta = time.time() - start
+                self.log('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
     # end of async cache methods
 
