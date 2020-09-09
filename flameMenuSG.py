@@ -752,6 +752,7 @@ class flameShotgunConnector(object):
     # background loops and related functions
 
     def cache_long_loop(self, timeout):
+        recent_deltas = [0]*9
         while self.threads:
             start = time.time()
 
@@ -772,13 +773,17 @@ class flameShotgunConnector(object):
                 del sg
             
             self.log('cache_long_loop took %s sec' % str(time.time() - start))
-            time_passed = int(time.time() - start)
-            if timeout > time_passed:
-                self.log('cache_long_loop sleeping for %s sec' % (timeout - time_passed))
-            
-            self.loop_timeout(timeout, start)
+            delta = time.time() - start
+            recent_deltas.pop(0)
+            recent_deltas.append(delta)
+            avg_delta = sum(recent_deltas)/float(len(recent_deltas))
+            if avg_delta > timeout/2:
+                self.loop_timeout(avg_delta*2, start)
+            else:
+                self.loop_timeout(timeout, start)
 
     def cache_short_loop(self, timeout):
+        recent_deltas = [0]*9
         while self.threads:
             start = time.time()
             
@@ -849,7 +854,14 @@ class flameShotgunConnector(object):
 
             delta = time.time() - start
             self.log('cache_short_loop took %s sec' % str(delta))
-            self.loop_timeout(timeout, start)
+
+            recent_deltas.pop(0)
+            recent_deltas.append(delta)
+            avg_delta = sum(recent_deltas)/float(len(recent_deltas))
+            if avg_delta > timeout/2:
+                self.loop_timeout(avg_delta*2, start)
+            else:
+                self.loop_timeout(timeout, start)
                                 
     def terminate_loops(self):
         self.threads = False
@@ -908,14 +920,14 @@ class flameShotgunConnector(object):
                     result = sg.find(entity, filters, fields)
                     result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
-                    self.log('error performing query on register %s' % e)
+                    self.log('error performing long fetch on register %s' % e)
 
                 flag.append(True)
                 self.async_cache[uid]['result'] = result_by_id
                 if sg: sg.close()
 
                 delta = time.time() - start
-                self.log('query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                self.log('long fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
             def quick_fetch(query, uid, flag):
                 entity = query.get('entity')
@@ -1263,8 +1275,8 @@ class flameShotgunConnector(object):
     
                 results_by_hash[hash(pformat(query))] = result_by_id
 
-                delta = time.time() - start
-                self.log('softupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                # delta = time.time() - start
+                # self.log('softupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
     def cache_hardupdate(self, sg = None):
         
@@ -1308,8 +1320,8 @@ class flameShotgunConnector(object):
                 self.async_cache[cache_request_uid]['result'] = result_by_id
                 results_by_hash[hash(pformat(query))] = result_by_id
                 
-                delta = time.time() - start
-                self.log('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                # delta = time.time() - start
+                # self.log('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
     # end of async cache methods
 
