@@ -1387,18 +1387,17 @@ class flameShotgunConnector(object):
         try:
             if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
                 self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
-                self.sg_linked_project = flame.project.current_project.shotgun_project_name
+                self.sg_linked_project = flame.project.current_project.shotgun_project_name.get_value()
         except:
             return False
 
         if self.sg_user:
             self.log('updating project id')
-            project = self.sg.find_one('Project', [['name', 'is', self.sg_linked_project.get_value()]])
+            project = self.sg.find_one('Project', [['name', 'is', self.sg_linked_project]])
             if project:
                 self.sg_linked_project_id = project.get('id')
             else:
                 self.log('no project id found for project name: %s' % flame.project.current_project.shotgun_project_name)
-
         return True
 
     def get_pipeline_configurations(self):
@@ -1923,6 +1922,11 @@ class flameMenuProjectconnect(flameMenuApp):
                     'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
                     })
+
+        if self.connector.sg_linked_project and (not self.connector.sg_linked_project_id):
+            self.log('project %s can not be found' % self.connector.sg_linked_project)
+            self.log('unlinking %s' % self.connector.sg_linked_project)
+            self.unlink_project()
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -4901,12 +4905,6 @@ class flameMenuPublisher(flameMenuApp):
         self.selected_clips = []
         self.create_export_presets()
         
-        # async cache related initialization
-        # current tasks and versions are now centralized in sg connector
-
-        self.current_tasks_uid = self.connector.current_tasks_uid
-        self.current_versions_uid = self.connector.current_versions_uid
-
         self.progress = self.publish_progress_dialog()
         
     def __getattr__(self, name):
@@ -4944,15 +4942,15 @@ class flameMenuPublisher(flameMenuApp):
     def build_menu(self):
         if not self.connector.sg_user:
             return None
-        if not self.connector.sg_linked_project:
+        if not self.connector.sg_linked_project_id:
             return None
 
         batch_name = self.flame.batch.name.get_value()
         tasks = []
-        cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
 
         if not isinstance(cached_tasks, list):
-                return []
+            return []
 
         for cached_task in cached_tasks:
             if not cached_task.get('entity'):
@@ -5141,10 +5139,10 @@ class flameMenuPublisher(flameMenuApp):
         # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
 
         tasks = []
-        cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
         
         if not isinstance(cached_tasks, list):
-                return {}
+            return {}
 
 
         for cached_task in cached_tasks:
@@ -5155,10 +5153,10 @@ class flameMenuPublisher(flameMenuApp):
             tasks.append(cached_task)
         
         versions = []
-        cached_versions = self.connector.cache_retrive_result(self.current_versions_uid)
+        cached_versions = self.connector.cache_retrive_result('current_versions')
 
         if not isinstance(cached_versions, list):
-                return {}
+            return {}
 
         for cached_version in cached_versions:
             version_entity = cached_version.get('entity')
@@ -6270,10 +6268,10 @@ class flameMenuPublisher(flameMenuApp):
         
         # get current tasks form async cache
 
-        cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
 
         if not isinstance(cached_tasks, list):
-                return {}
+            return {}
 
         # remove tasks without entities and filter if user_only
         
@@ -6818,8 +6816,8 @@ class flameMenuPublisher(flameMenuApp):
             except:
                 self.flame = None
 
-        self.connector.cache_retrive_result(self.current_tasks_uid, True)
-        self.connector.async_cache.get(self.current_versions_uid, True)
+        self.connector.cache_retrive_result('current_tasks', True)
+        self.connector.async_cache.get('current_versions', True)
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
