@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.15'
+__version__ = 'v0.0.15rc2'
 
 
 class flameAppFramework(object):
@@ -1067,6 +1067,13 @@ class flameShotgunConnector(object):
                 
                 self.unregister_common_queries()
 
+                self.current_project_uid = self.connector.cache_register({
+                    'entity': 'Project',
+                    'filters': [['id', 'is', self.connector.sg_linked_project_id]],
+                    'fields': [
+                    ]
+                }, uid = 'current_project')
+
                 self.current_tasks_uid = self.connector.cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
@@ -1092,7 +1099,7 @@ class flameShotgunConnector(object):
                     ]
                 }, uid = 'current_versions')
 
-                self.current_pbfiles = self.connector.cache_register({
+                self.current_pbfiles_uid = self.connector.cache_register({
                     'entity': 'PublishedFile',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
                     'fields': [
@@ -1129,6 +1136,14 @@ class flameShotgunConnector(object):
             
         elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
             # register new query from scratch
+
+            self.current_project_uid = self.connector.cache_register({
+                'entity': 'Project',
+                'filters': [['id', 'is', self.connector.sg_linked_project_id]],
+                'fields': [
+                ]
+            }, uid = 'current_project')
+
             self.current_tasks_uid = self.connector.cache_register({
                     'entity': 'Task',
                     'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
@@ -1187,8 +1202,8 @@ class flameShotgunConnector(object):
             return True
         elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
             # unregister current uid
-            self.conne('current_tasks')
-            self.conne('current_versions')
+            self.unregister_common_queries()
+
             return True
         else:
             return False        
@@ -1196,8 +1211,10 @@ class flameShotgunConnector(object):
     def unregister_common_queries(self):
         # un-registers async cache requests
         
-        self.conne('current_tasks')
-        self.conne('current_versions')
+        self.cache_unregister('current_project')
+        self.cache_unregister('current_tasks')
+        self.cache_unregister('current_versions')
+        self.cache_unregister('current_pbfiles')
 
     def cache_softupdate(self, sg = None):
         if not sg:
@@ -4877,7 +4894,6 @@ class flameMenuPublisher(flameMenuApp):
 
         self.current_tasks_uid = self.connector.current_tasks_uid
         self.current_versions_uid = self.connector.current_versions_uid
-        #  self.register_query()
 
         self.progress = self.publish_progress_dialog()
         
@@ -4924,18 +4940,6 @@ class flameMenuPublisher(flameMenuApp):
         cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
         if not isinstance(cached_tasks, list):
-            
-            # try to unregister cache and register again
-
-            self.unregister_query()
-            self.register_query()
-
-            cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
-
-            if not isinstance(cached_tasks, list):
-
-                # give up
-
                 return []
 
         for cached_task in cached_tasks:
@@ -5128,18 +5132,6 @@ class flameMenuPublisher(flameMenuApp):
         cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
         
         if not isinstance(cached_tasks, list):
-
-            # try to unregister cache and register again
-
-            self.unregister_query()
-            self.register_query()
-
-            cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
-
-            if not isinstance(cached_tasks, list):
-
-                # give up
-
                 return {}
 
 
@@ -5154,18 +5146,6 @@ class flameMenuPublisher(flameMenuApp):
         cached_versions = self.connector.cache_retrive_result(self.current_versions_uid)
 
         if not isinstance(cached_versions, list):
-
-            # try to unregister cache and register again
-
-            self.unregister_query()
-            self.register_query()
-
-            cached_versions = self.connector.cache_retrive_result(self.current_versions_uid)
-
-            if not isinstance(cached_versions, list):
-
-                # give up
-
                 return {}
 
         for cached_version in cached_versions:
@@ -6281,20 +6261,7 @@ class flameMenuPublisher(flameMenuApp):
         cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
 
         if not isinstance(cached_tasks, list):
-
-            # try to unregister cache and register again
-
-            self.unregister_query()
-            self.register_query()
-
-            cached_tasks = self.connector.cache_retrive_result(self.current_tasks_uid)
-
-            if not isinstance(cached_tasks, list):
-
-                # give up
-
                 return {}
-
 
         # remove tasks without entities and filter if user_only
         
@@ -6830,89 +6797,6 @@ class flameMenuPublisher(flameMenuApp):
                 self.mbox.setText(message)
                 self.mbox.exec_()
         self.prefs['flame_bug_message_shown'] = True
-
-    def register_query(self, *args, **kwargs):
-        if self.connector.sg_linked_project_id and self.current_tasks_uid:
-            # check if project id match
-            try:
-                filters = self.connector.async_cache.get(self.current_tasks_uid).get('query').get('filters')
-                project_id = filters[0][2]
-            except:
-                return False
-
-            if project_id != self.connector.sg_linked_project_id:
-                
-                # unregister old id and register new one
-                
-                self.unregister_query()
-
-                self.current_tasks_uid = self.connector.cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-                })
-                self.current_versions_uid = self.connector.cache_register({
-                    'entity': 'Version',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'code',
-                        'sg_task.Task.id',
-                        'entity'
-                    ]
-                })
-                return True
-            else:
-                return False
-            
-        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
-            # register new query from scratch
-            self.current_tasks_uid = self.connector.cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-            # ['entity', 'task_assignees']
-            })
-            self.current_versions_uid = self.connector.cache_register({
-                    'entity': 'Version',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'code',
-                        'sg_task.Task.id',
-                        'entity',
-                    ]
-            })          
-            return True
-        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
-            # unregister current uid
-            self.conne(self.current_tasks_uid)
-            return True
-        else:
-            return False
-
-    def unregister_query(self, *args, **kwargs):
-
-        # un-registers async cache requests
-        
-        self.conne(self.current_tasks_uid)
-        self.conne(self.current_versions_uid)
 
     def rescan(self, *args, **kwargs):
         if not self.flame:
