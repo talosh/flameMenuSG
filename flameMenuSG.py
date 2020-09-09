@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = True
+DEBUG = False
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.15rc2'
+__version__ = 'v0.0.15'
 
 
 class flameAppFramework(object):
