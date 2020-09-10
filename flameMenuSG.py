@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.15'
+__version__ = 'v0.0.16b1'
 
 
 class flameAppFramework(object):
@@ -752,7 +752,8 @@ class flameShotgunConnector(object):
     # background loops and related functions
 
     def cache_long_loop(self, timeout):
-        recent_deltas = [0]*9
+        avg_delta = timeout / 2
+        recent_deltas = [avg_delta]*9
         while self.threads:
             start = time.time()
 
@@ -774,7 +775,12 @@ class flameShotgunConnector(object):
             
             self.log('cache_long_loop took %s sec' % str(time.time() - start))
             delta = time.time() - start
+            last_delta = recent_deltas[len(recent_deltas) - 1]
             recent_deltas.pop(0)
+            
+            if abs(delta - last_delta) > last_delta*3:
+                delta = last_delta*3
+
             recent_deltas.append(delta)
             avg_delta = sum(recent_deltas)/float(len(recent_deltas))
             if avg_delta > timeout/2:
@@ -783,7 +789,8 @@ class flameShotgunConnector(object):
                 self.loop_timeout(timeout, start)
 
     def cache_short_loop(self, timeout):
-        recent_deltas = [0]*9
+        avg_delta = timeout / 2
+        recent_deltas = [avg_delta]*9
         while self.threads:
             start = time.time()
             
@@ -855,7 +862,12 @@ class flameShotgunConnector(object):
             delta = time.time() - start
             self.log('cache_short_loop took %s sec' % str(delta))
 
+            last_delta = recent_deltas[len(recent_deltas) - 1]
             recent_deltas.pop(0)
+            
+            if abs(delta - last_delta) > last_delta*3:
+                delta = last_delta*3
+
             recent_deltas.append(delta)
             avg_delta = sum(recent_deltas)/float(len(recent_deltas))
             if avg_delta > timeout/2:
@@ -1924,8 +1936,8 @@ class flameMenuProjectconnect(flameMenuApp):
                     })
 
         if self.connector.sg_linked_project and (not self.connector.sg_linked_project_id):
-            self.log('project %s can not be found' % self.connector.sg_linked_project)
-            self.log('unlinking %s' % self.connector.sg_linked_project)
+            self.log("project '%s' can not be found" % self.connector.sg_linked_project)
+            self.log("unlinking project: '%s'" % self.connector.sg_linked_project)
             self.unlink_project()
         
     def __getattr__(self, name):
