@@ -1140,9 +1140,9 @@ class flameShotgunConnector(object):
                     #    'project.Project.tank_name',
                     #    'project.Project.sg_status',
                         'sg_source_location',
+                        'task.Task.id',
                         'task.Task.entity',
                     #    'task.Task.content',
-                    #    'task.Task.entity.Entity.id',
                     #    'task.Task.entity.Entity.type',
                     #    'task.Task.step.Step.short_name',
                         'task.Task.step.Step.id',
@@ -1209,9 +1209,9 @@ class flameShotgunConnector(object):
                 #    'project.Project.tank_name',
                 #    'project.Project.sg_status',
                     'sg_source_location',
+                    'task.Task.id',
                     'task.Task.entity',
                 #    'task.Task.content',
-                #    'task.Task.entity.Entity.id',
                 #    'task.Task.entity.Entity.type',
                 #    'task.Task.step.Step.short_name',
                     'task.Task.step.Step.id',
@@ -1278,12 +1278,12 @@ class flameShotgunConnector(object):
                 try:
                     result = sg.find(entity, hour_filters, fields)
                     if result:
-                        result_by_id =  {e.get('id'):e for e in result}
+                        result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
                     self.log('error hard updating cache %s' % e)
 
-                # for entity_id in result_by_id:
-                #    self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
+                for entity_id in result_by_id:
+                    self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
     
                 results_by_hash[hash(pformat(query))] = result_by_id
 
@@ -5136,7 +5136,6 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def build_publish_menu(self, entity):
-
         if not entity.get('code'):
             entity['code'] = entity.get('name', 'no_name')
         
@@ -5177,6 +5176,17 @@ class flameMenuPublisher(flameMenuApp):
             if entity.get('id', 0) == version_entity.get('id'):
                 versions.append(cached_version)
         
+        pbfiles = []
+        cached_pbfiles = self.connector.cache_retrive_result('current_pbfiles')
+        if not isinstance(cached_pbfiles, list):
+            return {}
+
+        for cached_pbfile in cached_pbfiles:
+            pbfile_entity = cached_pbfile.get('task.Task.entity')
+            if not pbfile_entity:
+                continue
+            if entity.get('id', 0) == pbfile_entity.get('id'):
+                pbfiles.append(cached_pbfile)
 
         if not self.connector.sg_human_user:
             human_user = {'id': 0}
@@ -5269,12 +5279,81 @@ class flameMenuPublisher(flameMenuApp):
 
                 task_id = task.get('id')
 
+                
+                task_versions = []
+                task_pbfiles = []
+
+                for v in versions:
+                    if task_id == v.get('sg_task.Task.id'):
+                        task_versions.append(v)
+                for p in pbfiles:
+                    if task_id == p.get('task.Task.id'):
+                        task_pbfiles.append(p)
+
                 version_names = []
                 version_name_lenghts = set()
+                
+                if len(task_versions) < 2:
+                    for version in task_versions:
+                        version_names.append('* ' + version.get('code'))
+                else:
+                    
+                    # group Published Files by Published File Type id and name pair
+                    # find the latest Published File for that pair
+                    # get the set of ids for versions linked to Published Files
+
+                    loose_versions = []
+                    pbfiles_version_ids = set()
+                    pbfile_type_id_name_group = {}
+                    pbfile_type_id_name_datetime = {}
+                    pbfile_type_id_name_count = {}
+
+                    for pbfile in task_pbfiles:
+                        
+                        pbfile_version_id = pbfile.get('version.Version.id')
+                        if pbfile_version_id: pbfiles_version_ids.add(pbfile_version_id)
+                        
+                        pbfile_id = 0
+                        pbfile_type = pbfile.get('published_file_type')
+                        if isinstance(pbfile_type, dict):
+                            pbfile_id = pbfile_type.get('id')
+                        pbfile_name = pbfile.get('name')
+                        pbfile_created_at = pbfile.get('created_at')
+                        pbfile_type_id_name_key = (pbfile_id, pbfile_name)
+                        if pbfile_type_id_name_key not in pbfile_type_id_name_group.keys():
+                            pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                            pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                            pbfile_type_id_name_count[pbfile_type_id_name_key] = 1
+                        else:
+                            if pbfile_created_at > pbfile_type_id_name_datetime.get(pbfile_type_id_name_key):
+                                pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                                pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                                pbfile_type_id_name_count[pbfile_type_id_name_key] += 1
+
+                    version_names_set = set()
+                    
+                    # collect 'loose' versions vithout published files into separate list
+                    # and add them to version names
+
+                    for version in task_versions:
+                        if version.get('id') not in pbfiles_version_ids:
+                            loose_versions.append(version)
+                            version_names_set.add(version.get('code'))
+
+                    for key in pbfile_type_id_name_group.keys():
+                        pbfile = pbfile_type_id_name_group.get(key)
+                        version_names_set.add(pbfile.get('version.Version.code'))
+
+                    for name in sorted(version_names_set):
+                        # version_names.append(' '*8 + ' '*(len(name)//2 - 4) + '. . . . .')
+                        version_names.append('* ' + name)
+
+
+                
+                '''        
                 for version in versions:
                     if task_id == version.get('sg_task.Task.id'):
                         
-                        '''
                         # try to get the name of he clip used to create version
 
                         resolved_template = version_template
@@ -5289,7 +5368,6 @@ class flameMenuPublisher(flameMenuApp):
                         pattern = re.compile(resolved_template)
                         match = re.search(pattern, version.get('code'))
                         pprint (match.group(2))
-                        '''
                         
                         version_names.append('* ' + version.get('code'))
                         version_name_lenghts.add(len('* ' + version.get('code')))
@@ -5298,6 +5376,8 @@ class flameMenuPublisher(flameMenuApp):
                 if len(version_names) > 5:
                     version_names = version_names[:2] + version_names[-3:]
                     version_names[2] = ' '*8 + ' '*(max(list(version_name_lenghts))//2 - 4) + '. . . . .'
+                '''
+
                 for version_name in version_names:
                     menu_item = {}
                     menu_item['name'] = ' '*8 + version_name
