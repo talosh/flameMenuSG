@@ -887,6 +887,9 @@ class flameShotgunConnector(object):
 
                 flag.append(True)
                 self.async_cache[uid]['result'] = result_by_id
+
+                self.preformat_common_queries()
+
                 if sg: sg.close()
 
                 delta = time.time() - start
@@ -944,6 +947,8 @@ class flameShotgunConnector(object):
                     for entity_id in result_by_id.keys():
                         self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
 
+                    self.preformat_common_queries()
+
                     delta = time.time() - start
                     self.log('quick_fetch for day %s: query: %s, len: %s took %s' % (abs(day), entity, len(result_by_id.keys()), delta))
 
@@ -954,12 +959,13 @@ class flameShotgunConnector(object):
                 if sg: sg.close()
 
             flag = []
-            loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
             quick_fetch_thread = threading.Thread(target=quick_fetch, args=(query, uid, flag, ))
-            loong_fetch_thread.daemon = True
+            loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
             quick_fetch_thread.daemon = True
-            loong_fetch_thread.start()
+            loong_fetch_thread.daemon = True
+            
             quick_fetch_thread.start()
+            loong_fetch_thread.start()
         
         return uid
     
@@ -5169,12 +5175,24 @@ class flameMenuPublisher(flameMenuApp):
         version_template = self.prefs.get('templates', {}).get(entity_type, {}).get('version_name', {}).get('value', '')
         # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
 
+        cached_tasks_query = self.connector.async_cache.get('current_tasks')
+        cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
+        tasks = cached_tasks_by_entity.get((entity_type, entity_id)) if cached_tasks_by_entity else []
+
+        cached_versions_query = self.connector.async_cache.get('current_versions')
+        cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
+        versions = cached_versions_by_entity.get((entity_type, entity_id)) if cached_versions_by_entity else []
+
+        cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
+        cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
+        pbfiles = cached_pbfiles_by_entity.get((entity_type, entity_id)) if cached_pbfiles_by_entity else []
+
+        '''
         tasks = []
         cached_tasks = self.connector.cache_retrive_result('current_tasks')
         
         if not isinstance(cached_tasks, list):
             return {}
-
 
         for cached_task in cached_tasks:
             if not cached_task.get('entity'):
@@ -5207,6 +5225,8 @@ class flameMenuPublisher(flameMenuApp):
                 continue
             if entity.get('id', 0) == pbfile_entity.get('id'):
                 pbfiles.append(cached_pbfile)
+        '''
+
 
         if not self.connector.sg_human_user:
             human_user = {'id': 0}
