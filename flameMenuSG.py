@@ -893,6 +893,8 @@ class flameShotgunConnector(object):
                 self.log('long fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
             def quick_fetch(query, uid, flag):
+                from datetime import datetime, timedelta
+
                 entity = query.get('entity')
                 filters = query.get('filters')
                 fields = query.get('fields')
@@ -913,14 +915,26 @@ class flameShotgunConnector(object):
                 delta = time.time() - start
                 self.log('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
                 '''
-                
+
+                sg = None
+                result = []
+                result_by_id = {}
+
+                try:
+                    sg = self.sg_user.create_sg_connection()
+                except Exception as e:
+                    self.log('error performing quick_fetch query on register %s' % e)
+
                 day = 0
                 max_days = 99
                 while not flag:
                     start = time.time()
+
                     day_filters = list(filters)
-                    day_filters.append(['updated_at', 'in_calendar_day', day])
-                    
+                    start_window = datetime.now() - timedelta(days=day)
+                    end_window = datetime.now() - timedelta(days=day+1)
+                    day_filters.append(['updated_at', 'between', start_window, end_window])
+
                     try:
                         result = sg.find(entity, day_filters, fields)
                         result_by_id = {e.get('id'):e for e in result}
@@ -933,8 +947,8 @@ class flameShotgunConnector(object):
                     delta = time.time() - start
                     self.log('quick_fetch for day %s: query: %s, len: %s took %s' % (abs(day), entity, len(result_by_id.keys()), delta))
 
-                    day -= 1
-                    if abs(day) > max_days:
+                    day += 1
+                    if day > max_days:
                         break
 
                 if sg: sg.close()
