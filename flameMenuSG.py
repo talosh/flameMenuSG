@@ -769,10 +769,10 @@ class flameShotgunConnector(object):
             except Exception as e:
                 self.log('error hard updating cache in cache_long_loop: %s' % e)
             
-            if sg:
-                sg.close()
-                del sg
+            if sg: sg.close()
             
+            self.preformat_common_queries()
+
             self.log('cache_long_loop took %s sec' % str(time.time() - start))
             delta = time.time() - start
             last_delta = recent_deltas[len(recent_deltas) - 1]
@@ -806,58 +806,9 @@ class flameShotgunConnector(object):
             except Exception as e:
                 self.log('error soft updating cache in cache_short_loop: %s' % e)
             
-            '''
-            wks_state = {}
-            wks_state, selected_uids = self.framework.flame_workspace_map()
-
-            # remove old keys and unregister their queries if any
-            # if name hash has changed we need to remove uid as well
-            # and unregister its queries
-            
-            for old_uid in self.flame_workspace_state.keys():
-                if old_uid not in wks_state.keys():
-            
-                    # unregister queries
-
-                    # remove uid record
-
-                    del self.flame_workspace_state[old_uid]
-
-                else:
-                    old_hash = self.flame_workspace_state[old_uid].get('name_hash')
-                    new_hash = wks_state[old_uid].get('name_hash')
-                    if old_hash != new_hash:
-
-                        # unregister queries
-
-                        # remove uid record
-
-                        del self.flame_workspace_state[old_uid]
-
-
-            # add the new keys to the dictionary and register their queries
-            # if there's a match to shotgun entities
-
-            current_tasks = self.cache_retrive_result('current_tasks')
-            if not current_tasks:
-                print ('no current tasks')
-                self.loop_timeout(timeout, start)
-                continue
-
-            entities_by_name = {}
-            for current_task in current_tasks:
-                entity = current_task.get('entity')
-                if entity:
-                    entity_name = entity.get('name')
-                    if entity_name:
-                        entities_by_name[entity_name] = entity
-
-            for new_uid in wks_state.keys():
-                if new_uid not in self.flame_workspace_state.keys():
-                    pass
-            '''
-
             if sg: sg.close()
+
+            self.preformat_common_queries()
 
             delta = time.time() - start
             self.log('cache_short_loop took %s sec' % str(delta))
@@ -1334,6 +1285,11 @@ class flameShotgunConnector(object):
                 
                 # delta = time.time() - start
                 # self.log('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+
+    def preformat_common_queries(self):
+
+        current_tasks = self.connector.cache_retrive_result('current_tasks')
+        pprint (current_tasks[0])
 
     # end of async cache methods
 
@@ -5348,36 +5304,6 @@ class flameMenuPublisher(flameMenuApp):
                         # version_names.append(' '*8 + ' '*(len(name)//2 - 4) + '. . . . .')
                         version_names.append('* ' + name)
 
-
-                
-                '''        
-                for version in versions:
-                    if task_id == version.get('sg_task.Task.id'):
-                        
-                        # try to get the name of he clip used to create version
-
-                        resolved_template = version_template
-                        if task_Sequence_name: resolved_template = resolved_template.replace('{Sequence}', task_Sequence_name) 
-                        if task_Shot: resolved_template = resolved_template.replace('{Shot}', task_Shot) 
-                        if task_Asset: resolved_template = resolved_template.replace('{Asset}', task_Asset) 
-                        if task_sg_Asset_type: resolved_template = resolved_template.replace('{sg_asset_type}', task_sg_Asset_type) 
-                        if task_Step: resolved_template = resolved_template.replace('{Step}', task_Step) 
-                        if task_Step_code: resolved_template = resolved_template.replace('{Step_code}', task_Step_code)
-                        resolved_template = resolved_template.replace('{version}', '(\d{3})')
-                        resolved_template = resolved_template.replace('{name}', '(.*)')
-                        pattern = re.compile(resolved_template)
-                        match = re.search(pattern, version.get('code'))
-                        pprint (match.group(2))
-                        
-                        version_names.append('* ' + version.get('code'))
-                        version_name_lenghts.add(len('* ' + version.get('code')))
-                
-                version_names = sorted(version_names)
-                if len(version_names) > 5:
-                    version_names = version_names[:2] + version_names[-3:]
-                    version_names[2] = ' '*8 + ' '*(max(list(version_name_lenghts))//2 - 4) + '. . . . .'
-                '''
-
                 for version_name in version_names:
                     menu_item = {}
                     menu_item['name'] = ' '*8 + version_name
@@ -5936,21 +5862,23 @@ class flameMenuPublisher(flameMenuApp):
             self.progress.set_progress(version_name, 'Uploading preview...')
             try:
                 self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
-            except Exception as e:
-                self.progress.hide()
-                mbox = QtWidgets.QMessageBox()
-                mbox.setText('Error uploading version preview to Shotgun')
-                mbox.setDetailedText(pformat(e))
-                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-                btn_Continue.setText('Continue')
-                mbox.exec_()
-                if mbox.clickedButton() == btn_Continue:
-                    return (pb_info, False)
-                else:
-                    return (pb_info, True)
-
+            except:
+                try:
+                    self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+                except Exception as e:
+                    self.progress.hide()
+                    mbox = QtWidgets.QMessageBox()
+                    mbox.setText('Error uploading version preview to Shotgun')
+                    mbox.setDetailedText(pformat(e))
+                    mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                    btn_Continue.setText('Continue')
+                    mbox.exec_()
+                    if mbox.clickedButton() == btn_Continue:
+                        return (pb_info, False)
+                    else:
+                        return (pb_info, True)
 
         # Create 'flame_render' PublishedFile
 
@@ -5992,20 +5920,23 @@ class flameMenuPublisher(flameMenuApp):
         self.progress.set_progress(version_name, 'Uploading main publish files thumbnail...')
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
-        except Exception as e:
-            self.progress.hide()
-            mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error uploading thumbnail to Shotgun')
-            mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-            btn_Continue.setText('Continue')
-            mbox.exec_()
-            if mbox.clickedButton() == btn_Continue:
-                return (pb_info, False)
-            else:
-                return (pb_info, True)        
+        except:
+            try:
+                self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading thumbnail to Shotgun')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)        
 
         pb_info['status'] = True
 
@@ -6209,20 +6140,23 @@ class flameMenuPublisher(flameMenuApp):
 
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
-        except Exception as e:
-            self.progress.hide()
-            mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error uploading thumbnail to Shotgun')
-            mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-            btn_Continue.setText('Continue')
-            mbox.exec_()
-            if mbox.clickedButton() == btn_Continue:
-                return (pb_info, False)
-            else:
-                return (pb_info, True)
+        except:
+            try:
+                self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading thumbnail to Shotgun')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
 
         # clean-up preview and thumbnail files
 
