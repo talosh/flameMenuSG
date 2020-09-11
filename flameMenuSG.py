@@ -899,6 +899,7 @@ class flameShotgunConnector(object):
 
                 start = time.time()
 
+                '''
                 try:
                     sg = self.sg_user.create_sg_connection()
                     result = sg.find(entity, filters, fields, limit=99)
@@ -911,7 +912,8 @@ class flameShotgunConnector(object):
 
                 delta = time.time() - start
                 self.log('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
-
+                '''
+                
                 day = 0
                 max_days = 99
                 while not flag:
@@ -1288,8 +1290,56 @@ class flameShotgunConnector(object):
 
     def preformat_common_queries(self):
 
+        # sort versions, tasks and published files by entity (type, id)
+        
+        current_tasks_by_entity = {}
         current_tasks = self.connector.cache_retrive_result('current_tasks')
-        pprint (current_tasks[0])
+        if current_tasks:
+            for current_task in current_tasks:
+                entity = current_task.get('entity')
+                if entity:
+                    entity_key = (entity.get('type'), entity.get('id'))
+                else:
+                    entity_key = (None, None)
+                
+                if entity_key not in current_tasks_by_entity.keys():
+                    current_tasks_by_entity[entity_key] = [current_task]
+                else:
+                    current_tasks_by_entity[entity_key].append(current_task)
+        if self.async_cache.get('current_tasks'):
+            self.async_cache['current_tasks']['by_entity'] = current_tasks_by_entity
+
+        current_versions_by_entity = {}
+        current_versions = self.connector.cache_retrive_result('current_versions')
+        if current_versions:
+            for current_version in current_versions:
+                entity = current_version.get('entity')
+                if entity:
+                    entity_key = (entity.get('type'), entity.get('id'))
+                else:
+                    entity_key = (None, None)
+                if entity_key not in current_versions_by_entity.keys():
+                    current_versions_by_entity[entity_key] = [current_version]
+                else:
+                    current_versions_by_entity[entity_key].append(current_version)
+        if self.async_cache.get('current_versions'):
+            self.async_cache['current_versions']['by_entity'] = current_versions_by_entity
+
+        current_pbfiles_by_entity = {}
+        current_pbfiles  = self.connector.cache_retrive_result('current_pbfiles')
+        if current_pbfiles:
+            for current_pbfile in current_pbfiles:
+                entity = current_pbfile.get('task.Task.entity')
+                if entity:
+                    entity_key = (entity.get('type'), entity.get('id'))
+                else:
+                    entity_key = (None, None)
+                if entity_key not in current_pbfiles_by_entity.keys():
+                    current_pbfiles_by_entity[entity_key] = [current_pbfile]
+                else:
+                    current_pbfiles_by_entity[entity_key].append(current_pbfile)
+        if self.async_cache.get('current_pbfiles'):
+            self.async_cache['current_pbfiles']['by_entity'] = current_pbfiles_by_entity
 
     # end of async cache methods
 
