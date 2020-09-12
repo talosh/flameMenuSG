@@ -5172,9 +5172,6 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs[entity_key] = {}
             self.prefs[entity_key]['show_all'] = True
 
-        version_template = self.prefs.get('templates', {}).get(entity_type, {}).get('version_name', {}).get('value', '')
-        # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
-
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
         tasks = cached_tasks_by_entity.get(entity_key, []) if cached_tasks_by_entity else []
@@ -5186,47 +5183,6 @@ class flameMenuPublisher(flameMenuApp):
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
         pbfiles = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
-
-        '''
-        tasks = []
-        cached_tasks = self.connector.cache_retrive_result('current_tasks')
-        
-        if not isinstance(cached_tasks, list):
-            return {}
-
-        for cached_task in cached_tasks:
-            if not cached_task.get('entity'):
-                continue
-            if cached_task.get('entity').get('id') != entity_id:
-                continue
-            tasks.append(cached_task)
-        
-        versions = []
-        cached_versions = self.connector.cache_retrive_result('current_versions')
-
-        if not isinstance(cached_versions, list):
-            return {}
-
-        for cached_version in cached_versions:
-            version_entity = cached_version.get('entity')
-            if not version_entity:
-                continue
-            if entity.get('id', 0) == version_entity.get('id'):
-                versions.append(cached_version)
-        
-        pbfiles = []
-        cached_pbfiles = self.connector.cache_retrive_result('current_pbfiles')
-        if not isinstance(cached_pbfiles, list):
-            return {}
-
-        for cached_pbfile in cached_pbfiles:
-            pbfile_entity = cached_pbfile.get('task.Task.entity')
-            if not pbfile_entity:
-                continue
-            if entity.get('id', 0) == pbfile_entity.get('id'):
-                pbfiles.append(cached_pbfile)
-        '''
-
 
         if not self.connector.sg_human_user:
             human_user = {'id': 0}
