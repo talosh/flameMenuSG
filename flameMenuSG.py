@@ -183,7 +183,7 @@ class flameAppFramework(object):
         if not self.prefs_global.get('menu_auto_refresh'):
             self.prefs_global['menu_auto_refresh'] = {
                 'media_panel': True,
-                'batch': False,
+                'batch': True,
                 'main_menu': True
             }
 
@@ -4531,24 +4531,31 @@ class flameMenuBatchLoader(flameMenuApp):
         if not self.connector.sg_linked_project_id:
             return None
         
-        sg = self.connector.sg
-
         batch_name = self.flame.batch.name.get_value()
+        tasks = []
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
+
+        if not isinstance(cached_tasks, list):
+            return []
+
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            tasks.append(cached_task)
+        entities_id_list = [task.get('entity').get('id') for task in tasks]
+
+        add_menu_list = []
+
         if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
+
             for index, stored_entity in enumerate(add_menu_list):
                 stored_entity_type = stored_entity.get('type', 'Shot')
                 stored_entity_id = stored_entity.get('id', 0)
-                found_entity = sg.find_one(stored_entity_type, [['id', 'is', stored_entity_id]])
-                if not found_entity:
+                if not stored_entity_id in entities_id_list:
                     add_menu_list.pop(index)
 
             if not add_menu_list:
-                project_id = self.connector.sg_linked_project_id
-                tasks = sg.find('Task',
-                    [['project.Project.id', 'is', project_id]],
-                    ['entity']
-                )
                 entity = {}
                 for task in tasks:
                     current_entity = task.get('entity')
@@ -4563,11 +4570,7 @@ class flameMenuBatchLoader(flameMenuApp):
         else:
             self.prefs['additional menu ' + batch_name] = []
             project_id = self.connector.sg_linked_project_id
-            task_filters = [['project.Project.id', 'is', project_id]]
-            tasks = sg.find('Task',
-                task_filters,
-                ['entity']
-            )
+
             entity = {}
             for task in tasks:
                 current_entity = task.get('entity')
@@ -7086,7 +7089,7 @@ def get_main_menu_custom_ui_actions():
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-        if menu_auto_refresh.get('main_menu', False):
+        if menu_auto_refresh.get('main_menu', True):
             try:
                 import flame
                 flame.schedule_idle_event(rescan_hooks)
@@ -7139,7 +7142,7 @@ def get_media_panel_custom_ui_actions():
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-        if menu_auto_refresh.get('media_panel', False):
+        if menu_auto_refresh.get('media_panel', True):
             try:
                 import flame
                 flame.schedule_idle_event(rescan_hooks)
@@ -7166,7 +7169,7 @@ def get_batch_custom_ui_actions():
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-        if menu_auto_refresh.get('batch', False):
+        if menu_auto_refresh.get('batch', True):
             try:
                 import flame
                 flame.schedule_idle_event(rescan_hooks)
