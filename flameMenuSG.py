@@ -1078,6 +1078,8 @@ class flameShotgunConnector(object):
                         'content',
                         'step.Step.code',
                         'step.Step.short_name',
+                        'step.Step.id',
+                        'sg_sort_order',
                         'task_assignees',
                         'project.Project.id',
                         'entity',
@@ -1148,6 +1150,8 @@ class flameShotgunConnector(object):
                         'content',
                         'step.Step.code',
                         'step.Step.short_name',
+                        'step.Step.id',
+                        'sg_sort_order',
                         'task_assignees',
                         'project.Project.id',
                         'entity',
@@ -4955,6 +4959,8 @@ class flameMenuPublisher(flameMenuApp):
                 elif entity.get('caller') == 'flip_assigned_for_entity':
                     self.show_bug_message()
                     self.flip_assigned_for_entity(entity)
+                elif entity.get('caller') == 'fold_step_entity':
+                    self.fold_step_entity(entity)
                 elif entity.get('caller') == 'publish':
                     self.publish(entity, args[0])
                     self.connector.bootstrap_toolkit()
@@ -5225,6 +5231,8 @@ class flameMenuPublisher(flameMenuApp):
             step_name = task.get('step.Step.code')
             if not step_name:
                 step_name = ''
+            step_id = task.get('step.Step.id')
+
             if step_name not in tasks_by_step.keys():
                 tasks_by_step[step_name] = []
             tasks_by_step[step_name].append(task)
@@ -5240,15 +5248,32 @@ class flameMenuPublisher(flameMenuApp):
             menu['actions'].append(menu_item)            
 
         for step_name in tasks_by_step.keys():
+            step_key = ('Step', step_name)
+            
+            if step_key not in self.prefs[entity_key].keys():
+                self.prefs[entity_key][step_key] = {'isFolded': False}
+
+            fold_step_entity = dict(entity)
+            fold_step_entity['caller'] = 'fold_step_entity'
+            fold_step_entity['key'] = step_key
+            self.dynamic_menu_data[str(id(fold_step_entity))] = fold_step_entity
+
+            if self.prefs[entity_key][step_key].get('isFolded'):
+                menu_item = {}
+                menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
+                menu['actions'].append(menu_item)
+                continue
+
             if len(tasks_by_step[step_name]) != 1:
                 menu_item = {}
                 menu_item['name'] = '- [ ' + step_name + ' ]'
-                menu_item['execute'] = self.rescan
+                menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
                 menu['actions'].append(menu_item)
             elif tasks_by_step[step_name][0].get('content') != step_name:
                 menu_item = {}
                 menu_item['name'] = '- [ ' + step_name + ' ]'
-                menu_item['execute'] = self.rescan
+                menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
                 menu['actions'].append(menu_item)
 
             for task in tasks_by_step[step_name]:
@@ -5332,9 +5357,7 @@ class flameMenuPublisher(flameMenuApp):
                     for version in task_versions:
                         if version.get('id') not in pbfiles_version_ids:
                             loose_versions.append(version)
-                    
-                    pprint (loose_versions)
-                                        
+                                                            
                     if len(loose_versions) > 3:
                         first = loose_versions[0].get('code')
                         last = loose_versions[-1].get('code')
@@ -6506,6 +6529,13 @@ class flameMenuPublisher(flameMenuApp):
         entity_key = (entity_type, entity_id)
         if entity_id:
             self.prefs[entity_key]['show_all'] = not self.prefs[entity_key]['show_all']
+
+    def fold_step_entity(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        step_key = entity.get('key')
+        self.prefs[entity_key][step_key]['isFolded'] = not self.prefs[entity_key][step_key]['isFolded']
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
