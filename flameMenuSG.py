@@ -837,7 +837,7 @@ class flameShotgunConnector(object):
         if timeout <= time_passed:
             return
         else:
-            for n in range((timeout - time_passed) * 10):
+            for n in range(int(timeout - time_passed) * 10):
                 if not self.threads:
                     self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
                     break
@@ -5177,15 +5177,15 @@ class flameMenuPublisher(flameMenuApp):
 
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
-        tasks = cached_tasks_by_entity.get((entity_type, entity_id)) if cached_tasks_by_entity else []
+        tasks = cached_tasks_by_entity.get((entity_type, entity_id), []) if cached_tasks_by_entity else []
 
         cached_versions_query = self.connector.async_cache.get('current_versions')
         cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
-        versions = cached_versions_by_entity.get((entity_type, entity_id)) if cached_versions_by_entity else []
+        versions = cached_versions_by_entity.get((entity_type, entity_id), []) if cached_versions_by_entity else []
 
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
-        pbfiles = cached_pbfiles_by_entity.get((entity_type, entity_id)) if cached_pbfiles_by_entity else []
+        pbfiles = cached_pbfiles_by_entity.get((entity_type, entity_id), []) if cached_pbfiles_by_entity else []
 
         '''
         tasks = []
@@ -5342,7 +5342,6 @@ class flameMenuPublisher(flameMenuApp):
                     # find the latest Published File for that pair
                     # get the set of ids for versions linked to Published Files
 
-                    loose_versions = []
                     pbfiles_version_ids = set()
                     pbfile_type_id_name_group = {}
                     pbfile_type_id_name_datetime = {}
@@ -5374,18 +5373,28 @@ class flameMenuPublisher(flameMenuApp):
                     
                     # collect 'loose' versions vithout published files into separate list
                     # and add them to version names
-
+                    loose_versions = []
                     for version in task_versions:
                         if version.get('id') not in pbfiles_version_ids:
                             loose_versions.append(version)
-                            version_names_set.add(version.get('code'))
+                    
+                    pprint (loose_versions)
+                                        
+                    if len(loose_versions) > 3:
+                        first = loose_versions[0].get('code')
+                        last = loose_versions[-1].get('code')
+                        version_names.append(' '*3 + first)
+                        version_names.append(' '*8 + ' '*(max(len(first), len(last))//2 - 4) + '. . . . .')
+                        version_names.append(' '*3 + last)
+                    else:
+                        for loose_version in loose_versions:
+                            version_names.append(' '*3 + loose_version.get('code'))
 
                     for key in pbfile_type_id_name_group.keys():
                         pbfile = pbfile_type_id_name_group.get(key)
                         version_names_set.add(pbfile.get('version.Version.code'))
 
                     for name in sorted(version_names_set):
-                        # version_names.append(' '*8 + ' '*(len(name)//2 - 4) + '. . . . .')
                         version_names.append('* ' + name)
 
                 for version_name in version_names:
@@ -5412,8 +5421,8 @@ class flameMenuPublisher(flameMenuApp):
         # Main publishing function
 
         # temporary move built-in integration out of the way
-
-        self.connector.destroy_toolkit_engine()
+        # we may not need by passing the empty set of hooks
+        # self.connector.destroy_toolkit_engine()
         
         # First,let's check if the project folder is there
         # and if not - try to create one
@@ -5473,10 +5482,6 @@ class flameMenuPublisher(flameMenuApp):
             if is_cancelled:
                 break
 
-        # update async cache
-
-        self.rescan()
-
         # report user of the status
         
         if is_cancelled and (len(versions_published) == 0):
@@ -5488,7 +5493,8 @@ class flameMenuPublisher(flameMenuApp):
         else:
             msg = 'Published %s version(s), %s version(s) failed' % (len(versions_published), len(versions_failed))
 
-        self.connector.bootstrap_toolkit()
+        # We may not need it by passing empty set of hooks
+        # self.connector.bootstrap_toolkit()
 
         mbox = self.mbox
         mbox.setText('flameMenuSG: ' + msg)
@@ -5794,6 +5800,24 @@ class flameMenuPublisher(flameMenuApp):
 
         self.log('export preset: %s' % preset_path)
 
+        class ExportHooks(object):
+            def preExport(self, info, userData, *args, **kwargs):
+                pass
+            def postExport(self, info, userData, *args, **kwargs):
+                pass
+            def preExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def postExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def preExportAsset(self, info, userData, *args, **kwargs):
+                pass
+            def postExportAsset(self, info, userData, *args, **kwargs):
+                del args, kwargs
+                pass
+            def exportOverwriteFile(self, path, *args, **kwargs):
+                del path, args, kwargs
+                return "overwrite"
+
         exporter = self.flame.PyExporter()
         exporter.foreground = True
         export_clip_name, ext = os.path.splitext(os.path.basename(export_path))
@@ -5828,7 +5852,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('into folder: %s' % export_dir)
 
         try:
-            exporter.export(clip, preset_path, export_dir)
+            exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
             clip.name.set_value(original_clip_name)
         except:
             clip.name.set_value(original_clip_name)
@@ -5852,7 +5876,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('into folder: %s' % export_dir)
 
         try:
-            exporter.export(clip, preset_path, export_dir)
+            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
         except:
             pass
 
@@ -5879,7 +5903,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
         try:
-            exporter.export(clip, preset_path, export_dir)
+            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
         except:
             pass
         
