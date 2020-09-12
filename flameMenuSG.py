@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.15'
+__version__ = 'v0.0.16b1'
 
 
 class flameAppFramework(object):
@@ -752,7 +752,8 @@ class flameShotgunConnector(object):
     # background loops and related functions
 
     def cache_long_loop(self, timeout):
-        recent_deltas = [0]*9
+        avg_delta = timeout / 2
+        recent_deltas = [avg_delta]*9
         while self.threads:
             start = time.time()
 
@@ -768,13 +769,18 @@ class flameShotgunConnector(object):
             except Exception as e:
                 self.log('error hard updating cache in cache_long_loop: %s' % e)
             
-            if sg:
-                sg.close()
-                del sg
+            if sg: sg.close()
             
+            self.preformat_common_queries()
+
             self.log('cache_long_loop took %s sec' % str(time.time() - start))
             delta = time.time() - start
+            last_delta = recent_deltas[len(recent_deltas) - 1]
             recent_deltas.pop(0)
+            
+            if abs(delta - last_delta) > last_delta*3:
+                delta = last_delta*3
+
             recent_deltas.append(delta)
             avg_delta = sum(recent_deltas)/float(len(recent_deltas))
             if avg_delta > timeout/2:
@@ -783,7 +789,8 @@ class flameShotgunConnector(object):
                 self.loop_timeout(timeout, start)
 
     def cache_short_loop(self, timeout):
-        recent_deltas = [0]*9
+        avg_delta = timeout / 2
+        recent_deltas = [avg_delta]*9
         while self.threads:
             start = time.time()
             
@@ -799,63 +806,19 @@ class flameShotgunConnector(object):
             except Exception as e:
                 self.log('error soft updating cache in cache_short_loop: %s' % e)
             
-            '''
-            wks_state = {}
-            wks_state, selected_uids = self.framework.flame_workspace_map()
-
-            # remove old keys and unregister their queries if any
-            # if name hash has changed we need to remove uid as well
-            # and unregister its queries
-            
-            for old_uid in self.flame_workspace_state.keys():
-                if old_uid not in wks_state.keys():
-            
-                    # unregister queries
-
-                    # remove uid record
-
-                    del self.flame_workspace_state[old_uid]
-
-                else:
-                    old_hash = self.flame_workspace_state[old_uid].get('name_hash')
-                    new_hash = wks_state[old_uid].get('name_hash')
-                    if old_hash != new_hash:
-
-                        # unregister queries
-
-                        # remove uid record
-
-                        del self.flame_workspace_state[old_uid]
-
-
-            # add the new keys to the dictionary and register their queries
-            # if there's a match to shotgun entities
-
-            current_tasks = self.cache_retrive_result('current_tasks')
-            if not current_tasks:
-                print ('no current tasks')
-                self.loop_timeout(timeout, start)
-                continue
-
-            entities_by_name = {}
-            for current_task in current_tasks:
-                entity = current_task.get('entity')
-                if entity:
-                    entity_name = entity.get('name')
-                    if entity_name:
-                        entities_by_name[entity_name] = entity
-
-            for new_uid in wks_state.keys():
-                if new_uid not in self.flame_workspace_state.keys():
-                    pass
-            '''
-
             if sg: sg.close()
+
+            self.preformat_common_queries()
 
             delta = time.time() - start
             self.log('cache_short_loop took %s sec' % str(delta))
 
+            last_delta = recent_deltas[len(recent_deltas) - 1]
             recent_deltas.pop(0)
+            
+            if abs(delta - last_delta) > last_delta*3:
+                delta = last_delta*3
+
             recent_deltas.append(delta)
             avg_delta = sum(recent_deltas)/float(len(recent_deltas))
             if avg_delta > timeout/2:
@@ -874,7 +837,7 @@ class flameShotgunConnector(object):
         if timeout <= time_passed:
             return
         else:
-            for n in range((timeout - time_passed) * 10):
+            for n in range(int(timeout - time_passed) * 10):
                 if not self.threads:
                     self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
                     break
@@ -924,18 +887,24 @@ class flameShotgunConnector(object):
 
                 flag.append(True)
                 self.async_cache[uid]['result'] = result_by_id
+
+                self.preformat_common_queries()
+
                 if sg: sg.close()
 
                 delta = time.time() - start
                 self.log('long fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
             def quick_fetch(query, uid, flag):
+                from datetime import datetime, timedelta
+
                 entity = query.get('entity')
                 filters = query.get('filters')
                 fields = query.get('fields')
 
                 start = time.time()
 
+                '''
                 try:
                     sg = self.sg_user.create_sg_connection()
                     result = sg.find(entity, filters, fields, limit=99)
@@ -948,14 +917,27 @@ class flameShotgunConnector(object):
 
                 delta = time.time() - start
                 self.log('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                '''
+
+                sg = None
+                result = []
+                result_by_id = {}
+
+                try:
+                    sg = self.sg_user.create_sg_connection()
+                except Exception as e:
+                    self.log('error performing quick_fetch query on register %s' % e)
 
                 day = 0
                 max_days = 99
                 while not flag:
                     start = time.time()
+
                     day_filters = list(filters)
-                    day_filters.append(['updated_at', 'in_calendar_day', day])
-                    
+                    start_window = datetime.now() - timedelta(days=day)
+                    end_window = datetime.now() - timedelta(days=day+1)
+                    day_filters.append(['updated_at', 'between', start_window, end_window])
+
                     try:
                         result = sg.find(entity, day_filters, fields)
                         result_by_id = {e.get('id'):e for e in result}
@@ -965,22 +947,25 @@ class flameShotgunConnector(object):
                     for entity_id in result_by_id.keys():
                         self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
 
+                    self.preformat_common_queries()
+
                     delta = time.time() - start
                     self.log('quick_fetch for day %s: query: %s, len: %s took %s' % (abs(day), entity, len(result_by_id.keys()), delta))
 
-                    day -= 1
-                    if abs(day) > max_days:
+                    day += 1
+                    if day > max_days:
                         break
 
                 if sg: sg.close()
 
             flag = []
-            loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
             quick_fetch_thread = threading.Thread(target=quick_fetch, args=(query, uid, flag, ))
-            loong_fetch_thread.daemon = True
+            loong_fetch_thread = threading.Thread(target=loong_fetch, args=(query, uid, flag, ))
             quick_fetch_thread.daemon = True
-            loong_fetch_thread.start()
+            loong_fetch_thread.daemon = True
+            
             quick_fetch_thread.start()
+            loong_fetch_thread.start()
         
         return uid
     
@@ -1128,9 +1113,9 @@ class flameShotgunConnector(object):
                     #    'project.Project.tank_name',
                     #    'project.Project.sg_status',
                         'sg_source_location',
+                        'task.Task.id',
                         'task.Task.entity',
                     #    'task.Task.content',
-                    #    'task.Task.entity.Entity.id',
                     #    'task.Task.entity.Entity.type',
                     #    'task.Task.step.Step.short_name',
                         'task.Task.step.Step.id',
@@ -1197,9 +1182,9 @@ class flameShotgunConnector(object):
                 #    'project.Project.tank_name',
                 #    'project.Project.sg_status',
                     'sg_source_location',
+                    'task.Task.id',
                     'task.Task.entity',
                 #    'task.Task.content',
-                #    'task.Task.entity.Entity.id',
                 #    'task.Task.entity.Entity.type',
                 #    'task.Task.step.Step.short_name',
                     'task.Task.step.Step.id',
@@ -1266,12 +1251,12 @@ class flameShotgunConnector(object):
                 try:
                     result = sg.find(entity, hour_filters, fields)
                     if result:
-                        result_by_id =  {e.get('id'):e for e in result}
+                        result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
                     self.log('error hard updating cache %s' % e)
 
-                # for entity_id in result_by_id:
-                #    self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
+                for entity_id in result_by_id:
+                    self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
     
                 results_by_hash[hash(pformat(query))] = result_by_id
 
@@ -1322,6 +1307,59 @@ class flameShotgunConnector(object):
                 
                 # delta = time.time() - start
                 # self.log('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+
+    def preformat_common_queries(self):
+
+        # sort versions, tasks and published files by entity (type, id)
+        
+        current_tasks_by_entity = {}
+        current_tasks = self.connector.cache_retrive_result('current_tasks')
+        if current_tasks:
+            for current_task in current_tasks:
+                entity = current_task.get('entity')
+                if entity:
+                    entity_key = (entity.get('type'), entity.get('id'))
+                else:
+                    entity_key = (None, None)
+                
+                if entity_key not in current_tasks_by_entity.keys():
+                    current_tasks_by_entity[entity_key] = [current_task]
+                else:
+                    current_tasks_by_entity[entity_key].append(current_task)
+        if self.async_cache.get('current_tasks'):
+            self.async_cache['current_tasks']['by_entity'] = current_tasks_by_entity
+
+        current_versions_by_entity = {}
+        current_versions = self.connector.cache_retrive_result('current_versions')
+        if current_versions:
+            for current_version in current_versions:
+                entity = current_version.get('entity')
+                if entity:
+                    entity_key = (entity.get('type'), entity.get('id'))
+                else:
+                    entity_key = (None, None)
+                if entity_key not in current_versions_by_entity.keys():
+                    current_versions_by_entity[entity_key] = [current_version]
+                else:
+                    current_versions_by_entity[entity_key].append(current_version)
+        if self.async_cache.get('current_versions'):
+            self.async_cache['current_versions']['by_entity'] = current_versions_by_entity
+
+        current_pbfiles_by_entity = {}
+        current_pbfiles  = self.connector.cache_retrive_result('current_pbfiles')
+        if current_pbfiles:
+            for current_pbfile in current_pbfiles:
+                entity = current_pbfile.get('task.Task.entity')
+                if entity:
+                    entity_key = (entity.get('type'), entity.get('id'))
+                else:
+                    entity_key = (None, None)
+                if entity_key not in current_pbfiles_by_entity.keys():
+                    current_pbfiles_by_entity[entity_key] = [current_pbfile]
+                else:
+                    current_pbfiles_by_entity[entity_key].append(current_pbfile)
+        if self.async_cache.get('current_pbfiles'):
+            self.async_cache['current_pbfiles']['by_entity'] = current_pbfiles_by_entity
 
     # end of async cache methods
 
@@ -1924,8 +1962,8 @@ class flameMenuProjectconnect(flameMenuApp):
                     })
 
         if self.connector.sg_linked_project and (not self.connector.sg_linked_project_id):
-            self.log('project %s can not be found' % self.connector.sg_linked_project)
-            self.log('unlinking %s' % self.connector.sg_linked_project)
+            self.log("project '%s' can not be found" % self.connector.sg_linked_project)
+            self.log("unlinking project: '%s'" % self.connector.sg_linked_project)
             self.unlink_project()
         
     def __getattr__(self, name):
@@ -5124,7 +5162,6 @@ class flameMenuPublisher(flameMenuApp):
         return menu
 
     def build_publish_menu(self, entity):
-
         if not entity.get('code'):
             entity['code'] = entity.get('name', 'no_name')
         
@@ -5138,12 +5175,24 @@ class flameMenuPublisher(flameMenuApp):
         version_template = self.prefs.get('templates', {}).get(entity_type, {}).get('version_name', {}).get('value', '')
         # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
 
+        cached_tasks_query = self.connector.async_cache.get('current_tasks')
+        cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
+        tasks = cached_tasks_by_entity.get((entity_type, entity_id), []) if cached_tasks_by_entity else []
+
+        cached_versions_query = self.connector.async_cache.get('current_versions')
+        cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
+        versions = cached_versions_by_entity.get((entity_type, entity_id), []) if cached_versions_by_entity else []
+
+        cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
+        cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
+        pbfiles = cached_pbfiles_by_entity.get((entity_type, entity_id), []) if cached_pbfiles_by_entity else []
+
+        '''
         tasks = []
         cached_tasks = self.connector.cache_retrive_result('current_tasks')
         
         if not isinstance(cached_tasks, list):
             return {}
-
 
         for cached_task in cached_tasks:
             if not cached_task.get('entity'):
@@ -5165,6 +5214,19 @@ class flameMenuPublisher(flameMenuApp):
             if entity.get('id', 0) == version_entity.get('id'):
                 versions.append(cached_version)
         
+        pbfiles = []
+        cached_pbfiles = self.connector.cache_retrive_result('current_pbfiles')
+        if not isinstance(cached_pbfiles, list):
+            return {}
+
+        for cached_pbfile in cached_pbfiles:
+            pbfile_entity = cached_pbfile.get('task.Task.entity')
+            if not pbfile_entity:
+                continue
+            if entity.get('id', 0) == pbfile_entity.get('id'):
+                pbfiles.append(cached_pbfile)
+        '''
+
 
         if not self.connector.sg_human_user:
             human_user = {'id': 0}
@@ -5257,35 +5319,84 @@ class flameMenuPublisher(flameMenuApp):
 
                 task_id = task.get('id')
 
+                
+                task_versions = []
+                task_pbfiles = []
+
+                for v in versions:
+                    if task_id == v.get('sg_task.Task.id'):
+                        task_versions.append(v)
+                for p in pbfiles:
+                    if task_id == p.get('task.Task.id'):
+                        task_pbfiles.append(p)
+
                 version_names = []
                 version_name_lenghts = set()
-                for version in versions:
-                    if task_id == version.get('sg_task.Task.id'):
-                        
-                        '''
-                        # try to get the name of he clip used to create version
-
-                        resolved_template = version_template
-                        if task_Sequence_name: resolved_template = resolved_template.replace('{Sequence}', task_Sequence_name) 
-                        if task_Shot: resolved_template = resolved_template.replace('{Shot}', task_Shot) 
-                        if task_Asset: resolved_template = resolved_template.replace('{Asset}', task_Asset) 
-                        if task_sg_Asset_type: resolved_template = resolved_template.replace('{sg_asset_type}', task_sg_Asset_type) 
-                        if task_Step: resolved_template = resolved_template.replace('{Step}', task_Step) 
-                        if task_Step_code: resolved_template = resolved_template.replace('{Step_code}', task_Step_code)
-                        resolved_template = resolved_template.replace('{version}', '(\d{3})')
-                        resolved_template = resolved_template.replace('{name}', '(.*)')
-                        pattern = re.compile(resolved_template)
-                        match = re.search(pattern, version.get('code'))
-                        pprint (match.group(2))
-                        '''
-                        
-                        version_names.append('* ' + version.get('code'))
-                        version_name_lenghts.add(len('* ' + version.get('code')))
                 
-                version_names = sorted(version_names)
-                if len(version_names) > 5:
-                    version_names = version_names[:2] + version_names[-3:]
-                    version_names[2] = ' '*8 + ' '*(max(list(version_name_lenghts))//2 - 4) + '. . . . .'
+                if len(task_versions) < 2:
+                    for version in task_versions:
+                        version_names.append('* ' + version.get('code'))
+                else:
+                    
+                    # group Published Files by Published File Type id and name pair
+                    # find the latest Published File for that pair
+                    # get the set of ids for versions linked to Published Files
+
+                    pbfiles_version_ids = set()
+                    pbfile_type_id_name_group = {}
+                    pbfile_type_id_name_datetime = {}
+                    pbfile_type_id_name_count = {}
+
+                    for pbfile in task_pbfiles:
+                        
+                        pbfile_version_id = pbfile.get('version.Version.id')
+                        if pbfile_version_id: pbfiles_version_ids.add(pbfile_version_id)
+                        
+                        pbfile_id = 0
+                        pbfile_type = pbfile.get('published_file_type')
+                        if isinstance(pbfile_type, dict):
+                            pbfile_id = pbfile_type.get('id')
+                        pbfile_name = pbfile.get('name')
+                        pbfile_created_at = pbfile.get('created_at')
+                        pbfile_type_id_name_key = (pbfile_id, pbfile_name)
+                        if pbfile_type_id_name_key not in pbfile_type_id_name_group.keys():
+                            pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                            pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                            pbfile_type_id_name_count[pbfile_type_id_name_key] = 1
+                        else:
+                            if pbfile_created_at > pbfile_type_id_name_datetime.get(pbfile_type_id_name_key):
+                                pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                                pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                                pbfile_type_id_name_count[pbfile_type_id_name_key] += 1
+
+                    version_names_set = set()
+                    
+                    # collect 'loose' versions vithout published files into separate list
+                    # and add them to version names
+                    loose_versions = []
+                    for version in task_versions:
+                        if version.get('id') not in pbfiles_version_ids:
+                            loose_versions.append(version)
+                    
+                    pprint (loose_versions)
+                                        
+                    if len(loose_versions) > 3:
+                        first = loose_versions[0].get('code')
+                        last = loose_versions[-1].get('code')
+                        version_names.append(' '*3 + first)
+                        version_names.append(' '*8 + ' '*(max(len(first), len(last))//2 - 4) + '. . . . .')
+                        version_names.append(' '*3 + last)
+                    else:
+                        for loose_version in loose_versions:
+                            version_names.append(' '*3 + loose_version.get('code'))
+
+                    for key in pbfile_type_id_name_group.keys():
+                        pbfile = pbfile_type_id_name_group.get(key)
+                        version_names_set.add(pbfile.get('version.Version.code'))
+
+                    for name in sorted(version_names_set):
+                        version_names.append('* ' + name)
+
                 for version_name in version_names:
                     menu_item = {}
                     menu_item['name'] = ' '*8 + version_name
@@ -5310,8 +5421,8 @@ class flameMenuPublisher(flameMenuApp):
         # Main publishing function
 
         # temporary move built-in integration out of the way
-
-        self.connector.destroy_toolkit_engine()
+        # we may not need by passing the empty set of hooks
+        # self.connector.destroy_toolkit_engine()
         
         # First,let's check if the project folder is there
         # and if not - try to create one
@@ -5371,10 +5482,6 @@ class flameMenuPublisher(flameMenuApp):
             if is_cancelled:
                 break
 
-        # update async cache
-
-        self.rescan()
-
         # report user of the status
         
         if is_cancelled and (len(versions_published) == 0):
@@ -5386,7 +5493,8 @@ class flameMenuPublisher(flameMenuApp):
         else:
             msg = 'Published %s version(s), %s version(s) failed' % (len(versions_published), len(versions_failed))
 
-        self.connector.bootstrap_toolkit()
+        # We may not need it by passing empty set of hooks
+        # self.connector.bootstrap_toolkit()
 
         mbox = self.mbox
         mbox.setText('flameMenuSG: ' + msg)
@@ -5692,6 +5800,24 @@ class flameMenuPublisher(flameMenuApp):
 
         self.log('export preset: %s' % preset_path)
 
+        class ExportHooks(object):
+            def preExport(self, info, userData, *args, **kwargs):
+                pass
+            def postExport(self, info, userData, *args, **kwargs):
+                pass
+            def preExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def postExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def preExportAsset(self, info, userData, *args, **kwargs):
+                pass
+            def postExportAsset(self, info, userData, *args, **kwargs):
+                del args, kwargs
+                pass
+            def exportOverwriteFile(self, path, *args, **kwargs):
+                del path, args, kwargs
+                return "overwrite"
+
         exporter = self.flame.PyExporter()
         exporter.foreground = True
         export_clip_name, ext = os.path.splitext(os.path.basename(export_path))
@@ -5726,7 +5852,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('into folder: %s' % export_dir)
 
         try:
-            exporter.export(clip, preset_path, export_dir)
+            exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
             clip.name.set_value(original_clip_name)
         except:
             clip.name.set_value(original_clip_name)
@@ -5750,7 +5876,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('into folder: %s' % export_dir)
 
         try:
-            exporter.export(clip, preset_path, export_dir)
+            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
         except:
             pass
 
@@ -5777,7 +5903,7 @@ class flameMenuPublisher(flameMenuApp):
         self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
         try:
-            exporter.export(clip, preset_path, export_dir)
+            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
         except:
             pass
         
@@ -5844,21 +5970,23 @@ class flameMenuPublisher(flameMenuApp):
             self.progress.set_progress(version_name, 'Uploading preview...')
             try:
                 self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
-            except Exception as e:
-                self.progress.hide()
-                mbox = QtWidgets.QMessageBox()
-                mbox.setText('Error uploading version preview to Shotgun')
-                mbox.setDetailedText(pformat(e))
-                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-                btn_Continue.setText('Continue')
-                mbox.exec_()
-                if mbox.clickedButton() == btn_Continue:
-                    return (pb_info, False)
-                else:
-                    return (pb_info, True)
-
+            except:
+                try:
+                    self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+                except Exception as e:
+                    self.progress.hide()
+                    mbox = QtWidgets.QMessageBox()
+                    mbox.setText('Error uploading version preview to Shotgun')
+                    mbox.setDetailedText(pformat(e))
+                    mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                    btn_Continue.setText('Continue')
+                    mbox.exec_()
+                    if mbox.clickedButton() == btn_Continue:
+                        return (pb_info, False)
+                    else:
+                        return (pb_info, True)
 
         # Create 'flame_render' PublishedFile
 
@@ -5900,20 +6028,23 @@ class flameMenuPublisher(flameMenuApp):
         self.progress.set_progress(version_name, 'Uploading main publish files thumbnail...')
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
-        except Exception as e:
-            self.progress.hide()
-            mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error uploading thumbnail to Shotgun')
-            mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-            btn_Continue.setText('Continue')
-            mbox.exec_()
-            if mbox.clickedButton() == btn_Continue:
-                return (pb_info, False)
-            else:
-                return (pb_info, True)        
+        except:
+            try:
+                self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading thumbnail to Shotgun')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)        
 
         pb_info['status'] = True
 
@@ -6117,20 +6248,23 @@ class flameMenuPublisher(flameMenuApp):
 
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
-        except Exception as e:
-            self.progress.hide()
-            mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error uploading thumbnail to Shotgun')
-            mbox.setDetailedText(pformat(e))
-            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
-            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-            btn_Continue.setText('Continue')
-            mbox.exec_()
-            if mbox.clickedButton() == btn_Continue:
-                return (pb_info, False)
-            else:
-                return (pb_info, True)
+        except:
+            try:
+                self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading thumbnail to Shotgun')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
 
         # clean-up preview and thumbnail files
 
