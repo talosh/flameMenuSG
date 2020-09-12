@@ -1119,8 +1119,9 @@ class flameShotgunConnector(object):
                         'task.Task.entity',
                     #    'task.Task.content',
                     #    'task.Task.entity.Entity.type',
-                    #    'task.Task.step.Step.short_name',
                         'task.Task.step.Step.id',
+                        'task.Task.step.Step.code',
+                        'task.Task.step.Step.short_name',
                         'version.Version.id',
                         'version.Version.code',
                     #    'version.Version.name',
@@ -1190,8 +1191,9 @@ class flameShotgunConnector(object):
                     'task.Task.entity',
                 #    'task.Task.content',
                 #    'task.Task.entity.Entity.type',
-                #    'task.Task.step.Step.short_name',
                     'task.Task.step.Step.id',
+                    'task.Task.step.Step.code',
+                    'task.Task.step.Step.short_name',
                     'version.Version.id',
                     'version.Version.code',
                 #    'version.Version.name',
@@ -4694,21 +4696,22 @@ class flameMenuBatchLoader(flameMenuApp):
         return menu
 
     def build_batch_loader_menu(self, entity):
-        sg = self.connector.sg
-
+        if not entity.get('code'):
+            entity['code'] = entity.get('name', 'no_name')
+        
         entity_type = entity.get('type')
         entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        if entity_key not in self.prefs.keys():
+            self.prefs[entity_key] = {}
 
-        found_entity = sg.find_one(
-                    entity_type,
-                    [['id', 'is', entity_id]],
-                    ['code']
-        )
+        cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
+        cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
 
-        if not found_entity:
-            return {}
-
-        publishes = sg.find(
+        publishes = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
+        
+        '''
+        self.connector.sg.find(
             'PublishedFile',
             [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
             [
@@ -4722,9 +4725,10 @@ class flameMenuBatchLoader(flameMenuApp):
                 'task.Task.step.Step.short_name'
             ]
         )
+        '''
         
         menu = {}
-        menu['name'] = found_entity.get('code') + ':'
+        menu['name'] = entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
