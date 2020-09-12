@@ -4961,6 +4961,8 @@ class flameMenuPublisher(flameMenuApp):
                     self.flip_assigned_for_entity(entity)
                 elif entity.get('caller') == 'fold_step_entity':
                     self.fold_step_entity(entity)
+                elif entity.get('caller') == 'fold_task_entity':
+                    self.fold_task_entity(entity)
                 elif entity.get('caller') == 'publish':
                     self.publish(entity, args[0])
                     self.connector.bootstrap_toolkit()
@@ -5258,25 +5260,34 @@ class flameMenuPublisher(flameMenuApp):
             fold_step_entity['key'] = step_key
             self.dynamic_menu_data[str(id(fold_step_entity))] = fold_step_entity
 
-            if self.prefs[entity_key][step_key].get('isFolded'):
-                menu_item = {}
-                menu_item['name'] = '+ [ ' + step_name + ' ]'
-                menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
+            menu_item = {}
+            menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
+
+            if self.prefs[entity_key][step_key].get('isFolded') and len(tasks_by_step[step_name]) != 1:
+                menu_item['name'] = '+ [ ' + step_name + ' ] [>]'
+                menu['actions'].append(menu_item)
+                continue
+            elif self.prefs[entity_key][step_key].get('isFolded') and tasks_by_step[step_name][0].get('content') != step_name:
+                menu_item['name'] = '+ [ ' + step_name + ' ] [>]'
                 menu['actions'].append(menu_item)
                 continue
 
             if len(tasks_by_step[step_name]) != 1:
-                menu_item = {}
                 menu_item['name'] = '- [ ' + step_name + ' ]'
-                menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
                 menu['actions'].append(menu_item)
             elif tasks_by_step[step_name][0].get('content') != step_name:
-                menu_item = {}
                 menu_item['name'] = '- [ ' + step_name + ' ]'
-                menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
                 menu['actions'].append(menu_item)
 
             for task in tasks_by_step[step_name]:
+                task_key = ('Task', task.get('id'))
+                if task_key not in self.prefs[entity_key].keys():
+                    self.prefs[entity_key][task_key] = {'isFolded': False}
+                
+                fold_task_entity = dict(entity)
+                fold_task_entity['caller'] = 'fold_task_entity'
+                fold_task_entity['key'] = task_key
+                self.dynamic_menu_data[str(id(fold_task_entity))] = fold_task_entity
 
                 # fill in template fields from task
                 task_Sequence = task.get('entity.Shot.sg_sequence', {})
@@ -5291,15 +5302,21 @@ class flameMenuPublisher(flameMenuApp):
                 task_name = task.get('content')
                 menu_item = {}
                 if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
-                    menu_item['name'] = '- [ ' + task_name + ' ]'
+                    if self.prefs[entity_key][task_key].get('isFolded'):
+                        menu_item['name'] = '+ [ ' + task_name + ' ] [>]'
+                    else:
+                        menu_item['name'] = '- [ ' + task_name + ' ]'
                 else:
-                    menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
-                menu_item['execute'] = self.rescan
+                    if self.prefs[entity_key][task_key].get('isFolded'):
+                        menu_item['name'] = ' '*4 + '+ [ ' + task_name + ' ] [>]'
+                    else:
+                        menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
+                menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
                 menu['actions'].append(menu_item)
+                if self.prefs[entity_key][task_key].get('isFolded'): continue
 
                 task_id = task.get('id')
 
-                
                 task_versions = []
                 task_pbfiles = []
 
@@ -6536,6 +6553,13 @@ class flameMenuPublisher(flameMenuApp):
         entity_key = (entity_type, entity_id)
         step_key = entity.get('key')
         self.prefs[entity_key][step_key]['isFolded'] = not self.prefs[entity_key][step_key]['isFolded']
+
+    def fold_task_entity(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        task_key = entity.get('key')
+        self.prefs[entity_key][task_key]['isFolded'] = not self.prefs[entity_key][task_key]['isFolded']
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
