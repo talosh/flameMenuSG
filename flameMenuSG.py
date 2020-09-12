@@ -5167,25 +5167,25 @@ class flameMenuPublisher(flameMenuApp):
         
         entity_type = entity.get('type')
         entity_id = entity.get('id')
-        if entity_id not in self.prefs.keys():
-            self.prefs[entity_id] = {}
-            self.prefs[entity_id]['show_all'] = True
-        prefs = self.prefs.get(entity_id)
+        entity_key = (entity_type, entity_id)
+        if entity_key not in self.prefs.keys():
+            self.prefs[entity_key] = {}
+            self.prefs[entity_key]['show_all'] = True
 
         version_template = self.prefs.get('templates', {}).get(entity_type, {}).get('version_name', {}).get('value', '')
         # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
 
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
-        tasks = cached_tasks_by_entity.get((entity_type, entity_id), []) if cached_tasks_by_entity else []
+        tasks = cached_tasks_by_entity.get(entity_key, []) if cached_tasks_by_entity else []
 
         cached_versions_query = self.connector.async_cache.get('current_versions')
         cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
-        versions = cached_versions_by_entity.get((entity_type, entity_id), []) if cached_versions_by_entity else []
+        versions = cached_versions_by_entity.get(entity_key, []) if cached_versions_by_entity else []
 
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
-        pbfiles = cached_pbfiles_by_entity.get((entity_type, entity_id), []) if cached_pbfiles_by_entity else []
+        pbfiles = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
 
         '''
         tasks = []
@@ -5243,11 +5243,10 @@ class flameMenuPublisher(flameMenuApp):
         menu['actions'].append(menu_item)
 
         menu_item = {}        
-        show_all_entity = {}
+        show_all_entity = dict(entity)
         show_all_entity['caller'] = 'flip_assigned_for_entity'
-        show_all_entity['id'] = entity_id
 
-        if self.prefs[entity_id]['show_all']:            
+        if self.prefs[entity_key]['show_all']:            
             menu_item['name'] = '~ Show Assigned Only'
         else:
             menu_item['name'] = '~ Show All Tasks'
@@ -5263,7 +5262,7 @@ class flameMenuPublisher(flameMenuApp):
             if task_assignees:
                 for user in task_assignees:
                     user_ids.append(user.get('id'))
-            if not prefs['show_all']:
+            if not self.prefs[entity_key]['show_all']:
                 if human_user.get('id') not in user_ids:
                     continue
 
@@ -5276,7 +5275,7 @@ class flameMenuPublisher(flameMenuApp):
         
         if len(tasks_by_step.values()) == 0:
             menu_item = {}
-            if self.prefs[entity_id]['show_all']:
+            if self.prefs[entity_key]['show_all']:
                 menu_item['name'] = ' '*4 + 'No tasks found'
             else:
                 menu_item['name'] = ' '*4 + 'No assigned tasks found'
@@ -6545,10 +6544,12 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['show_all'] = not self.prefs['show_all']
         self.rescan()
 
-    def flip_assigned_for_entity(self,entity):
+    def flip_assigned_for_entity(self, entity):
+        entity_type = entity.get('type')
         entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
         if entity_id:
-            self.prefs[entity_id]['show_all'] = not self.prefs[entity_id]['show_all']
+            self.prefs[entity_key]['show_all'] = not self.prefs[entity_key]['show_all']
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
