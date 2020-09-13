@@ -2577,7 +2577,7 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_AutoRefresh.move(0, 170)
         lbl_AutoRefresh.setAlignment(QtCore.Qt.AlignCenter)
 
-        lbl_AutoRefreshMsg = QtWidgets.QLabel('Use to debug poor right-click menu performance', paneGeneral)
+        lbl_AutoRefreshMsg = QtWidgets.QLabel('Use to debug right-click menu performance', paneGeneral)
         lbl_AutoRefreshMsg.setStyleSheet('QFrame {color: #989898;}')
         lbl_AutoRefreshMsg.setMinimumSize(36, 28)
         lbl_AutoRefreshMsg.move(0, 204)
