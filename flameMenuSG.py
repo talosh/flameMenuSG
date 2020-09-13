@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = True
+DEBUG = False
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.16b1'
+__version__ = 'v0.0.17-rc1'
 
 
 class flameAppFramework(object):
@@ -183,7 +183,7 @@ class flameAppFramework(object):
         if not self.prefs_global.get('menu_auto_refresh'):
             self.prefs_global['menu_auto_refresh'] = {
                 'media_panel': True,
-                'batch': False,
+                'batch': True,
                 'main_menu': True
             }
 
@@ -1037,173 +1037,76 @@ class flameShotgunConnector(object):
         return True
     
     def register_common_queries(self):
-        if self.connector.sg_linked_project_id and self.current_tasks_uid:
-            
-            # check if project id in cache query matches current one
-            
-            current_tasks_cache_entry = self.connector.async_cache.get(self.current_tasks_uid)
-            if current_tasks_cache_entry:
-                query = current_tasks_cache_entry.get('query')
-                if query:
-                    filters = query.get('filters')
-                    if filters:
-                        try:
-                            project_id = filters[0][2]
-                        except:
-                            project_id = 0
-                    else:
-                        project_id = 0
-                else:
-                    project_id = 0
-            else:
-                project_id = 0
+        self.unregister_common_queries()
 
-            if project_id != self.connector.sg_linked_project_id:
-                
-                # unregister old id and register new one
-                
-                self.unregister_common_queries()
+        if not self.connector.sg_linked_project_id:
+            return False
+                        
+        self.current_project_uid = self.connector.cache_register({
+            'entity': 'Project',
+            'filters': [['id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+            ]
+        }, uid = 'current_project')
 
-                self.current_project_uid = self.connector.cache_register({
-                    'entity': 'Project',
-                    'filters': [['id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                    ]
-                }, uid = 'current_project')
+        self.current_tasks_uid = self.connector.cache_register({
+            'entity': 'Task',
+            'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+                'content',
+                'step.Step.code',
+                'step.Step.short_name',
+                'step.Step.id',
+                'sg_sort_order',
+                'task_assignees',
+                'project.Project.id',
+                'entity',
+                'entity.Asset.sg_asset_type',
+                'entity.Shot.sg_sequence'
+            ]
+        }, uid = 'current_tasks')
 
-                self.current_tasks_uid = self.connector.cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-                }, uid = 'current_tasks')
+        self.current_versions_uid = self.connector.cache_register({
+            'entity': 'Version',
+            'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+                'code',
+                'sg_task.Task.id',
+                'entity'
+            ]
+        }, uid = 'current_versions')
 
-                self.current_versions_uid = self.connector.cache_register({
-                    'entity': 'Version',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'code',
-                        'sg_task.Task.id',
-                        'entity'
-                    ]
-                }, uid = 'current_versions')
-
-                self.current_pbfiles_uid = self.connector.cache_register({
-                    'entity': 'PublishedFile',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'name',
-                        'created_at',
-                        'sg_colourspace',
-                    #    'sg_image_file_type',
-                        'published_file_type',
-                        'path_cache',
-                        'path_cache_storage',
-                    #    'path',
-                    #    'project.Project.id',
-                    #    'project.Project.name',
-                    #    'project.Project.tank_name',
-                    #    'project.Project.sg_status',
-                        'sg_source_location',
-                        'task.Task.id',
-                        'task.Task.entity',
-                    #    'task.Task.content',
-                    #    'task.Task.entity.Entity.type',
-                    #    'task.Task.step.Step.short_name',
-                        'task.Task.step.Step.id',
-                        'version.Version.id',
-                        'version.Version.code',
-                    #    'version.Version.name',
-                        'version_number',
-                        'version.Version.sg_status_list'
-                    ]
-                }, uid = 'current_pbfiles')
-
-                return True
-            else:
-                return False
-            
-        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
-            # register new query from scratch
-
-            self.current_project_uid = self.connector.cache_register({
-                'entity': 'Project',
-                'filters': [['id', 'is', self.connector.sg_linked_project_id]],
-                'fields': [
-                ]
-            }, uid = 'current_project')
-
-            self.current_tasks_uid = self.connector.cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-            }, uid = 'current_tasks')
-            self.current_versions_uid = self.connector.cache_register({
-                    'entity': 'Version',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'code',
-                        'sg_task.Task.id',
-                        'entity',
-                    ]
-            }, uid = 'current_versions')
-
-            self.current_pbfiles = self.connector.cache_register({
-                'entity': 'PublishedFile',
-                'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                'fields': [
-                    'name',
-                    'created_at',
-                    'sg_colourspace',
-                #    'sg_image_file_type',
-                    'published_file_type',
-                    'path_cache',
-                    'path_cache_storage',
-                #    'path',
-                #    'project.Project.id',
-                #    'project.Project.name',
-                #    'project.Project.tank_name',
-                #    'project.Project.sg_status',
-                    'sg_source_location',
-                    'task.Task.id',
-                    'task.Task.entity',
-                #    'task.Task.content',
-                #    'task.Task.entity.Entity.type',
-                #    'task.Task.step.Step.short_name',
-                    'task.Task.step.Step.id',
-                    'version.Version.id',
-                    'version.Version.code',
-                #    'version.Version.name',
-                    'version_number',
-                    'version.Version.sg_status_list'
-                ]
-            }, uid = 'current_pbfiles')
-
-            return True
-        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
-            # unregister current uid
-            self.unregister_common_queries()
-
-            return True
-        else:
-            return False        
+        self.current_pbfiles_uid = self.connector.cache_register({
+            'entity': 'PublishedFile',
+            'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+                'name',
+                'created_at',
+            #    'sg_colourspace',
+            #    'sg_image_file_type',
+                'published_file_type',
+                'path_cache',
+                'path_cache_storage',
+            #    'path',
+            #    'project.Project.id',
+            #    'project.Project.name',
+            #    'project.Project.tank_name',
+            #    'project.Project.sg_status',
+            #    'sg_source_location',
+                'task.Task.id',
+                'task.Task.entity',
+            #    'task.Task.content',
+            #    'task.Task.entity.Entity.type',
+            #    'task.Task.step.Step.id',
+            #    'task.Task.step.Step.code',
+            #    'task.Task.step.Step.short_name',
+                'version.Version.id',
+                'version.Version.code',
+            #    'version.Version.name',
+                'version_number',
+                'version.Version.sg_status_list'
+            ]
+        }, uid = 'current_pbfiles')
 
     def unregister_common_queries(self):
         # un-registers async cache requests
@@ -2674,7 +2577,7 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_AutoRefresh.move(0, 170)
         lbl_AutoRefresh.setAlignment(QtCore.Qt.AlignCenter)
 
-        lbl_AutoRefreshMsg = QtWidgets.QLabel('This may degrade right-click menu performance', paneGeneral)
+        lbl_AutoRefreshMsg = QtWidgets.QLabel('Use to debug right-click menu performance', paneGeneral)
         lbl_AutoRefreshMsg.setStyleSheet('QFrame {color: #989898;}')
         lbl_AutoRefreshMsg.setMinimumSize(36, 28)
         lbl_AutoRefreshMsg.move(0, 204)
@@ -4527,24 +4430,31 @@ class flameMenuBatchLoader(flameMenuApp):
         if not self.connector.sg_linked_project_id:
             return None
         
-        sg = self.connector.sg
-
         batch_name = self.flame.batch.name.get_value()
+        tasks = []
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
+
+        if not isinstance(cached_tasks, list):
+            return []
+
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            tasks.append(cached_task)
+        entities_id_list = [task.get('entity').get('id') for task in tasks]
+
+        add_menu_list = []
+
         if (('additional menu ' + batch_name) in self.prefs.keys()) and self.prefs.get('additional menu ' + batch_name):
             add_menu_list = self.prefs.get('additional menu ' + batch_name)
+
             for index, stored_entity in enumerate(add_menu_list):
                 stored_entity_type = stored_entity.get('type', 'Shot')
                 stored_entity_id = stored_entity.get('id', 0)
-                found_entity = sg.find_one(stored_entity_type, [['id', 'is', stored_entity_id]])
-                if not found_entity:
+                if not stored_entity_id in entities_id_list:
                     add_menu_list.pop(index)
 
             if not add_menu_list:
-                project_id = self.connector.sg_linked_project_id
-                tasks = sg.find('Task',
-                    [['project.Project.id', 'is', project_id]],
-                    ['entity']
-                )
                 entity = {}
                 for task in tasks:
                     current_entity = task.get('entity')
@@ -4559,11 +4469,7 @@ class flameMenuBatchLoader(flameMenuApp):
         else:
             self.prefs['additional menu ' + batch_name] = []
             project_id = self.connector.sg_linked_project_id
-            task_filters = [['project.Project.id', 'is', project_id]]
-            tasks = sg.find('Task',
-                task_filters,
-                ['entity']
-            )
+
             entity = {}
             for task in tasks:
                 current_entity = task.get('entity')
@@ -4687,21 +4593,24 @@ class flameMenuBatchLoader(flameMenuApp):
         return menu
 
     def build_batch_loader_menu(self, entity):
-        sg = self.connector.sg
-
+        if not entity.get('code'):
+            entity['code'] = entity.get('name', 'no_name')
+        
         entity_type = entity.get('type')
         entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        if entity_key not in self.prefs.keys():
+            self.prefs[entity_key] = {}
 
-        found_entity = sg.find_one(
-                    entity_type,
-                    [['id', 'is', entity_id]],
-                    ['code']
-        )
+        cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
+        cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
+        publishes = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
 
-        if not found_entity:
-            return {}
-
-        publishes = sg.find(
+        cached_tasks_query = self.connector.async_cache.get('current_tasks')
+        current_tasks_by_id = cached_tasks_query.get('result') if cached_tasks_query else {}
+        
+        '''
+        self.connector.sg.find(
             'PublishedFile',
             [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
             [
@@ -4715,9 +4624,10 @@ class flameMenuBatchLoader(flameMenuApp):
                 'task.Task.step.Step.short_name'
             ]
         )
+        '''
         
         menu = {}
-        menu['name'] = found_entity.get('code') + ':'
+        menu['name'] = entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
@@ -4728,9 +4638,9 @@ class flameMenuBatchLoader(flameMenuApp):
         step_names = set()
         for publish in publishes:
             # step_name = publish.get('task.Task.step.Step.short_name')
-            step_name = publish.get('task.Task.step.Step.code')
-            if not step_name:
-                step_name = ''
+            task_id = publish.get('task.Task.id', 0)
+            task = current_tasks_by_id.get(task_id, {})
+            step_name = task.get('step.Step.code', '')
             step_names.add(step_name)
 
         for step_name in step_names:
@@ -4741,9 +4651,10 @@ class flameMenuBatchLoader(flameMenuApp):
             
             published_file_type_name = ''
             for publish in publishes:
-                step = publish.get('task.Task.step.Step.code')
-                if not step:
-                    step = ''
+                # step = publish.get('task.Task.step.Step.code')
+                task_id = publish.get('task.Task.id', 0)
+                task = current_tasks_by_id.get(task_id, {})
+                step = task.get('step.Step.code', '')
                 if step == step_name:
                     published_file_type = publish.get('published_file_type')
                     if published_file_type:
@@ -4804,6 +4715,49 @@ class flameMenuBatchLoader(flameMenuApp):
         self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
     def get_entities(self, user_only = True, filter_out=[]):
+
+        # get current tasks form async cache
+
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
+
+        if not isinstance(cached_tasks, list):
+            return {}
+
+        # remove tasks without entities and filter if user_only
+
+        user_id = 0
+        if self.connector.sg_human_user:
+            user_id = self.connector.sg_human_user.get('id', 0)
+        tasks = []
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            if user_only:
+                if not cached_task.get('task_assignees'):
+                    continue
+                else:
+                    task_assignees_ids = [assignee.get('id') for assignee in cached_task.get('task_assignees', [])]
+                    if user_id not in task_assignees_ids:
+                        continue
+
+            tasks.append(cached_task)            
+
+        # group entities by id
+
+        entities_by_id = {task.get('entity').get('id'):task.get('entity') for task in tasks}
+        
+        shots = []
+        assets = []
+        for entity_id in sorted(entities_by_id.keys()):
+            entity = entities_by_id.get(entity_id)
+            if entity.get('type') == 'Shot':
+                shots.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Shot'})
+            elif entity.get('type') == 'Asset':
+                assets.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Asset'})
+        
+        return {'Asset': assets, 'Shot': shots}
+
+        '''
         sg = self.connector.sg
         project_id = self.connector.sg_linked_project_id
         task_filters = [['project.Project.id', 'is', project_id]]
@@ -4842,6 +4796,7 @@ class flameMenuBatchLoader(flameMenuApp):
             found_entities[entity_type] = list(found_by_type)
 
         return found_entities
+        '''
 
     def build_flame_friendly_path(self, path):
         import re
@@ -4955,6 +4910,10 @@ class flameMenuPublisher(flameMenuApp):
                 elif entity.get('caller') == 'flip_assigned_for_entity':
                     self.show_bug_message()
                     self.flip_assigned_for_entity(entity)
+                elif entity.get('caller') == 'fold_step_entity':
+                    self.fold_step_entity(entity)
+                elif entity.get('caller') == 'fold_task_entity':
+                    self.fold_task_entity(entity)
                 elif entity.get('caller') == 'publish':
                     self.publish(entity, args[0])
                     self.connector.bootstrap_toolkit()
@@ -5167,66 +5126,22 @@ class flameMenuPublisher(flameMenuApp):
         
         entity_type = entity.get('type')
         entity_id = entity.get('id')
-        if entity_id not in self.prefs.keys():
-            self.prefs[entity_id] = {}
-            self.prefs[entity_id]['show_all'] = True
-        prefs = self.prefs.get(entity_id)
-
-        version_template = self.prefs.get('templates', {}).get(entity_type, {}).get('version_name', {}).get('value', '')
-        # fields: '{Sequence}', '{Shot}', '{Step}', '{Step_code}', '{name}', '{version}', '{version_four}'
+        entity_key = (entity_type, entity_id)
+        if entity_key not in self.prefs.keys():
+            self.prefs[entity_key] = {}
+            self.prefs[entity_key]['show_all'] = True
 
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
-        tasks = cached_tasks_by_entity.get((entity_type, entity_id), []) if cached_tasks_by_entity else []
+        tasks = cached_tasks_by_entity.get(entity_key, []) if cached_tasks_by_entity else []
 
         cached_versions_query = self.connector.async_cache.get('current_versions')
         cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
-        versions = cached_versions_by_entity.get((entity_type, entity_id), []) if cached_versions_by_entity else []
+        versions = cached_versions_by_entity.get(entity_key, []) if cached_versions_by_entity else []
 
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
-        pbfiles = cached_pbfiles_by_entity.get((entity_type, entity_id), []) if cached_pbfiles_by_entity else []
-
-        '''
-        tasks = []
-        cached_tasks = self.connector.cache_retrive_result('current_tasks')
-        
-        if not isinstance(cached_tasks, list):
-            return {}
-
-        for cached_task in cached_tasks:
-            if not cached_task.get('entity'):
-                continue
-            if cached_task.get('entity').get('id') != entity_id:
-                continue
-            tasks.append(cached_task)
-        
-        versions = []
-        cached_versions = self.connector.cache_retrive_result('current_versions')
-
-        if not isinstance(cached_versions, list):
-            return {}
-
-        for cached_version in cached_versions:
-            version_entity = cached_version.get('entity')
-            if not version_entity:
-                continue
-            if entity.get('id', 0) == version_entity.get('id'):
-                versions.append(cached_version)
-        
-        pbfiles = []
-        cached_pbfiles = self.connector.cache_retrive_result('current_pbfiles')
-        if not isinstance(cached_pbfiles, list):
-            return {}
-
-        for cached_pbfile in cached_pbfiles:
-            pbfile_entity = cached_pbfile.get('task.Task.entity')
-            if not pbfile_entity:
-                continue
-            if entity.get('id', 0) == pbfile_entity.get('id'):
-                pbfiles.append(cached_pbfile)
-        '''
-
+        pbfiles = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
 
         if not self.connector.sg_human_user:
             human_user = {'id': 0}
@@ -5243,11 +5158,10 @@ class flameMenuPublisher(flameMenuApp):
         menu['actions'].append(menu_item)
 
         menu_item = {}        
-        show_all_entity = {}
+        show_all_entity = dict(entity)
         show_all_entity['caller'] = 'flip_assigned_for_entity'
-        show_all_entity['id'] = entity_id
 
-        if self.prefs[entity_id]['show_all']:            
+        if self.prefs[entity_key]['show_all']:            
             menu_item['name'] = '~ Show Assigned Only'
         else:
             menu_item['name'] = '~ Show All Tasks'
@@ -5263,20 +5177,22 @@ class flameMenuPublisher(flameMenuApp):
             if task_assignees:
                 for user in task_assignees:
                     user_ids.append(user.get('id'))
-            if not prefs['show_all']:
+            if not self.prefs[entity_key]['show_all']:
                 if human_user.get('id') not in user_ids:
                     continue
 
             step_name = task.get('step.Step.code')
             if not step_name:
                 step_name = ''
+            step_id = task.get('step.Step.id')
+
             if step_name not in tasks_by_step.keys():
                 tasks_by_step[step_name] = []
             tasks_by_step[step_name].append(task)
         
         if len(tasks_by_step.values()) == 0:
             menu_item = {}
-            if self.prefs[entity_id]['show_all']:
+            if self.prefs[entity_key]['show_all']:
                 menu_item['name'] = ' '*4 + 'No tasks found'
             else:
                 menu_item['name'] = ' '*4 + 'No assigned tasks found'
@@ -5285,18 +5201,44 @@ class flameMenuPublisher(flameMenuApp):
             menu['actions'].append(menu_item)            
 
         for step_name in tasks_by_step.keys():
+            step_key = ('Step', step_name)
+            
+            if step_key not in self.prefs[entity_key].keys():
+                self.prefs[entity_key][step_key] = {'isFolded': False}
+
+            fold_step_entity = dict(entity)
+            fold_step_entity['caller'] = 'fold_step_entity'
+            fold_step_entity['key'] = step_key
+            self.dynamic_menu_data[str(id(fold_step_entity))] = fold_step_entity
+
+            menu_item = {}
+            menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
+
+            if self.prefs[entity_key][step_key].get('isFolded') and len(tasks_by_step[step_name]) != 1:
+                menu_item['name'] = '+ [ ' + step_name + ' ] [>]'
+                menu['actions'].append(menu_item)
+                continue
+            elif self.prefs[entity_key][step_key].get('isFolded') and tasks_by_step[step_name][0].get('content') != step_name:
+                menu_item['name'] = '+ [ ' + step_name + ' ] [>]'
+                menu['actions'].append(menu_item)
+                continue
+
             if len(tasks_by_step[step_name]) != 1:
-                menu_item = {}
                 menu_item['name'] = '- [ ' + step_name + ' ]'
-                menu_item['execute'] = self.rescan
                 menu['actions'].append(menu_item)
             elif tasks_by_step[step_name][0].get('content') != step_name:
-                menu_item = {}
                 menu_item['name'] = '- [ ' + step_name + ' ]'
-                menu_item['execute'] = self.rescan
                 menu['actions'].append(menu_item)
 
             for task in tasks_by_step[step_name]:
+                task_key = ('Task', task.get('id'))
+                if task_key not in self.prefs[entity_key].keys():
+                    self.prefs[entity_key][task_key] = {'isFolded': False}
+                
+                fold_task_entity = dict(entity)
+                fold_task_entity['caller'] = 'fold_task_entity'
+                fold_task_entity['key'] = task_key
+                self.dynamic_menu_data[str(id(fold_task_entity))] = fold_task_entity
 
                 # fill in template fields from task
                 task_Sequence = task.get('entity.Shot.sg_sequence', {})
@@ -5311,15 +5253,21 @@ class flameMenuPublisher(flameMenuApp):
                 task_name = task.get('content')
                 menu_item = {}
                 if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
-                    menu_item['name'] = '- [ ' + task_name + ' ]'
+                    if self.prefs[entity_key][task_key].get('isFolded'):
+                        menu_item['name'] = '+ [ ' + task_name + ' ] [>]'
+                    else:
+                        menu_item['name'] = '- [ ' + task_name + ' ]'
                 else:
-                    menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
-                menu_item['execute'] = self.rescan
+                    if self.prefs[entity_key][task_key].get('isFolded'):
+                        menu_item['name'] = ' '*4 + '+ [ ' + task_name + ' ] [>]'
+                    else:
+                        menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
+                menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
                 menu['actions'].append(menu_item)
+                if self.prefs[entity_key][task_key].get('isFolded'): continue
 
                 task_id = task.get('id')
 
-                
                 task_versions = []
                 task_pbfiles = []
 
@@ -5377,9 +5325,7 @@ class flameMenuPublisher(flameMenuApp):
                     for version in task_versions:
                         if version.get('id') not in pbfiles_version_ids:
                             loose_versions.append(version)
-                    
-                    pprint (loose_versions)
-                                        
+                                                            
                     if len(loose_versions) > 3:
                         first = loose_versions[0].get('code')
                         last = loose_versions[-1].get('code')
@@ -6545,10 +6491,26 @@ class flameMenuPublisher(flameMenuApp):
         self.prefs['show_all'] = not self.prefs['show_all']
         self.rescan()
 
-    def flip_assigned_for_entity(self,entity):
+    def flip_assigned_for_entity(self, entity):
+        entity_type = entity.get('type')
         entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
         if entity_id:
-            self.prefs[entity_id]['show_all'] = not self.prefs[entity_id]['show_all']
+            self.prefs[entity_key]['show_all'] = not self.prefs[entity_key]['show_all']
+
+    def fold_step_entity(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        step_key = entity.get('key')
+        self.prefs[entity_key][step_key]['isFolded'] = not self.prefs[entity_key][step_key]['isFolded']
+
+    def fold_task_entity(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        task_key = entity.get('key')
+        self.prefs[entity_key][task_key]['isFolded'] = not self.prefs[entity_key][task_key]['isFolded']
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
@@ -7075,7 +7037,7 @@ def get_main_menu_custom_ui_actions():
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-        if menu_auto_refresh.get('main_menu', False):
+        if menu_auto_refresh.get('main_menu', True):
             try:
                 import flame
                 flame.schedule_idle_event(rescan_hooks)
@@ -7128,7 +7090,7 @@ def get_media_panel_custom_ui_actions():
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-        if menu_auto_refresh.get('media_panel', False):
+        if menu_auto_refresh.get('media_panel', True):
             try:
                 import flame
                 flame.schedule_idle_event(rescan_hooks)
@@ -7155,7 +7117,7 @@ def get_batch_custom_ui_actions():
 
     if app_framework:
         menu_auto_refresh = app_framework.prefs_global.get('menu_auto_refresh', {})
-        if menu_auto_refresh.get('batch', False):
+        if menu_auto_refresh.get('batch', True):
             try:
                 import flame
                 flame.schedule_idle_event(rescan_hooks)
