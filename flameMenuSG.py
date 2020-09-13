@@ -4505,7 +4505,7 @@ class flameMenuBatchLoader(flameMenuApp):
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
-        menu['name'] = self.menu_group_name + ' Add/Remove'
+        menu['name'] = '-' + chr(1) + self.menu_group_name + ' Add/Remove'
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
@@ -4627,7 +4627,7 @@ class flameMenuBatchLoader(flameMenuApp):
         '''
         
         menu = {}
-        menu['name'] = entity.get('code') + ':'
+        menu['name'] = '-' + chr(32) + entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
