@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.17-rc1'
+__version__ = 'v0.0.17'
 
 
 class flameAppFramework(object):
