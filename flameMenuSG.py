@@ -1037,179 +1037,76 @@ class flameShotgunConnector(object):
         return True
     
     def register_common_queries(self):
-        if self.connector.sg_linked_project_id and self.current_tasks_uid:
-            
-            # check if project id in cache query matches current one
-            
-            current_tasks_cache_entry = self.connector.async_cache.get(self.current_tasks_uid)
-            if current_tasks_cache_entry:
-                query = current_tasks_cache_entry.get('query')
-                if query:
-                    filters = query.get('filters')
-                    if filters:
-                        try:
-                            project_id = filters[0][2]
-                        except:
-                            project_id = 0
-                    else:
-                        project_id = 0
-                else:
-                    project_id = 0
-            else:
-                project_id = 0
+        self.unregister_common_queries()
 
-            if project_id != self.connector.sg_linked_project_id:
-                
-                # unregister old id and register new one
-                
-                self.unregister_common_queries()
+        if not self.connector.sg_linked_project_id:
+            return False
+                        
+        self.current_project_uid = self.connector.cache_register({
+            'entity': 'Project',
+            'filters': [['id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+            ]
+        }, uid = 'current_project')
 
-                self.current_project_uid = self.connector.cache_register({
-                    'entity': 'Project',
-                    'filters': [['id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                    ]
-                }, uid = 'current_project')
+        self.current_tasks_uid = self.connector.cache_register({
+            'entity': 'Task',
+            'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+                'content',
+                'step.Step.code',
+                'step.Step.short_name',
+                'step.Step.id',
+                'sg_sort_order',
+                'task_assignees',
+                'project.Project.id',
+                'entity',
+                'entity.Asset.sg_asset_type',
+                'entity.Shot.sg_sequence'
+            ]
+        }, uid = 'current_tasks')
 
-                self.current_tasks_uid = self.connector.cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'step.Step.id',
-                        'sg_sort_order',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-                }, uid = 'current_tasks')
+        self.current_versions_uid = self.connector.cache_register({
+            'entity': 'Version',
+            'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+                'code',
+                'sg_task.Task.id',
+                'entity'
+            ]
+        }, uid = 'current_versions')
 
-                self.current_versions_uid = self.connector.cache_register({
-                    'entity': 'Version',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'code',
-                        'sg_task.Task.id',
-                        'entity'
-                    ]
-                }, uid = 'current_versions')
-
-                self.current_pbfiles_uid = self.connector.cache_register({
-                    'entity': 'PublishedFile',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'name',
-                        'created_at',
-                        'sg_colourspace',
-                    #    'sg_image_file_type',
-                        'published_file_type',
-                        'path_cache',
-                        'path_cache_storage',
-                    #    'path',
-                    #    'project.Project.id',
-                    #    'project.Project.name',
-                    #    'project.Project.tank_name',
-                    #    'project.Project.sg_status',
-                        'sg_source_location',
-                        'task.Task.id',
-                        'task.Task.entity',
-                    #    'task.Task.content',
-                    #    'task.Task.entity.Entity.type',
-                        'task.Task.step.Step.id',
-                        'task.Task.step.Step.code',
-                        'task.Task.step.Step.short_name',
-                        'version.Version.id',
-                        'version.Version.code',
-                    #    'version.Version.name',
-                        'version_number',
-                        'version.Version.sg_status_list'
-                    ]
-                }, uid = 'current_pbfiles')
-
-                return True
-            else:
-                return False
-            
-        elif self.connector.sg_linked_project_id and not self.current_tasks_uid:
-            # register new query from scratch
-
-            self.current_project_uid = self.connector.cache_register({
-                'entity': 'Project',
-                'filters': [['id', 'is', self.connector.sg_linked_project_id]],
-                'fields': [
-                ]
-            }, uid = 'current_project')
-
-            self.current_tasks_uid = self.connector.cache_register({
-                    'entity': 'Task',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'content',
-                        'step.Step.code',
-                        'step.Step.short_name',
-                        'step.Step.id',
-                        'sg_sort_order',
-                        'task_assignees',
-                        'project.Project.id',
-                        'entity',
-                        'entity.Asset.sg_asset_type',
-                        'entity.Shot.sg_sequence'
-                    ]
-            }, uid = 'current_tasks')
-            self.current_versions_uid = self.connector.cache_register({
-                    'entity': 'Version',
-                    'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                    'fields': [
-                        'code',
-                        'sg_task.Task.id',
-                        'entity',
-                    ]
-            }, uid = 'current_versions')
-
-            self.current_pbfiles = self.connector.cache_register({
-                'entity': 'PublishedFile',
-                'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
-                'fields': [
-                    'name',
-                    'created_at',
-                    'sg_colourspace',
-                #    'sg_image_file_type',
-                    'published_file_type',
-                    'path_cache',
-                    'path_cache_storage',
-                #    'path',
-                #    'project.Project.id',
-                #    'project.Project.name',
-                #    'project.Project.tank_name',
-                #    'project.Project.sg_status',
-                    'sg_source_location',
-                    'task.Task.id',
-                    'task.Task.entity',
-                #    'task.Task.content',
-                #    'task.Task.entity.Entity.type',
-                    'task.Task.step.Step.id',
-                    'task.Task.step.Step.code',
-                    'task.Task.step.Step.short_name',
-                    'version.Version.id',
-                    'version.Version.code',
-                #    'version.Version.name',
-                    'version_number',
-                    'version.Version.sg_status_list'
-                ]
-            }, uid = 'current_pbfiles')
-
-            return True
-        elif self.current_tasks_uid and not self.connector.sg_linked_project_id:
-            # unregister current uid
-            self.unregister_common_queries()
-
-            return True
-        else:
-            return False        
+        self.current_pbfiles_uid = self.connector.cache_register({
+            'entity': 'PublishedFile',
+            'filters': [['project.Project.id', 'is', self.connector.sg_linked_project_id]],
+            'fields': [
+                'name',
+                'created_at',
+            #    'sg_colourspace',
+            #    'sg_image_file_type',
+                'published_file_type',
+                'path_cache',
+                'path_cache_storage',
+            #    'path',
+            #    'project.Project.id',
+            #    'project.Project.name',
+            #    'project.Project.tank_name',
+            #    'project.Project.sg_status',
+            #    'sg_source_location',
+                'task.Task.id',
+                'task.Task.entity',
+            #    'task.Task.content',
+            #    'task.Task.entity.Entity.type',
+            #    'task.Task.step.Step.id',
+            #    'task.Task.step.Step.code',
+            #    'task.Task.step.Step.short_name',
+                'version.Version.id',
+                'version.Version.code',
+            #    'version.Version.name',
+                'version_number',
+                'version.Version.sg_status_list'
+            ]
+        }, uid = 'current_pbfiles')
 
     def unregister_common_queries(self):
         # un-registers async cache requests
@@ -4707,8 +4604,10 @@ class flameMenuBatchLoader(flameMenuApp):
 
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
-
         publishes = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
+
+        cached_tasks_query = self.connector.async_cache.get('current_tasks')
+        current_tasks_by_id = cached_tasks_query.get('result') if cached_tasks_query else {}
         
         '''
         self.connector.sg.find(
@@ -4739,9 +4638,9 @@ class flameMenuBatchLoader(flameMenuApp):
         step_names = set()
         for publish in publishes:
             # step_name = publish.get('task.Task.step.Step.short_name')
-            step_name = publish.get('task.Task.step.Step.code')
-            if not step_name:
-                step_name = ''
+            task_id = publish.get('task.Task.id', 0)
+            task = current_tasks_by_id.get(task_id, {})
+            step_name = task.get('step.Step.code', '')
             step_names.add(step_name)
 
         for step_name in step_names:
@@ -4752,9 +4651,10 @@ class flameMenuBatchLoader(flameMenuApp):
             
             published_file_type_name = ''
             for publish in publishes:
-                step = publish.get('task.Task.step.Step.code')
-                if not step:
-                    step = ''
+                # step = publish.get('task.Task.step.Step.code')
+                task_id = publish.get('task.Task.id', 0)
+                task = current_tasks_by_id.get(task_id, {})
+                step = task.get('step.Step.code', '')
                 if step == step_name:
                     published_file_type = publish.get('published_file_type')
                     if published_file_type:
@@ -4815,6 +4715,49 @@ class flameMenuBatchLoader(flameMenuApp):
         self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
     def get_entities(self, user_only = True, filter_out=[]):
+
+        # get current tasks form async cache
+
+        cached_tasks = self.connector.cache_retrive_result('current_tasks')
+
+        if not isinstance(cached_tasks, list):
+            return {}
+
+        # remove tasks without entities and filter if user_only
+
+        user_id = 0
+        if self.connector.sg_human_user:
+            user_id = self.connector.sg_human_user.get('id', 0)
+        tasks = []
+        for cached_task in cached_tasks:
+            if not cached_task.get('entity'):
+                continue
+            if user_only:
+                if not cached_task.get('task_assignees'):
+                    continue
+                else:
+                    task_assignees_ids = [assignee.get('id') for assignee in cached_task.get('task_assignees', [])]
+                    if user_id not in task_assignees_ids:
+                        continue
+
+            tasks.append(cached_task)            
+
+        # group entities by id
+
+        entities_by_id = {task.get('entity').get('id'):task.get('entity') for task in tasks}
+        
+        shots = []
+        assets = []
+        for entity_id in sorted(entities_by_id.keys()):
+            entity = entities_by_id.get(entity_id)
+            if entity.get('type') == 'Shot':
+                shots.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Shot'})
+            elif entity.get('type') == 'Asset':
+                assets.append({'code': entity.get('name'), 'id': entity_id, 'type': 'Asset'})
+        
+        return {'Asset': assets, 'Shot': shots}
+
+        '''
         sg = self.connector.sg
         project_id = self.connector.sg_linked_project_id
         task_filters = [['project.Project.id', 'is', project_id]]
@@ -4853,6 +4796,7 @@ class flameMenuBatchLoader(flameMenuApp):
             found_entities[entity_type] = list(found_by_type)
 
         return found_entities
+        '''
 
     def build_flame_friendly_path(self, path):
         import re
