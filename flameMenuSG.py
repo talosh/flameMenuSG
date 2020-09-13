@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = True
+DEBUG = False
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.17b1'
+__version__ = 'v0.0.17-rc1'
 
 
 class flameAppFramework(object):
@@ -2577,7 +2577,7 @@ class flameMenuProjectconnect(flameMenuApp):
         lbl_AutoRefresh.move(0, 170)
         lbl_AutoRefresh.setAlignment(QtCore.Qt.AlignCenter)
 
-        lbl_AutoRefreshMsg = QtWidgets.QLabel('This may degrade right-click menu performance', paneGeneral)
+        lbl_AutoRefreshMsg = QtWidgets.QLabel('Use to debug poor right-click menu performance', paneGeneral)
         lbl_AutoRefreshMsg.setStyleSheet('QFrame {color: #989898;}')
         lbl_AutoRefreshMsg.setMinimumSize(36, 28)
         lbl_AutoRefreshMsg.move(0, 204)
