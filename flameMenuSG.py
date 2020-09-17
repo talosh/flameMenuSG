@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -70,7 +70,7 @@ loader_PublishedFileType_base = {
     'exclude': []
 }
 
-__version__ = 'v0.0.17'
+__version__ = 'v0.0.18-b.1'
 
 
 class flameAppFramework(object):
@@ -4421,6 +4421,8 @@ class flameMenuBatchLoader(flameMenuApp):
                     self.update_loader_list(entity)
                 elif entity.get('caller') == 'build_batch_loader_menu':
                     self.load_into_batch(entity)
+                elif entity.get('caller') == 'flip_show_latest':
+                    self.flip_latest(entity)
             self.rescan()
         return method
 
@@ -4601,6 +4603,16 @@ class flameMenuBatchLoader(flameMenuApp):
         entity_key = (entity_type, entity_id)
         if entity_key not in self.prefs.keys():
             self.prefs[entity_key] = {}
+        if 'showLatest' not in self.prefs[entity_key].keys():
+            self.prefs[entity_key]['showLatest'] = True
+
+        cached_tasks_query = self.connector.async_cache.get('current_tasks')
+        cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
+        tasks = cached_tasks_by_entity.get(entity_key, []) if cached_tasks_by_entity else []
+
+        cached_versions_query = self.connector.async_cache.get('current_versions')
+        cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
+        versions = cached_versions_by_entity.get(entity_key, []) if cached_versions_by_entity else []
 
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
@@ -4609,23 +4621,6 @@ class flameMenuBatchLoader(flameMenuApp):
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         current_tasks_by_id = cached_tasks_query.get('result') if cached_tasks_query else {}
         
-        '''
-        self.connector.sg.find(
-            'PublishedFile',
-            [['entity', 'is', {'id': entity_id, 'type': entity_type}]],
-            [
-                'path_cache',
-                'path_cache_storage',
-                'name',
-                'version_number',
-                'published_file_type',
-                'version.Version.code',
-                'task.Task.step.Step.code',
-                'task.Task.step.Step.short_name'
-            ]
-        )
-        '''
-        
         menu = {}
         menu['name'] = '-' + chr(32) + entity.get('code') + ':'
         menu['actions'] = []
@@ -4633,6 +4628,19 @@ class flameMenuBatchLoader(flameMenuApp):
         menu_item = {}
         menu_item['name'] = '~ Rescan'
         menu_item['execute'] = self.rescan
+        menu['actions'].append(menu_item)
+
+        menu_item = {}        
+        show_latest_entity = dict(entity)
+        show_latest_entity['caller'] = 'flip_show_latest'
+
+        if self.prefs[entity_key]['showLatest']:            
+            menu_item['name'] = '~ Show All Versions'
+        else:
+            menu_item['name'] = '~ Show Latest Versions'
+
+        self.dynamic_menu_data[str(id(show_latest_entity))] = show_latest_entity
+        menu_item['execute'] = getattr(self, str(id(show_latest_entity)))
         menu['actions'].append(menu_item)
 
         step_names = set()
@@ -4860,6 +4868,13 @@ class flameMenuBatchLoader(flameMenuApp):
     def flip_assigned(self, *args, **kwargs):
         self.prefs['show_all'] = not self.prefs['show_all']
         self.rescan()
+
+    def flip_latest(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        if (entity_key in self.prefs.keys()) and (isinstance(self.prefs.get(entity_key), dict)):
+            self.prefs[entity_key]['showLatest'] = not self.prefs[entity_key]['showLatest']
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
