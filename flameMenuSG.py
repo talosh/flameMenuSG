@@ -65,11 +65,6 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-loader_PublishedFileType_base = {
-    'include': [],
-    'exclude': []
-}
-
 __version__ = 'v0.0.18-b.1'
 
 
@@ -545,6 +540,27 @@ class flameMenuApp(object):
 
         from PySide2 import QtWidgets
         self.mbox = QtWidgets.QMessageBox()
+
+    @property
+    def flame_extension_map(self):
+        return {
+            'Alias': 'als',
+            'Cineon': 'cin',
+            'Dpx': 'dpx',
+            'Jpeg': 'jpg',
+            'Maya': 'iff',
+            'OpenEXR': 'exr',
+            'Pict': 'pict',
+            'Pixar': 'picio',
+            'Sgi': 'sgi',
+            'SoftImage': 'pic',
+            'Targa': 'tga',
+            'Tiff': 'tif',
+            'Wavefront': 'rla',
+            'QuickTime': 'mov',
+            'MXF': 'mxf',
+            'SonyMXF': 'mxf'
+        }
         
     def __getattr__(self, name):
         def method(*args, **kwargs):
@@ -5002,22 +5018,42 @@ class flameMenuBatchLoader(flameMenuApp):
         self.prefs['additional menu ' + batch_name] = add_list
 
     def load_into_batch(self, entity):
-        pprint (entity)
-        '''
-        path_cache = entity.get('path_cache')
-        if not path_cache:
+        cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
+        cached_pbfiles_by_id = cached_pbfiles_query.get('result') if cached_pbfiles_query else {}
+        
+        image_pbfiles = []
+        path_cache = ''
+        entity_pbfiles = entity.get('published_files', [])
+        for pbfile in entity_pbfiles:
+            pbfile_id = pbfile.get('id', 0)
+            cached_pbfile = cached_pbfiles_by_id.get(pbfile_id)
+            
+            if cached_pbfile:
+                path_cache = cached_pbfile.get('path_cache')
+            else:
+                continue
+
+            if path_cache:
+                base, ext = os.path.splitext(os.path.basename(path_cache))
+                if ext:
+                    if ext.startswith('.'):
+                        if ext[1:] in self.flame_extension_map.values():
+                            image_pbfiles.append(cached_pbfile)
+        
+        if not image_pbfiles:
             return
         
-        storage_root = self.connector.resolve_storage_root(entity.get('path_cache_storage'))
-        if not storage_root:
-            return
-        path = os.path.join(storage_root, path_cache)
-        flame_path = self.build_flame_friendly_path(path)
-        if not flame_path:
-            return
+        for image_pbfile in image_pbfiles:        
+            path_cache = image_pbfile.get('path_cache')
+            storage_root = self.connector.resolve_storage_root(image_pbfile.get('path_cache_storage'))
+            if not storage_root:
+                return
+            path = os.path.join(storage_root, path_cache)
+            flame_path = self.build_flame_friendly_path(path)
+            if not flame_path:
+                return
 
-        self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
-        '''
+            self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
     def get_entities(self, user_only = True, filter_out=[]):
 
