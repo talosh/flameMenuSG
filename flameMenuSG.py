@@ -513,10 +513,6 @@ class flameAppFramework(object):
                     all_folders.append(folder)
                     all_folders += recursive_folders(folder)
 
-                
-
-            pprint (all_folders)
-
         map_batchgroups(dsk_batch_groups)
         map_reelgroups(dsk_reel_groups)
         # map_libraries(libraries)
@@ -5006,6 +5002,8 @@ class flameMenuBatchLoader(flameMenuApp):
         self.prefs['additional menu ' + batch_name] = add_list
 
     def load_into_batch(self, entity):
+        pprint (entity)
+        '''
         path_cache = entity.get('path_cache')
         if not path_cache:
             return
@@ -5019,6 +5017,7 @@ class flameMenuBatchLoader(flameMenuApp):
             return
 
         self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
+        '''
 
     def get_entities(self, user_only = True, filter_out=[]):
 
@@ -5542,11 +5541,11 @@ class flameMenuPublisher(flameMenuApp):
             menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
 
             if self.prefs[entity_key][step_key].get('isFolded') and len(tasks_by_step[step_name]) != 1:
-                menu_item['name'] = '+ [ ' + step_name + ' ] [>]'
+                menu_item['name'] = '+ [ ' + step_name + ' ]'
                 menu['actions'].append(menu_item)
                 continue
             elif self.prefs[entity_key][step_key].get('isFolded') and tasks_by_step[step_name][0].get('content') != step_name:
-                menu_item['name'] = '+ [ ' + step_name + ' ] [>]'
+                menu_item['name'] = '+ [ ' + step_name + ' ]'
                 menu['actions'].append(menu_item)
                 continue
 
@@ -5580,12 +5579,12 @@ class flameMenuPublisher(flameMenuApp):
                 menu_item = {}
                 if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
                     if self.prefs[entity_key][task_key].get('isFolded'):
-                        menu_item['name'] = '+ [ ' + task_name + ' ] [>]'
+                        menu_item['name'] = '+ [ ' + task_name + ' ]'
                     else:
                         menu_item['name'] = '- [ ' + task_name + ' ]'
                 else:
                     if self.prefs[entity_key][task_key].get('isFolded'):
-                        menu_item['name'] = ' '*4 + '+ [ ' + task_name + ' ] [>]'
+                        menu_item['name'] = ' '*4 + '+ [ ' + task_name + ' ]'
                     else:
                         menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
                 menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
