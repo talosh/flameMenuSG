@@ -1072,7 +1072,8 @@ class flameShotgunConnector(object):
             'fields': [
                 'code',
                 'sg_task.Task.id',
-                'entity'
+                'entity',
+                'published_files'
             ]
         }, uid = 'current_versions')
 
@@ -4401,7 +4402,8 @@ class flameMenuBatchLoader(flameMenuApp):
     def __init__(self, framework, connector):
         self.types_to_include = [
             'Image Sequence',
-            'Flame Render'
+            'Flame Render',
+            'Flame Batch File',
         ]
 
         flameMenuApp.__init__(self, framework)
@@ -4423,6 +4425,10 @@ class flameMenuBatchLoader(flameMenuApp):
                     self.load_into_batch(entity)
                 elif entity.get('caller') == 'flip_show_latest':
                     self.flip_latest(entity)
+                elif entity.get('caller') == 'fold_step_entity':
+                    self.fold_step_entity(entity)
+                elif entity.get('caller') == 'fold_task_entity':
+                    self.fold_task_entity(entity)
             self.rescan()
         return method
 
@@ -4609,6 +4615,7 @@ class flameMenuBatchLoader(flameMenuApp):
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         cached_tasks_by_entity = cached_tasks_query.get('by_entity') if cached_tasks_query else False
         tasks = cached_tasks_by_entity.get(entity_key, []) if cached_tasks_by_entity else []
+        tasks_by_id = cached_tasks_query.get('result') if cached_tasks_query else {}
 
         cached_versions_query = self.connector.async_cache.get('current_versions')
         cached_versions_by_entity = cached_versions_query.get('by_entity') if cached_versions_query else False
@@ -4617,6 +4624,7 @@ class flameMenuBatchLoader(flameMenuApp):
         cached_pbfiles_query = self.connector.async_cache.get('current_pbfiles')
         cached_pbfiles_by_entity = cached_pbfiles_query.get('by_entity') if cached_pbfiles_query else False
         publishes = cached_pbfiles_by_entity.get(entity_key, []) if cached_pbfiles_by_entity else []
+        cached_pbfiles_by_id = cached_pbfiles_query.get('result') if cached_pbfiles_query else {}
 
         cached_tasks_query = self.connector.async_cache.get('current_tasks')
         current_tasks_by_id = cached_tasks_query.get('result') if cached_tasks_query else {}
@@ -4643,6 +4651,295 @@ class flameMenuBatchLoader(flameMenuApp):
         menu_item['execute'] = getattr(self, str(id(show_latest_entity)))
         menu['actions'].append(menu_item)
 
+        # for the loader we're only interested in versions with published files
+        # versions (should not but) might contain published files from other entities
+        # if it is the case we should add them to out published files group
+        # in the same pass we can split the versions into two kinds -
+        # versions with tasks and without tasks and filter out versions
+        # without published files at the same time
+
+        taskless_versions = []
+        versions_with_tasks = []
+        pbfiles_by_id = {p.get('id'):p for p in publishes}
+
+        for version in versions:
+            if not version.get('sg_task.Task.id'):
+                if version.get('published_files'):
+                    taskless_versions.append(version)
+            else:
+                if version.get('published_files'):
+                    versions_with_tasks.append(version)
+    
+            version_pbfiles = version.get('published_files')
+            for version_pbfile in version_pbfiles:
+                pbfile_id = version_pbfile.get('id')
+                if pbfile_id not in pbfiles_by_id:
+                    pbfile = cached_pbfiles_by_id.get(pbfile_id)
+                    if pbfile:
+                        pbfiles_by_id[pbfile_id] = pbfile
+
+        # remove published files with type not listed in types_to_include
+
+        for pbfile_id in pbfiles_by_id.keys():
+            pbfile = pbfiles_by_id.get(pbfile_id)
+            published_file_type = pbfile.get('published_file_type')
+            if not published_file_type:
+                del pbfiles_by_id[pbfile_id]
+                continue
+            published_file_type_name = published_file_type.get('name')
+            if published_file_type_name not in self.types_to_include:
+                del pbfiles_by_id[pbfile_id]
+                continue
+        
+        # versions without tasks will come first in list
+        taskless_pbfiles = []
+        for taskless_version in taskless_versions:
+            tv_pbfiles = taskless_version.get('published_files')
+            for tv_pbfile in tv_pbfiles:
+                if tv_pbfile.get('id') in pbfiles_by_id.keys():
+                    taskless_pbfiles.append(pbfiles_by_id[tv_pbfile.get('id')])
+
+        if taskless_pbfiles:
+            task_key = ('Task', -1)
+            if task_key not in self.prefs[entity_key].keys():
+                self.prefs[entity_key][task_key] = {'isFolded': False}
+
+            fold_task_entity = dict(entity)
+            fold_task_entity['caller'] = 'fold_task_entity'
+            fold_task_entity['key'] = task_key
+            self.dynamic_menu_data[str(id(fold_task_entity))] = fold_task_entity
+
+            menu_item = {}
+            if self.prefs[entity_key][task_key].get('isFolded'):
+                menu_item['name'] = '+ [ ' + 'No Task' + ' ]'
+            else:
+                menu_item['name'] = '- [ ' + 'No Task' + ' ]'
+            menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
+            menu['actions'].append(menu_item)
+
+            if not self.prefs[entity_key][task_key].get('isFolded'):
+
+                if self.prefs[entity_key]['showLatest']:
+                    
+                    # show latest version from the (pbfile_id, pbfile_name) group
+                    
+                    # collect published files from versions
+                    
+                    pbfiles = []
+                    for version in taskless_versions:
+                        version_pbfiles = version.get('published_files')
+                        for version_pbfile in version_pbfiles:
+                            version_pbfile_id = version_pbfile.get('id')   
+                            pbfile = pbfiles_by_id.get(version_pbfile_id)
+                            if pbfile: pbfiles.append(pbfile)
+                    
+                    # find the latest (pbfile_id, pbfile_name) group
+                    # and get the version linked to it
+
+                    pbfiles_version_ids = set()
+                    pbfile_type_id_name_group = {}
+                    pbfile_type_id_name_datetime = {}
+                    pbfile_type_id_name_count = {}
+
+                    for pbfile in pbfiles:
+                        pbfile_id = 0
+                        pbfile_type = pbfile.get('published_file_type')
+                        if isinstance(pbfile_type, dict):
+                            pbfile_id = pbfile_type.get('id')
+                        pbfile_name = pbfile.get('name')
+                        pbfile_created_at = pbfile.get('created_at')
+                        pbfile_type_id_name_key = (pbfile_id, pbfile_name)
+                        if pbfile_type_id_name_key not in pbfile_type_id_name_group.keys():
+                            pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                            pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                            pbfile_type_id_name_count[pbfile_type_id_name_key] = 1
+                        else:
+                            if pbfile_created_at > pbfile_type_id_name_datetime.get(pbfile_type_id_name_key):
+                                pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                                pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                            pbfile_type_id_name_count[pbfile_type_id_name_key] += 1
+
+                    taskless_versions_by_id = {v.get('id'):v for v in taskless_versions}
+                    for key in pbfile_type_id_name_group.keys():
+                        pbfile = pbfile_type_id_name_group.get(key)
+                        version_id = pbfile.get('version.Version.id')
+                        version = taskless_versions_by_id.get(version_id)
+                        if not version: continue
+                        version['caller'] = inspect.currentframe().f_code.co_name
+                        menu_item = {}
+                        if pbfile_type_id_name_count.get(key) > 1:
+                            menu_item['name'] = ' '*6 + '* ' + version.get('code')
+                        else:
+                            menu_item['name'] = ' '*8 + version.get('code')
+                        self.dynamic_menu_data[str(id(version))] = version
+                        menu_item['execute'] = getattr(self, str(id(version)))
+                        menu['actions'].append(menu_item)
+
+                else:
+                    # show all versions as they are
+                    for version in taskless_versions:
+                        version['caller'] = inspect.currentframe().f_code.co_name
+                        menu_item = {}
+                        menu_item['name'] = ' '*8 + version.get('code')
+                        self.dynamic_menu_data[str(id(version))] = version
+                        menu_item['execute'] = getattr(self, str(id(version)))
+                        menu['actions'].append(menu_item)
+
+        # build list of tasks from versions with tasks.
+        # add versions and published files to tasks
+
+        vtasks = []
+        vtasks_by_id = {}
+
+        for version in versions_with_tasks:
+            vtask_id = version.get('sg_task.Task.id')
+            if vtask_id not in vtasks_by_id.keys():
+                task = tasks_by_id.get(vtask_id)
+                task['versions'] = [version]
+                task['published_files'] = []
+                for version_pbfile in version.get('published_files'):
+                    version_pbfile_id = version_pbfile.get('id')
+                    pbfile = pbfiles_by_id.get(version_pbfile_id)
+                    if pbfile: task['published_files'].append(pbfile)
+                vtasks_by_id[vtask_id] = task
+            else:
+                vtasks_by_id[vtask_id]['versions'].append(version)
+                for version_pbfile in version.get('published_files'):
+                    version_pbfile_id = version_pbfile.get('id')
+                    pbfile = pbfiles_by_id.get(version_pbfile_id)
+                    if pbfile: vtasks_by_id[vtask_id]['published_files'].append(pbfile)
+        
+        for vtkey in vtasks_by_id.keys():
+            vtasks.append(vtasks_by_id.get(vtkey))
+        
+        tasks_by_step = {}
+        for task in vtasks:
+            step_name = task.get('step.Step.code')
+            if not step_name:
+                step_name = ''
+            step_id = task.get('step.Step.id')
+
+            if step_name not in tasks_by_step.keys():
+                tasks_by_step[step_name] = []
+            tasks_by_step[step_name].append(task)
+
+        for step_name in tasks_by_step.keys():
+            step_key = ('Step', step_name)
+
+            if step_key not in self.prefs[entity_key].keys():
+                self.prefs[entity_key][step_key] = {'isFolded': False}
+            
+            fold_step_entity = dict(entity)
+            fold_step_entity['caller'] = 'fold_step_entity'
+            fold_step_entity['key'] = step_key
+            self.dynamic_menu_data[str(id(fold_step_entity))] = fold_step_entity
+
+            menu_item = {}
+            menu_item['execute'] = getattr(self, str(id(fold_step_entity)))
+
+            if self.prefs[entity_key][step_key].get('isFolded') and len(tasks_by_step[step_name]) != 1:
+                menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu['actions'].append(menu_item)
+                continue
+            elif self.prefs[entity_key][step_key].get('isFolded') and tasks_by_step[step_name][0].get('content') != step_name:
+                menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu['actions'].append(menu_item)
+                continue
+
+            if len(tasks_by_step[step_name]) != 1:
+                menu_item['name'] = '- [ ' + step_name + ' ]'
+                menu['actions'].append(menu_item)
+            elif tasks_by_step[step_name][0].get('content') != step_name:
+                menu_item['name'] = '- [ ' + step_name + ' ]'
+                menu['actions'].append(menu_item)
+        
+            for task in tasks_by_step[step_name]:
+                task_key = ('Task', task.get('id'))
+                if task_key not in self.prefs[entity_key].keys():
+                    self.prefs[entity_key][task_key] = {'isFolded': False}
+
+                fold_task_entity = dict(entity)
+                fold_task_entity['caller'] = 'fold_task_entity'
+                fold_task_entity['key'] = task_key
+                self.dynamic_menu_data[str(id(fold_task_entity))] = fold_task_entity
+
+                task_name = task.get('content')
+                menu_item = {}
+                if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
+                    if self.prefs[entity_key][task_key].get('isFolded'):
+                        menu_item['name'] = '+ [ ' + task_name + ' ]'
+                    else:
+                        menu_item['name'] = '- [ ' + task_name + ' ]'
+                else:
+                    if self.prefs[entity_key][task_key].get('isFolded'):
+                        menu_item['name'] = ' '*4 + '+ [ ' + task_name + ' ]'
+                    else:
+                        menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
+                menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
+                menu['actions'].append(menu_item)
+                if self.prefs[entity_key][task_key].get('isFolded'): continue
+
+                if self.prefs[entity_key]['showLatest']:
+                    
+                    # show latest version from the (pbfile_id, pbfile_name) group
+                    
+                    pbfiles_version_ids = set()
+                    pbfile_type_id_name_group = {}
+                    pbfile_type_id_name_datetime = {}
+                    pbfile_type_id_name_count = {}
+
+                    for pbfile in task.get('published_files'):
+                        pbfile_id = 0
+                        pbfile_type = pbfile.get('published_file_type')
+                        if isinstance(pbfile_type, dict):
+                            pbfile_id = pbfile_type.get('id')
+                        pbfile_name = pbfile.get('name')
+                        pbfile_created_at = pbfile.get('created_at')
+                        pbfile_type_id_name_key = (pbfile_id, pbfile_name)
+                        if pbfile_type_id_name_key not in pbfile_type_id_name_group.keys():
+                            pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                            pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                            pbfile_type_id_name_count[pbfile_type_id_name_key] = 1
+                        else:
+                            if pbfile_created_at > pbfile_type_id_name_datetime.get(pbfile_type_id_name_key):
+                                pbfile_type_id_name_group[pbfile_type_id_name_key] = pbfile
+                                pbfile_type_id_name_datetime[pbfile_type_id_name_key] = pbfile_created_at
+                            pbfile_type_id_name_count[pbfile_type_id_name_key] += 1
+                    
+                    task_versions_by_id = {v.get('id'):v for v in task.get('versions')}
+                    version_names_ids = set()
+
+                    for key in pbfile_type_id_name_group.keys():
+                        pbfile = pbfile_type_id_name_group.get(key)
+                        version_name = pbfile.get('version.Version.code')
+                        version_id = pbfile.get('version.Version.id')
+                        version_names_ids.add((version_name, version_id))
+                    
+                    for version_name_id in sorted(version_names_ids):
+                        version = task_versions_by_id.get(version_name_id[1])
+                        if not version: continue
+                        version['caller'] = inspect.currentframe().f_code.co_name
+                        menu_item = {}
+                        if pbfile_type_id_name_count.get(key) > 1:
+                            menu_item['name'] = ' '*6 + '* ' + version.get('code')
+                        else:
+                            menu_item['name'] = ' '*8 + version.get('code')
+                        self.dynamic_menu_data[str(id(version))] = version
+                        menu_item['execute'] = getattr(self, str(id(version)))
+                        menu['actions'].append(menu_item)
+                else:
+                    # show all versions sorted alphabetically
+                    versions_by_name_id = {(v.get('code'), v.get('id')):v for v in task.get('versions')}
+                    for version_name_id in sorted(versions_by_name_id.keys()):
+                        version = versions_by_name_id.get(version_name_id)
+                        version['caller'] = inspect.currentframe().f_code.co_name
+                        menu_item = {}
+                        menu_item['name'] = ' '*8 + version.get('code')
+                        self.dynamic_menu_data[str(id(version))] = version
+                        menu_item['execute'] = getattr(self, str(id(version)))
+                        menu['actions'].append(menu_item)
+
+        '''                
         step_names = set()
         for publish in publishes:
             # step_name = publish.get('task.Task.step.Step.short_name')
@@ -4689,6 +4986,7 @@ class flameMenuBatchLoader(flameMenuApp):
                         self.dynamic_menu_data[str(id(publish))] = publish
                         menu_item['execute'] = getattr(self, str(id(publish)))
                         menu['actions'].append(menu_item)
+        '''
 
         return menu
 
@@ -4875,6 +5173,20 @@ class flameMenuBatchLoader(flameMenuApp):
         entity_key = (entity_type, entity_id)
         if (entity_key in self.prefs.keys()) and (isinstance(self.prefs.get(entity_key), dict)):
             self.prefs[entity_key]['showLatest'] = not self.prefs[entity_key]['showLatest']
+
+    def fold_step_entity(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        step_key = entity.get('key')
+        self.prefs[entity_key][step_key]['isFolded'] = not self.prefs[entity_key][step_key]['isFolded']
+
+    def fold_task_entity(self, entity):
+        entity_type = entity.get('type')
+        entity_id = entity.get('id')
+        entity_key = (entity_type, entity_id)
+        task_key = entity.get('key')
+        self.prefs[entity_key][task_key]['isFolded'] = not self.prefs[entity_key][task_key]['isFolded']
 
     def page_fwd(self, *args, **kwargs):
         self.prefs['current_page'] += 1
@@ -5264,7 +5576,6 @@ class flameMenuPublisher(flameMenuApp):
                 task_Step = task.get('step.Step.code')
                 task_Step_code = task.get('step.Step.short_name')
                 
-
                 task_name = task.get('content')
                 menu_item = {}
                 if (task_name == step_name) and (len(tasks_by_step[step_name]) == 1):
