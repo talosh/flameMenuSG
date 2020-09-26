@@ -5829,6 +5829,7 @@ class flameMenuPublisher(flameMenuApp):
                     detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 500px;}')
+        mbox.setWindowTitle(self.menu_group_name)
         mbox.exec_()
 
         
