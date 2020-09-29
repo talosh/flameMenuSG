@@ -4525,7 +4525,7 @@ class flameMenuBatchLoader(flameMenuApp):
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
-        menu['name'] = '-' + chr(1) + self.menu_group_name + ' Add/Remove'
+        menu['name'] = '-' + chr(10) + self.menu_group_name + ' Add/Remove'
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
@@ -5829,6 +5829,7 @@ class flameMenuPublisher(flameMenuApp):
                     detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 500px;}')
+        mbox.setWindowTitle(self.menu_group_name)
         mbox.exec_()
 
         
