@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = False
+DEBUG = True
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -65,7 +65,7 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-__version__ = 'v0.0.18-rc.1'
+__version__ = 'v0.0.19-b1'
 
 
 class flameAppFramework(object):
@@ -4525,7 +4525,7 @@ class flameMenuBatchLoader(flameMenuApp):
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
-        menu['name'] = '-' + chr(10) + self.menu_group_name + ' Add/Remove'
+        menu['name'] = '-' + chr(1) + self.menu_group_name + ' Add/Remove'
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
@@ -5256,6 +5256,9 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs['poster_frame'] = 1
             self.prefs['version_zero'] = False
 
+        if not self.prefs_global.master.get(self.name):
+            self.prefs_global['temp_files_list'] = []
+
         self.flame_bug_message = False
         self.selected_clips = []
         self.create_export_presets()
@@ -5829,7 +5832,6 @@ class flameMenuPublisher(flameMenuApp):
                     detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 500px;}')
-        mbox.setWindowTitle(self.menu_group_name)
         mbox.exec_()
 
         
@@ -6100,6 +6102,74 @@ class flameMenuPublisher(flameMenuApp):
                 else:
                     return (pb_info, True)
 
+        # Export section
+
+        original_clip_name = clip.name.get_value()
+
+        # Try to export preview and thumbnail in background
+                
+        class BgExportHooks(object):
+            def preExport(self, info, userData, *args, **kwargs):
+                pass
+            def postExport(self, info, userData, *args, **kwargs):
+                pass
+            def preExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def postExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def preExportAsset(self, info, userData, *args, **kwargs):
+                pass
+            def postExportAsset(self, info, userData, *args, **kwargs):
+                del args, kwargs
+                pass
+            def exportOverwriteFile(self, path, *args, **kwargs):
+                del path, args, kwargs
+                return "overwrite"
+        
+        bg_exporter = self.flame.PyExporter()
+        bg_exporter.foreground = False
+
+        self.log('sending preview to background export')
+        preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        clip.name.set_value(version_name + '_preview_' + uid)
+        export_dir = '/var/tmp'
+        preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+        self.prefs_global['temp_files_list'].append(preview_path)
+
+        self.log('background exporting preview %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+
+        try:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+        except:
+            pass
+
+        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+        clip.name.set_value(version_name + '_thumbnail_' + uid)
+        export_dir = '/var/tmp'
+        thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+        self.prefs_global['temp_files_list'].append(thumbnail_path)
+        clip_in_mark = clip.in_mark.get_value()
+        clip_out_mark = clip.out_mark.get_value()
+        clip.in_mark = self.prefs.get('poster_frame', 1)
+        clip.out_mark = self.prefs.get('poster_frame', 1) + 1
+        exporter.export_between_marks = True
+
+        self.log('background exporting thumbnail %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+
+        try:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+        except:
+            pass
+
+        clip.in_mark.set_value(clip_in_mark)
+        clip.out_mark.set_value(clip_out_mark)
+        clip.name.set_value(original_clip_name)
+
         # Export using main preset
 
         self.log('starting export form flame')
@@ -6132,7 +6202,6 @@ class flameMenuPublisher(flameMenuApp):
         export_clip_name = export_clip_name.replace(sg_frame, '')
         if export_clip_name.endswith('.'):
             export_clip_name = export_clip_name[:-1]
-        original_clip_name = clip.name.get_value()
         clip.name.set_value(export_clip_name)
         export_dir = os.path.dirname(export_path)
 
@@ -6166,60 +6235,62 @@ class flameMenuPublisher(flameMenuApp):
             clip.name.set_value(original_clip_name)
             return (pb_info, True)
 
-        
-        # Export preview to temp folder
+        if not (os.path.isfile(preview_path) and os.path.isfile(thumbnail_path)):
+            self.log('no background previews ready, exporting in fg')
+            
+            # Export preview to temp folder
 
-        # preset_dir = self.flame.PyExporter.get_presets_dir(
-        #   self.flame.PyExporter.PresetVisibility.Shotgun,
-        #   self.flame.PyExporter.PresetType.Movie
-        # )
-        # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
-        preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
-        clip.name.set_value(version_name + '_preview_' + uid)
-        export_dir = '/var/tmp'
-        preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+            # preset_dir = self.flame.PyExporter.get_presets_dir(
+            #   self.flame.PyExporter.PresetVisibility.Shotgun,
+            #   self.flame.PyExporter.PresetType.Movie
+            # )
+            # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+            preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+            clip.name.set_value(version_name + '_preview_' + uid)
+            export_dir = '/var/tmp'
+            preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
 
-        self.log('exporting preview %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
+            self.log('exporting preview %s' % clip.name.get_value())
+            self.log('with preset: %s' % preset_path)
+            self.log('into folder: %s' % export_dir)
 
-        try:
-            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
-        except:
-            pass
+            try:
+                exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+            except:
+                pass
 
-        # Set clip in and out marks and export thumbnail to temp folder
+            # Set clip in and out marks and export thumbnail to temp folder
 
-        # preset_dir = self.flame.PyExporter.get_presets_dir(
-        #    self.flame.PyExporter.PresetVisibility.Shotgun,
-        #    self.flame.PyExporter.PresetType.Image_Sequence
-        # )
-        # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
-        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
-        clip.name.set_value(version_name + '_thumbnail_' + uid)
-        export_dir = '/var/tmp'
-        thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
-        clip_in_mark = clip.in_mark.get_value()
-        clip_out_mark = clip.out_mark.get_value()
-        clip.in_mark = self.prefs.get('poster_frame', 1)
-        clip.out_mark = self.prefs.get('poster_frame', 1) + 1
-        exporter.export_between_marks = True
+            # preset_dir = self.flame.PyExporter.get_presets_dir(
+            #    self.flame.PyExporter.PresetVisibility.Shotgun,
+            #    self.flame.PyExporter.PresetType.Image_Sequence
+            # )
+            # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+            preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+            clip.name.set_value(version_name + '_thumbnail_' + uid)
+            export_dir = '/var/tmp'
+            thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+            clip_in_mark = clip.in_mark.get_value()
+            clip_out_mark = clip.out_mark.get_value()
+            clip.in_mark = self.prefs.get('poster_frame', 1)
+            clip.out_mark = self.prefs.get('poster_frame', 1) + 1
+            exporter.export_between_marks = True
 
-        self.log('exporting thumbnail %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
-        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+            self.log('exporting thumbnail %s' % clip.name.get_value())
+            self.log('with preset: %s' % preset_path)
+            self.log('into folder: %s' % export_dir)
+            self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
-        try:
-            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
-        except:
-            pass
-        
-        clip.in_mark.set_value(clip_in_mark)
-        clip.out_mark.set_value(clip_out_mark)
-        clip.name.set_value(original_clip_name)
+            try:
+                exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+            except:
+                pass
+            
+            clip.in_mark.set_value(clip_in_mark)
+            clip.out_mark.set_value(clip_out_mark)
+            clip.name.set_value(original_clip_name)
 
-        # Create version in Shotgun
+            # Create version in Shotgun
 
         self.log('creating version in shotgun')
 
