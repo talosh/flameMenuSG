@@ -897,7 +897,7 @@ class flameShotgunConnector(object):
                 except Exception as e:
                     self.log('error performing long fetch on register %s' % e)
 
-                flag.append(True)
+                flag.append(True )
                 self.async_cache[uid]['result'] = result_by_id
 
                 self.preformat_common_queries()
@@ -6154,7 +6154,7 @@ class flameMenuPublisher(flameMenuApp):
         clip_out_mark = clip.out_mark.get_value()
         clip.in_mark = self.prefs.get('poster_frame', 1)
         clip.out_mark = self.prefs.get('poster_frame', 1) + 1
-        exporter.export_between_marks = True
+        bg_exporter.export_between_marks = True
 
         self.log('background exporting thumbnail %s' % clip.name.get_value())
         self.log('with preset: %s' % preset_path)
