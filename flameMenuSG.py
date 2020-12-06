@@ -5930,6 +5930,8 @@ class flameMenuPublisher(flameMenuApp):
         version_padding = -1
         if clip_name.startswith(batch_group_name):
             clip_name = clip_name[len(batch_group_name):]
+        if len(clip_name) == 0:
+            clip_name = task_step_code.lower()
 
         if clip_name[-1].isdigit():
             match = re.split('(\d+)', clip_name)
@@ -6141,8 +6143,9 @@ class flameMenuPublisher(flameMenuApp):
         self.log('into folder: %s' % export_dir)
 
         try:
-            bg_exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
-        except:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
+        except Exception as e:
+            self.log('error exporting in background %s' % e)
             pass
 
         preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
@@ -6162,8 +6165,9 @@ class flameMenuPublisher(flameMenuApp):
         self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
         try:
-            bg_exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
-        except:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
+        except Exception as e:
+            self.log('error exporting in background %s' % e)
             pass
 
         clip.in_mark.set_value(clip_in_mark)
@@ -6202,8 +6206,8 @@ class flameMenuPublisher(flameMenuApp):
         export_clip_name = export_clip_name.replace(sg_frame, '')
         if export_clip_name.endswith('.'):
             export_clip_name = export_clip_name[:-1]
-        clip.name.set_value(export_clip_name)
-        export_dir = os.path.dirname(export_path)
+        clip.name.set_value(str(export_clip_name))
+        export_dir = str(os.path.dirname(export_path))
 
         if not os.path.isdir(export_dir):
             self.log('creating folders: %s' % export_dir)
@@ -6231,9 +6235,19 @@ class flameMenuPublisher(flameMenuApp):
         try:
             exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
             clip.name.set_value(original_clip_name)
-        except:
+        except Exception as e:
             clip.name.set_value(original_clip_name)
-            return (pb_info, True)
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Error publishing flame clip %s:\n%s.' % (pb_info.get('flame_clip_name', ''), e))
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)
 
         if not (os.path.isfile(preview_path) and os.path.isfile(thumbnail_path)):
             self.log('no background previews ready, exporting in fg')
@@ -6557,12 +6571,12 @@ class flameMenuPublisher(flameMenuApp):
             else:
                 self.log('no linked .batch file found on filesystem')
                 self.log('saving current batch to: %s' % export_path)
-                self.flame.batch.save_setup(export_path)
+                self.flame.batch.save_setup(str(export_path))
         else:
             self.log('no linked .batch file')
             self.log('saving current batch to: %s' % export_path)
             self.progress.set_progress(version_name, 'Saving current batch...')
-            self.flame.batch.save_setup(export_path)
+            self.flame.batch.save_setup(str(export_path))
 
         # get published file type for Flame Batch or create a published file type on the fly
 
