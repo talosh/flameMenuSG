@@ -65,7 +65,7 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-__version__ = 'v0.0.19-b1'
+__version__ = 'v0.0.19-b2'
 
 
 class flameAppFramework(object):
