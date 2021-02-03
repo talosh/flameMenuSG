@@ -65,7 +65,7 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-__version__ = 'v0.0.19-b2'
+__version__ = 'v0.1.0.beta.001'
 
 
 class flameAppFramework(object):
@@ -3528,7 +3528,8 @@ class flameMenuNewBatch(flameMenuApp):
             self.prefs['menu_max_items_per_page'] = 128
 
             self.prefs['last_sequence_used'] = {}
-
+        
+        if (not 'shot_task_template' in self.prefs.keys()) and self.connector.sg_user:
             task_templates = self.connector.sg.find('TaskTemplate', [], ['entity_type','code'])
             task_templates_by_id = {x.get('id'):x for x in task_templates}
 
@@ -3543,6 +3544,11 @@ class flameMenuNewBatch(flameMenuApp):
                     if template.get('entity_type') == 'Shot':
                         self.prefs['shot_task_template'] = template
                         break
+
+        if (not 'asset_task_template' in self.prefs.keys()) and self.connector.sg_user:
+            task_templates = self.connector.sg.find('TaskTemplate', [], ['entity_type','code'])
+            task_templates_by_id = {x.get('id'):x for x in task_templates}
+
             if 41 in task_templates_by_id.keys():
                 self.prefs['asset_task_template'] = task_templates_by_id.get(41)
             else:
