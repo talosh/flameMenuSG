@@ -65,7 +65,7 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-__version__ = 'v0.0.18'
+__version__ = 'v0.1.0'
 
 
 class flameAppFramework(object):
@@ -897,7 +897,7 @@ class flameShotgunConnector(object):
                 except Exception as e:
                     self.log('error performing long fetch on register %s' % e)
 
-                flag.append(True)
+                flag.append(True )
                 self.async_cache[uid]['result'] = result_by_id
 
                 self.preformat_common_queries()
@@ -3528,7 +3528,8 @@ class flameMenuNewBatch(flameMenuApp):
             self.prefs['menu_max_items_per_page'] = 128
 
             self.prefs['last_sequence_used'] = {}
-
+        
+        if (not 'shot_task_template' in self.prefs.keys()) and self.connector.sg_user:
             task_templates = self.connector.sg.find('TaskTemplate', [], ['entity_type','code'])
             task_templates_by_id = {x.get('id'):x for x in task_templates}
 
@@ -3543,6 +3544,11 @@ class flameMenuNewBatch(flameMenuApp):
                     if template.get('entity_type') == 'Shot':
                         self.prefs['shot_task_template'] = template
                         break
+
+        if (not 'asset_task_template' in self.prefs.keys()) and self.connector.sg_user:
+            task_templates = self.connector.sg.find('TaskTemplate', [], ['entity_type','code'])
+            task_templates_by_id = {x.get('id'):x for x in task_templates}
+
             if 41 in task_templates_by_id.keys():
                 self.prefs['asset_task_template'] = task_templates_by_id.get(41)
             else:
@@ -4525,7 +4531,7 @@ class flameMenuBatchLoader(flameMenuApp):
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
-        menu['name'] = '-' + chr(10) + self.menu_group_name + ' Add/Remove'
+        menu['name'] = '- ' + self.menu_group_name + ' Add/Remove'
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
@@ -4642,7 +4648,7 @@ class flameMenuBatchLoader(flameMenuApp):
         current_tasks_by_id = cached_tasks_query.get('result') if cached_tasks_query else {}
         
         menu = {}
-        menu['name'] = '-' + chr(32) + entity.get('code') + ':'
+        menu['name'] = '- ' + chr(127) + entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
@@ -5256,6 +5262,9 @@ class flameMenuPublisher(flameMenuApp):
             self.prefs['poster_frame'] = 1
             self.prefs['version_zero'] = False
 
+        if not self.prefs_global.master.get(self.name):
+            self.prefs_global['temp_files_list'] = []
+
         self.flame_bug_message = False
         self.selected_clips = []
         self.create_export_presets()
@@ -5829,7 +5838,6 @@ class flameMenuPublisher(flameMenuApp):
                     detailed_msg += ' '*4 + pb_info.get('flame_clip_name') + ':\n'
         mbox.setDetailedText(detailed_msg)
         mbox.setStyleSheet('QLabel{min-width: 500px;}')
-        mbox.setWindowTitle(self.menu_group_name)
         mbox.exec_()
 
         
@@ -5928,6 +5936,8 @@ class flameMenuPublisher(flameMenuApp):
         version_padding = -1
         if clip_name.startswith(batch_group_name):
             clip_name = clip_name[len(batch_group_name):]
+        if len(clip_name) == 0:
+            clip_name = task_step_code.lower()
 
         if clip_name[-1].isdigit():
             match = re.split('(\d+)', clip_name)
@@ -6085,12 +6095,12 @@ class flameMenuPublisher(flameMenuApp):
                 
                 # inform user that published file already exists:
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Publish for flame clip %s already exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+                mbox.setText('Publish for flame clip %s\nalready exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
                 detailed_msg = ''
                 detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
                 mbox.setDetailedText(detailed_msg)
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6099,6 +6109,86 @@ class flameMenuPublisher(flameMenuApp):
                     return (pb_info, False)
                 else:
                     return (pb_info, True)
+
+        # Export section
+
+        original_clip_name = clip.name.get_value()
+
+        # Try to export preview and thumbnail in background
+                
+        class BgExportHooks(object):
+            def preExport(self, info, userData, *args, **kwargs):
+                pass
+            def postExport(self, info, userData, *args, **kwargs):
+                pass
+            def preExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def postExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def preExportAsset(self, info, userData, *args, **kwargs):
+                pass
+            def postExportAsset(self, info, userData, *args, **kwargs):
+                del args, kwargs
+                pass
+            def exportOverwriteFile(self, path, *args, **kwargs):
+                del path, args, kwargs
+                return "overwrite"
+        
+        bg_exporter = self.flame.PyExporter()
+        bg_exporter.foreground = False
+
+        # Exporting previews in background 
+        # doesn'r really work with concurrent exports in FG
+        # Render queue just becomes cluttered with
+        # unneeded and unfinished exports
+
+        # Disabling preview bg export block at the moment
+        # But leaving thumbnail export
+        
+        # self.log('sending preview to background export')
+        # preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        # clip.name.set_value(version_name + '_preview_' + uid)
+        export_dir = '/var/tmp'
+        preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+        # self.prefs_global['temp_files_list'].append(preview_path)
+
+        '''
+        self.log('background exporting preview %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+
+        try:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
+        except Exception as e:
+            self.log('error exporting in background %s' % e)
+            pass
+        '''
+
+        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+        clip.name.set_value(version_name + '_thumbnail_' + uid)
+        export_dir = '/var/tmp'
+        thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+        self.prefs_global['temp_files_list'].append(thumbnail_path)
+        clip_in_mark = clip.in_mark.get_value()
+        clip_out_mark = clip.out_mark.get_value()
+        clip.in_mark = self.prefs.get('poster_frame', 1)
+        clip.out_mark = self.prefs.get('poster_frame', 1) + 1
+        bg_exporter.export_between_marks = True
+
+        self.log('background exporting thumbnail %s' % clip.name.get_value())
+        self.log('with preset: %s' % preset_path)
+        self.log('into folder: %s' % export_dir)
+        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+
+        try:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
+        except Exception as e:
+            self.log('error exporting in background %s' % e)
+            pass
+
+        clip.in_mark.set_value(clip_in_mark)
+        clip.out_mark.set_value(clip_out_mark)
+        clip.name.set_value(original_clip_name)
 
         # Export using main preset
 
@@ -6132,9 +6222,8 @@ class flameMenuPublisher(flameMenuApp):
         export_clip_name = export_clip_name.replace(sg_frame, '')
         if export_clip_name.endswith('.'):
             export_clip_name = export_clip_name[:-1]
-        original_clip_name = clip.name.get_value()
-        clip.name.set_value(export_clip_name)
-        export_dir = os.path.dirname(export_path)
+        clip.name.set_value(str(export_clip_name))
+        export_dir = str(os.path.dirname(export_path))
 
         if not os.path.isdir(export_dir):
             self.log('creating folders: %s' % export_dir)
@@ -6146,7 +6235,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6162,64 +6251,76 @@ class flameMenuPublisher(flameMenuApp):
         try:
             exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
             clip.name.set_value(original_clip_name)
-        except:
+        except Exception as e:
             clip.name.set_value(original_clip_name)
-            return (pb_info, True)
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Error publishing flame clip %s:\n%s.' % (pb_info.get('flame_clip_name', ''), e))
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)
 
-        
-        # Export preview to temp folder
+        if not (os.path.isfile(preview_path) and os.path.isfile(thumbnail_path)):
+            self.log('no background previews ready, exporting in fg')
+            
+            # Export preview to temp folder
 
-        # preset_dir = self.flame.PyExporter.get_presets_dir(
-        #   self.flame.PyExporter.PresetVisibility.Shotgun,
-        #   self.flame.PyExporter.PresetType.Movie
-        # )
-        # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
-        preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
-        clip.name.set_value(version_name + '_preview_' + uid)
-        export_dir = '/var/tmp'
-        preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+            # preset_dir = self.flame.PyExporter.get_presets_dir(
+            #   self.flame.PyExporter.PresetVisibility.Shotgun,
+            #   self.flame.PyExporter.PresetType.Movie
+            # )
+            # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+            preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+            clip.name.set_value(version_name + '_preview_' + uid)
+            export_dir = '/var/tmp'
+            preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
 
-        self.log('exporting preview %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
+            self.log('exporting preview %s' % clip.name.get_value())
+            self.log('with preset: %s' % preset_path)
+            self.log('into folder: %s' % export_dir)
 
-        try:
-            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
-        except:
-            pass
+            try:
+                exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+            except:
+                pass
 
-        # Set clip in and out marks and export thumbnail to temp folder
+            # Set clip in and out marks and export thumbnail to temp folder
 
-        # preset_dir = self.flame.PyExporter.get_presets_dir(
-        #    self.flame.PyExporter.PresetVisibility.Shotgun,
-        #    self.flame.PyExporter.PresetType.Image_Sequence
-        # )
-        # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
-        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
-        clip.name.set_value(version_name + '_thumbnail_' + uid)
-        export_dir = '/var/tmp'
-        thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
-        clip_in_mark = clip.in_mark.get_value()
-        clip_out_mark = clip.out_mark.get_value()
-        clip.in_mark = self.prefs.get('poster_frame', 1)
-        clip.out_mark = self.prefs.get('poster_frame', 1) + 1
-        exporter.export_between_marks = True
+            # preset_dir = self.flame.PyExporter.get_presets_dir(
+            #    self.flame.PyExporter.PresetVisibility.Shotgun,
+            #    self.flame.PyExporter.PresetType.Image_Sequence
+            # )
+            # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+            preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+            clip.name.set_value(version_name + '_thumbnail_' + uid)
+            export_dir = '/var/tmp'
+            thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+            clip_in_mark = clip.in_mark.get_value()
+            clip_out_mark = clip.out_mark.get_value()
+            clip.in_mark = self.prefs.get('poster_frame', 1)
+            clip.out_mark = self.prefs.get('poster_frame', 1) + 1
+            exporter.export_between_marks = True
 
-        self.log('exporting thumbnail %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
-        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+            self.log('exporting thumbnail %s' % clip.name.get_value())
+            self.log('with preset: %s' % preset_path)
+            self.log('into folder: %s' % export_dir)
+            self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
-        try:
-            exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
-        except:
-            pass
-        
-        clip.in_mark.set_value(clip_in_mark)
-        clip.out_mark.set_value(clip_out_mark)
-        clip.name.set_value(original_clip_name)
+            try:
+                exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+            except:
+                pass
+            
+            clip.in_mark.set_value(clip_in_mark)
+            clip.out_mark.set_value(clip_out_mark)
+            clip.name.set_value(original_clip_name)
 
-        # Create version in Shotgun
+            # Create version in Shotgun
 
         self.log('creating version in shotgun')
 
@@ -6244,7 +6345,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6264,7 +6365,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error uploading version thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6287,7 +6388,7 @@ class flameMenuPublisher(flameMenuApp):
                     mbox.setText('Error uploading version preview to Shotgun')
                     mbox.setDetailedText(pformat(e))
                     mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                     btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                     btn_Continue.setText('Continue')
                     mbox.exec_()
@@ -6321,7 +6422,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6345,7 +6446,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error uploading thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6445,7 +6546,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6475,7 +6576,7 @@ class flameMenuPublisher(flameMenuApp):
                     mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
                     mbox.setDetailedText('Path: ' + export_path)
                     mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                     btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                     btn_Continue.setText('Continue')
                     mbox.exec_()
@@ -6486,12 +6587,12 @@ class flameMenuPublisher(flameMenuApp):
             else:
                 self.log('no linked .batch file found on filesystem')
                 self.log('saving current batch to: %s' % export_path)
-                self.flame.batch.save_setup(export_path)
+                self.flame.batch.save_setup(str(export_path))
         else:
             self.log('no linked .batch file')
             self.log('saving current batch to: %s' % export_path)
             self.progress.set_progress(version_name, 'Saving current batch...')
-            self.flame.batch.save_setup(export_path)
+            self.flame.batch.save_setup(str(export_path))
 
         # get published file type for Flame Batch or create a published file type on the fly
 
@@ -6509,7 +6610,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error creating published file type in Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6540,7 +6641,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6565,7 +6666,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error uploading thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
