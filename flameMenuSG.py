@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-DEBUG = True
+DEBUG = False
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -6095,12 +6095,12 @@ class flameMenuPublisher(flameMenuApp):
                 
                 # inform user that published file already exists:
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Publish for flame clip %s already exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+                mbox.setText('Publish for flame clip %s\nalready exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
                 detailed_msg = ''
                 detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
                 mbox.setDetailedText(detailed_msg)
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6137,13 +6137,22 @@ class flameMenuPublisher(flameMenuApp):
         bg_exporter = self.flame.PyExporter()
         bg_exporter.foreground = False
 
-        self.log('sending preview to background export')
-        preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
-        clip.name.set_value(version_name + '_preview_' + uid)
+        # Exporting previews in background 
+        # doesn'r really work with concurrent exports in FG
+        # Render queue just becomes cluttered with
+        # unneeded and unfinished exports
+
+        # Disabling preview bg export block at the moment
+        # But leaving thumbnail export
+        
+        # self.log('sending preview to background export')
+        # preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        # clip.name.set_value(version_name + '_preview_' + uid)
         export_dir = '/var/tmp'
         preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
-        self.prefs_global['temp_files_list'].append(preview_path)
+        # self.prefs_global['temp_files_list'].append(preview_path)
 
+        '''
         self.log('background exporting preview %s' % clip.name.get_value())
         self.log('with preset: %s' % preset_path)
         self.log('into folder: %s' % export_dir)
@@ -6153,6 +6162,7 @@ class flameMenuPublisher(flameMenuApp):
         except Exception as e:
             self.log('error exporting in background %s' % e)
             pass
+        '''
 
         preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
         clip.name.set_value(version_name + '_thumbnail_' + uid)
@@ -6225,7 +6235,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6246,7 +6256,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox = QtWidgets.QMessageBox()
             mbox.setText('Error publishing flame clip %s:\n%s.' % (pb_info.get('flame_clip_name', ''), e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6335,7 +6345,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6355,7 +6365,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error uploading version thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6378,7 +6388,7 @@ class flameMenuPublisher(flameMenuApp):
                     mbox.setText('Error uploading version preview to Shotgun')
                     mbox.setDetailedText(pformat(e))
                     mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                     btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                     btn_Continue.setText('Continue')
                     mbox.exec_()
@@ -6412,7 +6422,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6436,7 +6446,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error uploading thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6536,7 +6546,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
                 mbox.setDetailedText('Path: ' + export_dir)
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6566,7 +6576,7 @@ class flameMenuPublisher(flameMenuApp):
                     mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
                     mbox.setDetailedText('Path: ' + export_path)
                     mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                    mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                     btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                     btn_Continue.setText('Continue')
                     mbox.exec_()
@@ -6600,7 +6610,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error creating published file type in Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
@@ -6631,7 +6641,7 @@ class flameMenuPublisher(flameMenuApp):
             mbox.setText('Error creating published file in Shotgun')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-            mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
             btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
             btn_Continue.setText('Continue')
             mbox.exec_()
@@ -6656,7 +6666,7 @@ class flameMenuPublisher(flameMenuApp):
                 mbox.setText('Error uploading thumbnail to Shotgun')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
                 btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
                 btn_Continue.setText('Continue')
                 mbox.exec_()
