@@ -1303,7 +1303,7 @@ class flameShotgunConnector(object):
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         try:
             self.sg_user = authenticator.get_user()
-        except sgtk.authentication.AuthenticationCancelled:
+        except:
             self.prefs_global['user signed out'] = True
             return None
 
@@ -1870,7 +1870,7 @@ class flameMenuProjectconnect(flameMenuApp):
                     'entity': 'Project',
                     'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
-                    })
+                    }, perform_query = True)
 
         if self.connector.sg_linked_project and (not self.connector.sg_linked_project_id):
             self.log("project '%s' can not be found" % self.connector.sg_linked_project)
