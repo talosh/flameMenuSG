@@ -2542,7 +2542,8 @@ class flameMenuProjectconnect(flameMenuApp):
             code = template.get('code', 'no_code')
             template_id = template.get('id')
             action = btn_ShotTaskTemplate_menu.addAction(code)
-            action.triggered[()].connect(lambda template_id=template_id: selectShotTaskTemplate(template_id))
+            x = lambda chk=False, template_id=template_id: selectShotTaskTemplate(template_id)
+            action.triggered[()].connect(x)
         btn_ShotTaskTemplate.setMenu(btn_ShotTaskTemplate_menu)
 
         # General::Create Asset Task Template Label
@@ -2578,7 +2579,8 @@ class flameMenuProjectconnect(flameMenuApp):
             code = template.get('code', 'no_code')
             template_id = template.get('id')
             action = btn_AssetTaskTemplate_menu.addAction(code)
-            action.triggered[()].connect(lambda template_id=template_id: selectAssetTaskTemplate(template_id))
+            x = lambda chk=False, template_id=template_id: selectAssetTaskTemplate(template_id)
+            action.triggered[()].connect(x)
         btn_AssetTaskTemplate.setMenu(btn_AssetTaskTemplate_menu)
 
         # General::AutoRefresh button Label
@@ -2973,7 +2975,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotFields_menu = QtWidgets.QMenu()
         for field in shot_template_fields:
             action = btn_shotFields_menu.addAction(field)
-            action.triggered[()].connect(lambda field=field: addShotField(field))
+            x = lambda chk=False, field=field: addShotField(field)
+            action.triggered[()].connect(x)
         btn_shotFields.setMenu(btn_shotFields_menu)
 
         # Publish::Templates::ShotPane: Batch template default button
@@ -3008,7 +3011,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotBatchFields_menu = QtWidgets.QMenu()
         for field in shot_template_fields:
             action = btn_shotBatchFields_menu.addAction(field)
-            action.triggered[()].connect(lambda field=field: addShotBatchField(field))
+            x = lambda chk=False, field=field: addShotBatchField(field)
+            action.triggered[()].connect(x)
         btn_shotBatchFields.setMenu(btn_shotBatchFields_menu)
 
         # Publish::Templates::ShotPane: Version template default button
@@ -3043,7 +3047,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionFields_menu = QtWidgets.QMenu()
         for field in shot_template_fields:
             action = btn_shotVersionFields_menu.addAction(field)
-            action.triggered[()].connect(lambda field=field: addShotVersionField(field))
+            x = lambda chk=False, field=field: addShotVersionField(field)
+            action.triggered[()].connect(x)
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
         print ('line 3048')
         # Publish::Templates::ShotPane: Version zero button
@@ -3131,7 +3136,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetFields_menu = QtWidgets.QMenu()
         for field in asset_template_fields:
             action = btn_assetFields_menu.addAction(field)
-            action.triggered[()].connect(lambda field=field: addAssetField(field))
+            x = lambda chk=False, field=field: addAssetField(field)
+            action.triggered[()].connect(x)
         btn_assetFields.setMenu(btn_assetFields_menu)
 
         # Publish::Templates::AssetPane: Batch template default button
@@ -3165,7 +3171,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetBatchFields_menu = QtWidgets.QMenu()
         for field in asset_template_fields:
             action = btn_assetBatchFields_menu.addAction(field)
-            action.triggered[()].connect(lambda field=field: addAssetBatchField(field))
+            x = lambda chk=False, field=field: addAssetBatchField(field)
+            action.triggered[()].connect(x)
         btn_assetBatchFields.setMenu(btn_assetBatchFields_menu)
 
         # Publish::Templates::AssetPane: Version template default button
@@ -3199,7 +3206,8 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionFields_menu = QtWidgets.QMenu()
         for field in asset_template_fields:
             action = btn_assetVersionFields_menu.addAction(field)
-            action.triggered[()].connect(lambda field=field: addAssetVersionField(field))
+            x = lambda chk=False, field=field: addAssetVersionField(field)
+            action.triggered[()].connect(x)
         btn_assetVersionFields.setMenu(btn_assetVersionFields_menu)
 
         # Publish::Templates::AssetPane: Version zero button
@@ -3944,7 +3952,8 @@ class flameMenuNewBatch(flameMenuApp):
             code = template.get('code', 'no_code')
             template_id = template.get('id')
             action = btn_AssetTaskTemplate_menu.addAction(code)
-            action.triggered[()].connect(lambda template_id=template_id: selectAssetTaskTemplate(template_id))
+            x = lambda chk=False, template_id=template_id: selectAssetTaskTemplate(template_id)
+            action.triggered[()].connect(x)
         btn_AssetTaskTemplate.setMenu(btn_AssetTaskTemplate_menu)
         vbox.addWidget(btn_AssetTaskTemplate)
 
@@ -4151,15 +4160,18 @@ class flameMenuNewBatch(flameMenuApp):
                     self.sequences_by_id = {x.get('id'):x for x in self.sequences}
                     self.sequences_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in self.sequences}
                     action = btn_Sequence_menu.addAction('DefaultSequence')
-                    action.triggered[()].connect(lambda sequence_id=-1: selectSequence(sequence_id))
+                    x = lambda chk=False, sequence_id=-1: selectSequence(sequence_id)
+                    action.triggered[()].connect(x)
                     for code_id in sorted(self.sequences_by_code_id.keys()):
                         sequence = self.sequences_by_code_id.get(code_id, {})
                         code = sequence.get('code', 'No code')
                         sequence_id = sequence.get('id')
                         action = btn_Sequence_menu.addAction(code)
-                        action.triggered[()].connect(lambda sequence_id=sequence_id: selectSequence(sequence_id))
+                        xx = lambda chk=False, sequence_id=sequence_id: selectSequence(sequence_id)
+                        action.triggered[()].connect(xx)
                     action = btn_Sequence_menu.addAction('Create New Sequence...')
-                    action.triggered[()].connect(lambda sequence_id=0: selectSequence(sequence_id))
+                    xxx = lambda chk=False, sequence_id=0: selectSequence(sequence_id)
+                    action.triggered[()].connect(xxx)
                     btn_Sequence.setMenu(btn_Sequence_menu)
                     self.sequence_id = new_sequence.get('id')
                     btn_Sequence.setText(new_sequence.get('code'))
@@ -4182,15 +4194,18 @@ class flameMenuNewBatch(flameMenuApp):
                                     'QPushButton::menu-indicator {image: none;}')
         btn_Sequence_menu = QtWidgets.QMenu()
         action = btn_Sequence_menu.addAction('DefaultSequence')
-        action.triggered[()].connect(lambda sequence_id=-1: selectSequence(sequence_id))
+        x = lambda chk=False, sequence_id=-1: selectSequence(sequence_id)
+        action.triggered[()].connect(x)
         for code_id in sorted(self.sequences_by_code_id.keys()):
             sequence = self.sequences_by_code_id.get(code_id, {})
             code = sequence.get('code', 'No code')
             sequence_id = sequence.get('id')
             action = btn_Sequence_menu.addAction(code)
-            action.triggered[()].connect(lambda sequence_id=sequence_id: selectSequence(sequence_id))
+            xx = lambda chk=False, sequence_id=sequence_id: selectSequence(sequence_id)
+            action.triggered[()].connect(xx)
         action = btn_Sequence_menu.addAction('Create New Sequence...')
-        action.triggered[()].connect(lambda sequence_id=0: selectSequence(sequence_id))
+        xxx = lambda chk=False, sequence_id=0: selectSequence(sequence_id)
+        action.triggered[()].connect(xxx)
         btn_Sequence.setMenu(btn_Sequence_menu)
         vbox.addWidget(btn_Sequence)
 
@@ -4213,8 +4228,17 @@ class flameMenuNewBatch(flameMenuApp):
         shot_task_templates = self.connector.sg.find('TaskTemplate', [['entity_type', 'is', 'Shot']], ['code'])
         shot_task_templates_by_id = {x.get('id'):x for x in shot_task_templates}
         shot_task_templates_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in shot_task_templates}
+        print ('shot_task_templates_by_id')
+        pprint (shot_task_templates_by_id)
+        print ('shot_task_templates_by_code_id')
+        pprint (shot_task_templates_by_code_id)
+
         def selectShotTaskTemplate(template_id):
+            print ('template_id')
+            pprint (template_id)
             template = shot_task_templates_by_id.get(template_id, {})
+            print ('selected template')
+            pprint (template)
             code = template.get('code', 'no_code')
             btn_ShotTaskTemplate.setText(code)
             self.shot_task_template = template
@@ -4230,7 +4254,8 @@ class flameMenuNewBatch(flameMenuApp):
             code = template.get('code', 'no_code')
             template_id = template.get('id')
             action = btn_ShotTaskTemplate_menu.addAction(code)
-            action.triggered[()].connect(lambda template_id=template_id: selectShotTaskTemplate(template_id))
+            x = lambda chk=False, template_id=template_id: selectShotTaskTemplate(template_id)
+            action.triggered[()].connect(x)
         btn_ShotTaskTemplate.setMenu(btn_ShotTaskTemplate_menu)
         vbox.addWidget(btn_ShotTaskTemplate)
 
