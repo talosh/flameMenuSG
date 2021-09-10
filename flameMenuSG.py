@@ -1367,7 +1367,7 @@ class flameShotgunConnector(object):
             )
         return pipeline_configurations
 
-    def get_tank_name(self, strict = False, custom=True):
+    def get_tank_name(self, strict=False, custom=True):
 
         # if strict set to False:
         # returns user - overrided tank_name if exists, then
@@ -1390,16 +1390,23 @@ class flameShotgunConnector(object):
             [['id', 'is', self.sg_linked_project_id]], 
             ['name', 'tank_name']
             )
+        
         if not project:
             return 'unknown_project'
         if strict:
             return project.get('tank_name', '')
         else:
             if not project.get('tank_name'):
-                name = project.get('name')
-                if not name:
+                project_name = project.get('name')
+                pprint ('project name: %s' % project_name)
+                if not project_name:
                     return 'unknown_project'
-                return self.sanitize_name(name).lower()
+
+                sanitized_name = self.sanitize_name(project_name)
+                if not sanitized_name:
+                    return 'unknown_project'
+
+                return sanitized_name.lower()
 
         return project.get('tank_name').lower()
 
@@ -1413,14 +1420,14 @@ class flameShotgunConnector(object):
         except:
             return False
 
-    def sanitize_name(self, name):
-        if name is None:
+    def sanitize_name(self, name_to_sanitize):
+        if name_to_sanitize is None:
             return None
         
-        name = name.strip()
+        stripped_name = name_to_sanitize.strip()
         exp = re.compile(u'[^\w\.-]', re.UNICODE)
 
-        result = exp.sub('_', value)
+        result = exp.sub('_', stripped_name)
         return re.sub('_\_+', '_', result)
 
     # shotgun storage root related methods
@@ -1900,6 +1907,7 @@ class flameMenuProjectconnect(flameMenuApp):
             menu_item['name'] = 'Sign in to ShotGrid'
             menu_item['execute'] = self.sign_in
             menu['actions'].append(menu_item)
+
         elif self.connector.sg_linked_project:
             menu['name'] = self.menu_group_name
 
@@ -2021,7 +2029,6 @@ class flameMenuProjectconnect(flameMenuApp):
         # storage root section
         self.connector.update_sg_storage_root()
 
-
         def compose_project_path_messge(tank_name):
             self.connector.update_sg_storage_root()
 
@@ -2054,14 +2061,17 @@ class flameMenuProjectconnect(flameMenuApp):
             return msg
 
         def update_project_path_info():
-            tank_name = self.connector.get_tank_name() 
+            print ('update_project_path_info')
+            tank_name = self.connector.get_tank_name()
+            pprint ('got tank name: %s' % tank_name) 
             storage_root_paths.setText(compose_project_path_messge(tank_name))
+            pprint ('got storage root paths: %s' % compose_project_path_messge(tank_name))
 
         def update_pipeline_config_info():
             if self.connector.get_pipeline_configurations():
                 pipeline_config_info.setText('Found')
             else:
-                pipeline_config_info.setText('Clear')
+                pipeline_config_info.setText('None')
 
         def change_storage_root_dialog():
             self.connector.project_path_dialog()
@@ -2167,9 +2177,6 @@ class flameMenuProjectconnect(flameMenuApp):
 
             paneSuperclips.setVisible(True)
 
-
-
-        window = None
         window = QtWidgets.QDialog()
         window.setFixedSize(1028, 328)
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
@@ -2708,11 +2715,12 @@ class flameMenuProjectconnect(flameMenuApp):
         hbox_storage.addWidget(pipeline_config_info, alignment = QtCore.Qt.AlignRight)
         vbox_storage_root.addLayout(hbox_storage)
 
+
         # Publish: StorageRoot: Paths info label
         storage_root_paths = QtWidgets.QLabel(window)
         storage_root_paths.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
         storage_root_paths.setStyleSheet('QFrame {color: #9a9a9a; background-color: #2a2a2a; border: 1px solid #696969 }')
-        
+
         update_project_path_info()
 
         vbox_storage_root.addWidget(storage_root_paths)
@@ -3259,7 +3267,6 @@ class flameMenuProjectconnect(flameMenuApp):
         close_btn.clicked.connect(close_prefs_dialog)
 
         # Set default tab and start window
-
         action_showShot()
         pressPublish()
         window.exec_()
@@ -3277,6 +3284,7 @@ class flameMenuProjectconnect(flameMenuApp):
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
             self.log('Rescan Python Hooks')
+
 
 
 class flameBatchBlessing(flameMenuApp):
