@@ -1398,7 +1398,6 @@ class flameShotgunConnector(object):
         else:
             if not project.get('tank_name'):
                 project_name = project.get('name')
-                pprint ('project name: %s' % project_name)
                 if not project_name:
                     return 'unknown_project'
 
@@ -2061,11 +2060,8 @@ class flameMenuProjectconnect(flameMenuApp):
             return msg
 
         def update_project_path_info():
-            print ('update_project_path_info')
             tank_name = self.connector.get_tank_name()
-            pprint ('got tank name: %s' % tank_name) 
             storage_root_paths.setText(compose_project_path_messge(tank_name))
-            pprint ('got storage root paths: %s' % compose_project_path_messge(tank_name))
 
         def update_pipeline_config_info():
             if self.connector.get_pipeline_configurations():
@@ -2177,6 +2173,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
             paneSuperclips.setVisible(True)
 
+        window = None
         window = QtWidgets.QDialog()
         window.setFixedSize(1028, 328)
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
@@ -2859,7 +2856,8 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: End of upper storage root and export preset section
         vbox_publish.addLayout(hbox_storage_root)
-        
+
+
         ### PUBLISH::TEMPLATES ###
         # Publish::Tempates actions
 
@@ -2942,7 +2940,7 @@ class flameMenuProjectconnect(flameMenuApp):
         paneShotTemplates = QtWidgets.QWidget(paneTemplates)
         paneShotTemplates.setFixedSize(744, 142)
         paneShotTemplates.move(96, 0)
-
+        
         # Publish::Templates::ShotPane: Publish default button
         def setShotDefault():
             txt_shot.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('default', ''))
@@ -2955,7 +2953,6 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotDefault.clicked.connect(setShotDefault)
 
         # Publish::Templates::ShotPane: Publish template text field
-        
         txt_shot_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('value', '')
         txt_shot = QtWidgets.QLineEdit(txt_shot_value, paneShotTemplates)
         txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
@@ -2998,7 +2995,7 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotBatch.setMinimumSize(556, 28)
         txt_shotBatch.move(94, 68)
         txt_shotBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
-
+        print ('line 2999')
         # Publish::Templates::ShotPane: Batch template fields button
         def addShotBatchField(field):
             txt_shotBatch.insert(field)
@@ -3048,7 +3045,7 @@ class flameMenuProjectconnect(flameMenuApp):
             action = btn_shotVersionFields_menu.addAction(field)
             action.triggered[()].connect(lambda field=field: addShotVersionField(field))
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
-
+        print ('line 3048')
         # Publish::Templates::ShotPane: Version zero button
         '''
         def update_shotVersionZero():
@@ -3094,7 +3091,9 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish::Templates::ShotPane: END OF SECTION
         # Publish::Templates::AssetPane: Show and hide
         # depending on an Entity toggle
-        
+
+        print ('line 3095')
+
         paneAssetTemplates = QtWidgets.QWidget(paneTemplates)
         paneAssetTemplates.setFixedSize(744, 142)
         paneAssetTemplates.move(96, 0)
@@ -3252,9 +3251,9 @@ class flameMenuProjectconnect(flameMenuApp):
         # Close button
 
         def close_prefs_dialog():
-            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_render']['value'] = txt_shot.text().encode('utf-8')
-            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_batch']['value'] = txt_shotBatch.text().encode('utf-8')
-            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['version_name']['value'] = txt_shotVersion.text().encode('utf-8')
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_render']['value'] = txt_shot.text()
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['flame_batch']['value'] = txt_shotBatch.text()
+            self.framework.prefs['flameMenuPublisher']['templates']['Shot']['version_name']['value'] = txt_shotVersion.text()
             self.framework.save_prefs()
             window.accept()
 
