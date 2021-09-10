@@ -65,7 +65,7 @@ default_flame_export_presets = {
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
 
-__version__ = 'v0.1.0'
+__version__ = 'v0.1.1 beta 001'
 
 
 class flameAppFramework(object):
@@ -1303,7 +1303,7 @@ class flameShotgunConnector(object):
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         try:
             self.sg_user = authenticator.get_user()
-        except sgtk.authentication.AuthenticationCancelled:
+        except:
             self.prefs_global['user signed out'] = True
             return None
 
@@ -1420,12 +1420,7 @@ class flameShotgunConnector(object):
         name = name.strip()
         exp = re.compile(u'[^\w\.-]', re.UNICODE)
 
-        if isinstance(name, unicode):
-            result = exp.sub('_', value)
-        else:
-            decoded = name.decode('utf-8')
-            result = exp.sub('_', decoded).encode('utf-8')
-
+        result = exp.sub('_', value)
         return re.sub('_\_+', '_', result)
 
     # shotgun storage root related methods
@@ -1809,7 +1804,7 @@ class flameShotgunConnector(object):
             import webbrowser
             jump_to_sg = lambda: webbrowser.open_new(project_url)
             self.tk_engine.register_command(
-                "Launch Shotgun in Web Browser",
+                "Launch ShotGrid in Web Browser",
                 jump_to_sg
             )
 
@@ -1820,7 +1815,7 @@ class flameShotgunConnector(object):
                 self.connector.sg_linked_project_id = None
             
             self.tk_engine.register_command(
-                "Break Link to Shotgun Project",
+                "Break Link to ShotGrid Project",
                 unlink_project
             )
 
@@ -1875,7 +1870,7 @@ class flameMenuProjectconnect(flameMenuApp):
                     'entity': 'Project',
                     'filters': [['archived', 'is', False], ['is_template', 'is', False]],
                     'fields': ['name', 'tank_name']
-                    })
+                    }, perform_query = True)
 
         if self.connector.sg_linked_project and (not self.connector.sg_linked_project_id):
             self.log("project '%s' can not be found" % self.connector.sg_linked_project)
@@ -1902,14 +1897,14 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['name'] = self.menu_group_name
 
             menu_item = {}
-            menu_item['name'] = 'Sign in to Shotgun'
+            menu_item['name'] = 'Sign in to ShotGrid'
             menu_item['execute'] = self.sign_in
             menu['actions'].append(menu_item)
         elif self.connector.sg_linked_project:
             menu['name'] = self.menu_group_name
 
             menu_item = {}
-            menu_item['name'] = 'Unlink from Shotgun project `' + self.connector.sg_linked_project + '`'
+            menu_item['name'] = 'Unlink from ShotGris project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             
@@ -1926,10 +1921,10 @@ class flameMenuProjectconnect(flameMenuApp):
 
         else:
             # menu['name'] = self.menu_group_name + ': Link `' + flame_project_name + '` to Shotgun'
-            menu['name'] = self.menu_group_name + ': Link to Shotgun'
+            menu['name'] = self.menu_group_name + ': Link to ShotGrid'
 
             menu_item = {}
-            menu_item['name'] = '~ Rescan Shotgun Projects'
+            menu_item['name'] = '~ Rescan ShotGrid Projects'
             menu_item['execute'] = self.rescan
             menu['actions'].append(menu_item)
 
@@ -3895,7 +3890,7 @@ class flameMenuNewBatch(flameMenuApp):
 
         window = QtWidgets.QDialog()
         window.setMinimumSize(280, 180)
-        window.setWindowTitle('Create Asset in Shotgun')
+        window.setWindowTitle('Create Asset in ShotGrid')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         window.setStyleSheet('background-color: #313131')
@@ -4031,7 +4026,7 @@ class flameMenuNewBatch(flameMenuApp):
         def newSequenceDialog():
             window_NewSequnece = QtWidgets.QDialog()
             window_NewSequnece.setMinimumSize(280, 100)
-            window_NewSequnece.setWindowTitle('Create New Sequence in Shotgun')
+            window_NewSequnece.setWindowTitle('Create New Sequence in ShotGrid')
             window_NewSequnece.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
             window_NewSequnece.setAttribute(QtCore.Qt.WA_DeleteOnClose)
             window_NewSequnece.setStyleSheet('background-color: #313131')
@@ -4097,7 +4092,7 @@ class flameMenuNewBatch(flameMenuApp):
 
         window = QtWidgets.QDialog()
         window.setMinimumSize(280, 180)
-        window.setWindowTitle('Create Shot in Shotgun')
+        window.setWindowTitle('Create Shot in ShotGrid')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         window.setStyleSheet('background-color: #313131')
@@ -6035,7 +6030,7 @@ class flameMenuPublisher(flameMenuApp):
         # get PublishedFileType from Shotgun
         # if it is not there - create it
         flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
-        self.log('PublishedFile type: %s, querying Shotgun' % flame_render_type)
+        self.log('PublishedFile type: %s, querying ShotGrid' % flame_render_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
         self.log('PublishedFile type: found: %s' % pformat(published_file_type))        
         if not published_file_type:
@@ -6095,7 +6090,7 @@ class flameMenuPublisher(flameMenuApp):
                 
                 # inform user that published file already exists:
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Publish for flame clip %s\nalready exists in shotgun version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+                mbox.setText('Publish for flame clip %s\nalready exists in ShotGrid version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
                 detailed_msg = ''
                 detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
                 mbox.setDetailedText(detailed_msg)
@@ -6322,7 +6317,7 @@ class flameMenuPublisher(flameMenuApp):
 
             # Create version in Shotgun
 
-        self.log('creating version in shotgun')
+        self.log('creating version in ShotGrid')
 
         self.progress.show()
         self.progress.set_progress(version_name, 'Creating version...')
@@ -6342,7 +6337,7 @@ class flameMenuPublisher(flameMenuApp):
         except Exception as e:
             self.progress.hide()
             mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error creating published file in Shotgun')
+            mbox.setText('Error creating published file in ShotGrid')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6362,7 +6357,7 @@ class flameMenuPublisher(flameMenuApp):
             except Exception as e:
                 self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Error uploading version thumbnail to Shotgun')
+                mbox.setText('Error uploading version thumbnail to ShotGrid')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6385,7 +6380,7 @@ class flameMenuPublisher(flameMenuApp):
                 except Exception as e:
                     self.progress.hide()
                     mbox = QtWidgets.QMessageBox()
-                    mbox.setText('Error uploading version preview to Shotgun')
+                    mbox.setText('Error uploading version preview to ShotGrid')
                     mbox.setDetailedText(pformat(e))
                     mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                     # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6399,7 +6394,7 @@ class flameMenuPublisher(flameMenuApp):
 
         # Create 'flame_render' PublishedFile
 
-        self.log('creating flame_render published file in shotgun')
+        self.log('creating flame_render published file in ShotGrid')
 
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
@@ -6419,7 +6414,7 @@ class flameMenuPublisher(flameMenuApp):
         except Exception as e:
             self.progress.hide()
             mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error creating published file in Shotgun')
+            mbox.setText('Error creating published file in ShotGrid')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6443,7 +6438,7 @@ class flameMenuPublisher(flameMenuApp):
             except Exception as e:
                 self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Error uploading thumbnail to Shotgun')
+                mbox.setText('Error uploading thumbnail to ShotGrid')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6597,7 +6592,7 @@ class flameMenuPublisher(flameMenuApp):
         # get published file type for Flame Batch or create a published file type on the fly
 
         flame_batch_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('PublishedFileType', '')
-        self.log('PublishedFile type: %s, querying Shotgun' % flame_batch_type)
+        self.log('PublishedFile type: %s, querying ShotGrid' % flame_batch_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_batch_type]])
         self.log('PublishedFile type: found: %s' % pformat(published_file_type))
         if not published_file_type:
@@ -6607,7 +6602,7 @@ class flameMenuPublisher(flameMenuApp):
             except Exception as e:
                 self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Error creating published file type in Shotgun')
+                mbox.setText('Error creating published file type in ShotGrid')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6638,7 +6633,7 @@ class flameMenuPublisher(flameMenuApp):
         except Exception as e:
             self.progress.hide()
             mbox = QtWidgets.QMessageBox()
-            mbox.setText('Error creating published file in Shotgun')
+            mbox.setText('Error creating published file in ShotGrid')
             mbox.setDetailedText(pformat(e))
             mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
             # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6663,7 +6658,7 @@ class flameMenuPublisher(flameMenuApp):
             except Exception as e:
                 self.progress.hide()
                 mbox = QtWidgets.QMessageBox()
-                mbox.setText('Error uploading thumbnail to Shotgun')
+                mbox.setText('Error uploading thumbnail to ShotGrid')
                 mbox.setDetailedText(pformat(e))
                 mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
                 # mbox.setStyleSheet('QLabel{min-width: 400px;}')
@@ -6746,7 +6741,7 @@ class flameMenuPublisher(flameMenuApp):
 
             def retranslateUi(self, Progress):
                 Progress.setWindowTitle(QtGui.QApplication.translate("Progress", "Form", None, QtGui.QApplication.UnicodeUTF8))
-                self.progress_header.setText(QtGui.QApplication.translate("Progress", "Shotgun Integration", None, QtGui.QApplication.UnicodeUTF8))
+                self.progress_header.setText(QtGui.QApplication.translate("Progress", "ShotGrid Integration", None, QtGui.QApplication.UnicodeUTF8))
                 self.progress_message.setText(QtGui.QApplication.translate("Progress", "Updating config....", None, QtGui.QApplication.UnicodeUTF8))
 
         class Progress(QtGui.QWidget):
