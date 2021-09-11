@@ -185,8 +185,12 @@ class flameAppFramework(object):
         self.apps = []
 
     def log(self, message):
+        print ('[%s] %s' % (self.bundle_name, message))
+
+    def log_debug(self, message):
         if self.debug:
             print ('[DEBUG %s] %s' % (self.bundle_name, message))
+
 
     def load_prefs(self):
         import pickle
@@ -197,32 +201,34 @@ class flameAppFramework(object):
         prefs_global_file_path = prefix + '.prefs'
 
         try:
-            prefs_file = open(prefs_file_path, 'r')
+            prefs_file = open(prefs_file_path, 'rb')
             self.prefs = pickle.load(prefs_file)
             prefs_file.close()
-            self.log('preferences loaded from %s' % prefs_file_path)
-            self.log('preferences contents:\n' + pformat(self.prefs))
-        except:
+            self.log_debug('preferences loaded from %s' % prefs_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs))
+        except Exception as e:
             self.log('unable to load preferences from %s' % prefs_file_path)
+            self.log_debug(e)
 
         try:
-            prefs_file = open(prefs_user_file_path, 'r')
+            prefs_file = open(prefs_user_file_path, 'rb')
             self.prefs_user = pickle.load(prefs_file)
             prefs_file.close()
-            self.log('preferences loaded from %s' % prefs_user_file_path)
-            self.log('preferences contents:\n' + pformat(self.prefs_user))
-        except:
+            self.log_debug('preferences loaded from %s' % prefs_user_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs_user))
+        except Exception as e:
             self.log('unable to load preferences from %s' % prefs_user_file_path)
+            self.log_debug(e)
 
         try:
-            prefs_file = open(prefs_global_file_path, 'r')
+            prefs_file = open(prefs_global_file_path, 'rb')
             self.prefs_global = pickle.load(prefs_file)
             prefs_file.close()
-            self.log('preferences loaded from %s' % prefs_global_file_path)
-            self.log('preferences contents:\n' + pformat(self.prefs_global))
-
-        except:
+            self.log_debug('preferences loaded from %s' % prefs_global_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs_global))
+        except Exception as e:
             self.log('unable to load preferences from %s' % prefs_global_file_path)
+            self.log_debug(e)
 
         return True
 
@@ -233,7 +239,7 @@ class flameAppFramework(object):
             try:
                 os.makedirs(self.prefs_folder)
             except:
-                self.log('unable to create folder %s' % prefs_folder)
+                self.log('unable to create folder %s' % self.prefs_folder)
                 return False
 
         prefix = self.prefs_folder + os.path.sep + self.bundle_name
@@ -242,31 +248,34 @@ class flameAppFramework(object):
         prefs_global_file_path = prefix + '.prefs'
 
         try:
-            prefs_file = open(prefs_file_path, 'w')
+            prefs_file = open(prefs_file_path, 'wb')
             pickle.dump(self.prefs, prefs_file)
             prefs_file.close()
-            self.log('preferences saved to %s' % prefs_file_path)
-            self.log('preferences contents:\n' + pformat(self.prefs))
-        except:
+            self.log_debug('preferences saved to %s' % prefs_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs))
+        except Exception as e:
             self.log('unable to save preferences to %s' % prefs_file_path)
+            self.log_debug(e)
 
         try:
-            prefs_file = open(prefs_user_file_path, 'w')
+            prefs_file = open(prefs_user_file_path, 'wb')
             pickle.dump(self.prefs_user, prefs_file)
             prefs_file.close()
-            self.log('preferences saved to %s' % prefs_user_file_path)
-            self.log('preferences contents:\n' + pformat(self.prefs_user))
+            self.log_debug('preferences saved to %s' % prefs_user_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs_user))
         except:
             self.log('unable to save preferences to %s' % prefs_user_file_path)
+            self.log_debug(e)
 
         try:
-            prefs_file = open(prefs_global_file_path, 'w')
+            prefs_file = open(prefs_global_file_path, 'wb')
             pickle.dump(self.prefs_global, prefs_file)
             prefs_file.close()
-            self.log('preferences saved to %s' % prefs_global_file_path)
-            self.log('preferences contents:\n' + pformat(self.prefs_global))
+            self.log_debug('preferences saved to %s' % prefs_global_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs_global))
         except:
             self.log('unable to save preferences to %s' % prefs_global_file_path)
+            self.log_debug(e)
             
         return True
 
@@ -570,6 +579,9 @@ class flameMenuApp(object):
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
 
+    def log_debug(self, message):
+        self.framework.log_debug('[' + self.name + '] ' + message)
+
     def rescan(self, *args, **kwargs):
         if not self.flame:
             try:
@@ -580,11 +592,11 @@ class flameMenuApp(object):
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
-            self.log('Rescan Python Hooks')
+            self.log_debug('Rescan Python Hooks')
 
     def get_export_preset_fields(self, preset):
         
-        self.log('Flame export preset parser')
+        self.log_debug('Flame export preset parser')
 
         # parses Flame Export preset and returns a dict of a parsed values
         # of False on error.
@@ -636,7 +648,7 @@ class flameMenuApp(object):
                 preset_file = preset_file[1:]
             preset_path = os.path.join(path_prefix, preset_file)
 
-        self.log('parsing Flame export preset: %s' % preset_path)
+        self.log_debug('parsing Flame export preset: %s' % preset_path)
         
         preset_xml_doc = None
         try:
@@ -714,7 +726,7 @@ class flameShotgunConnector(object):
         self.sg_user_name = None
         self.sg = None
         if not self.prefs_global.get('user signed out', False):
-            self.log('requesting for Shotgun user')
+            self.log_debug('requesting for Shotgun user')
             self.get_user()
         
         self.flame_project = None
@@ -761,6 +773,9 @@ class flameShotgunConnector(object):
     def log(self, message):
         self.framework.log('[' + self.name + '] ' + message)
 
+    def log_debug(self, message):
+        self.framework.log_debug('[' + self.name + '] ' + message)
+
     # background loops and related functions
 
     def cache_long_loop(self, timeout):
@@ -779,13 +794,13 @@ class flameShotgunConnector(object):
                 sg = self.sg_user.create_sg_connection()
                 self.cache_hardupdate(sg = sg)
             except Exception as e:
-                self.log('error hard updating cache in cache_long_loop: %s' % e)
+                self.log_debug('error hard updating cache in cache_long_loop: %s' % e)
             
             if sg: sg.close()
             
             self.preformat_common_queries()
 
-            self.log('cache_long_loop took %s sec' % str(time.time() - start))
+            self.log_debug('cache_long_loop took %s sec' % str(time.time() - start))
             delta = time.time() - start
             last_delta = recent_deltas[len(recent_deltas) - 1]
             recent_deltas.pop(0)
@@ -816,14 +831,14 @@ class flameShotgunConnector(object):
                 sg = self.sg_user.create_sg_connection()
                 self.cache_softupdate(sg = sg)
             except Exception as e:
-                self.log('error soft updating cache in cache_short_loop: %s' % e)
+                self.log_debug('error soft updating cache in cache_short_loop: %s' % e)
             
             if sg: sg.close()
 
             self.preformat_common_queries()
 
             delta = time.time() - start
-            self.log('cache_short_loop took %s sec' % str(delta))
+            self.log_debug('cache_short_loop took %s sec' % str(delta))
 
             last_delta = recent_deltas[len(recent_deltas) - 1]
             recent_deltas.pop(0)
@@ -851,7 +866,7 @@ class flameShotgunConnector(object):
         else:
             for n in range(int(timeout - time_passed) * 10):
                 if not self.threads:
-                    self.log('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
+                    self.log_debug('leaving loop thread: %s' % inspect.currentframe().f_back.f_code.co_name)
                     break
                 time.sleep(0.1)
 
@@ -863,7 +878,7 @@ class flameShotgunConnector(object):
         if not uid:
             uid = (str(uuid.uuid1()).replace('-', '')).upper()
         
-        self.log ('registering\n %s under uid: %s' % (pformat(query), uid))
+        self.log_debug('registering\n %s under uid: %s' % (pformat(query), uid))
 
         self.async_cache[uid] = {'query': query, 'result': {}}
         
@@ -895,7 +910,7 @@ class flameShotgunConnector(object):
                     result = sg.find(entity, filters, fields)
                     result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
-                    self.log('error performing long fetch on register %s' % e)
+                    self.log_debug('error performing long fetch on register %s' % e)
 
                 flag.append(True )
                 self.async_cache[uid]['result'] = result_by_id
@@ -905,7 +920,7 @@ class flameShotgunConnector(object):
                 if sg: sg.close()
 
                 delta = time.time() - start
-                self.log('long fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                self.log_debug('long fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
             def quick_fetch(query, uid, flag):
                 from datetime import datetime, timedelta
@@ -922,13 +937,13 @@ class flameShotgunConnector(object):
                     result = sg.find(entity, filters, fields, limit=99)
                     result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
-                    self.log('error performing quick_fetch query on register %s' % e)
+                    self.log_debug('error performing quick_fetch query on register %s' % e)
 
                 for entity_id in result_by_id.keys():
                     self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
 
                 delta = time.time() - start
-                self.log('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                self.log_debug('quick_fetch: query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
                 '''
 
                 sg = None
@@ -938,7 +953,7 @@ class flameShotgunConnector(object):
                 try:
                     sg = self.sg_user.create_sg_connection()
                 except Exception as e:
-                    self.log('error performing quick_fetch query on register %s' % e)
+                    self.log_debug('error performing quick_fetch query on register %s' % e)
 
                 day = 0
                 max_days = 99
@@ -954,7 +969,7 @@ class flameShotgunConnector(object):
                         result = sg.find(entity, day_filters, fields)
                         result_by_id = {e.get('id'):e for e in result}
                     except Exception as e:
-                        self.log('error performing quick_fetch query on register %s' % e)
+                        self.log_debug('error performing quick_fetch query on register %s' % e)
 
                     for entity_id in result_by_id.keys():
                         self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
@@ -962,7 +977,7 @@ class flameShotgunConnector(object):
                     self.preformat_common_queries()
 
                     delta = time.time() - start
-                    self.log('quick_fetch for day %s: query: %s, len: %s took %s' % (abs(day), entity, len(result_by_id.keys()), delta))
+                    self.log_debug('quick_fetch for day %s: query: %s, len: %s took %s' % (abs(day), entity, len(result_by_id.keys()), delta))
 
                     day += 1
                     if day > max_days:
@@ -1013,7 +1028,7 @@ class flameShotgunConnector(object):
             entity = query_body.get('entity')
             filters = query_body.get('filters')
             fields = query_body.get('fields')
-            self.log('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
+            self.log_debug('async cache query: entity: %s, filters %s, fields %s' % (entity, filters, fields))
 
             # perform actual shotgun query
             
@@ -1022,13 +1037,13 @@ class flameShotgunConnector(object):
             try:
                 current_result = sg.find(entity, filters, fields)
             except Exception as e:
-                self.log('error performing query on cache_retrive_result %s' % e)
+                self.log_debug('error performing query on cache_retrive_result %s' % e)
             
             if current_result:
                 try:
                     current_result_by_id = {e.get('id'):e for e in current_result}
                 except Exception as e:
-                    self.log('error grouping shotgun query result by uid in cache_retrive_result: %s' % e)
+                    self.log_debug('error grouping shotgun query result by uid in cache_retrive_result: %s' % e)
 
             if current_result_by_id:
                 self.async_cache[uid]['result'] = current_result_by_id
@@ -1169,7 +1184,7 @@ class flameShotgunConnector(object):
                     if result:
                         result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
-                    self.log('error hard updating cache %s' % e)
+                    self.log_debug('error hard updating cache %s' % e)
 
                 for entity_id in result_by_id:
                     self.async_cache[cache_request_uid]['result'][entity_id] = result_by_id.get(entity_id)
@@ -1177,7 +1192,7 @@ class flameShotgunConnector(object):
                 results_by_hash[hash(pformat(query))] = result_by_id
 
                 # delta = time.time() - start
-                # self.log('softupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                # self.log_debug('softupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
     def cache_hardupdate(self, sg = None):
         
@@ -1216,13 +1231,13 @@ class flameShotgunConnector(object):
                     if result:
                         result_by_id = {e.get('id'):e for e in result}
                 except Exception as e:
-                    self.log('error hard updating cache %s' % e)
+                    self.log_debug('error hard updating cache %s' % e)
                 
                 self.async_cache[cache_request_uid]['result'] = result_by_id
                 results_by_hash[hash(pformat(query))] = result_by_id
                 
                 # delta = time.time() - start
-                # self.log('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
+                # self.log_debug('hardupdate query: %s, len: %s took %s' % (entity, len(result_by_id.keys()), delta))
 
     def preformat_common_queries(self):
 
@@ -1292,7 +1307,7 @@ class flameShotgunConnector(object):
             self.sg_user_name = self.sg_human_user.get('name', None)
             if not self.sg_user_name:
                 self.sg_user_name = self.sg_user.login
-            self.log('human user update took %s' % (time.time() - start))
+            self.log_debug('human user update took %s' % (time.time() - start))
             return True
         except:
             return False
@@ -1329,29 +1344,29 @@ class flameShotgunConnector(object):
         try:
             import flame
         except:
-            self.log('no flame module avaliable to import')
+            self.log_debug('no flame module avaliable to import')
             return False
         try:
             if self.flame_project != flame.project.current_project.name:
-                self.log('updating flame project name: %s' % flame.project.current_project.name)
+                self.log_debug('updating flame project name: %s' % flame.project.current_project.name)
                 self.flame_project = flame.project.current_project.name
         except:
             return False
 
         try:
             if self.sg_linked_project != flame.project.current_project.shotgun_project_name:
-                self.log('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
+                self.log_debug('updating shotgun linked project name: %s' % flame.project.current_project.shotgun_project_name)
                 self.sg_linked_project = flame.project.current_project.shotgun_project_name.get_value()
         except:
             return False
 
         if self.sg_user:
-            self.log('updating project id')
+            self.log_debug('updating project id')
             project = self.sg.find_one('Project', [['name', 'is', self.sg_linked_project]])
             if project:
                 self.sg_linked_project_id = project.get('id')
             else:
-                self.log('no project id found for project name: %s' % flame.project.current_project.shotgun_project_name)
+                self.log_debug('no project id found for project name: %s' % flame.project.current_project.shotgun_project_name)
         return True
 
     def get_pipeline_configurations(self):
@@ -1455,7 +1470,7 @@ class flameShotgunConnector(object):
 
         if not sg_storage_data:
             message = '<p align = "center">'
-            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += 'Local file storage has to be defined on Shotgrid website first.<br><br>'
             message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
             message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
             self.mbox.setText(message)
@@ -1512,7 +1527,7 @@ class flameShotgunConnector(object):
 
         if not sg_storage_data:
             message = '<p align = "center">'
-            message += 'No Local File Storage(s) defined in Shotgun.<br><br>'
+            message += 'Local file storage has to be defined on Shotgrid website first.<br><br>'
             message += '<i>(Click on arrow at the upper right corner of your Shotgun website ' 
             message += 'next to user icon and choose Site Preferences -> File Management to create one)</i><br>'
             self.mbox.setText(message)
@@ -1879,8 +1894,8 @@ class flameMenuProjectconnect(flameMenuApp):
                     }, perform_query = True)
 
         if self.connector.sg_linked_project and (not self.connector.sg_linked_project_id):
-            self.log("project '%s' can not be found" % self.connector.sg_linked_project)
-            self.log("unlinking project: '%s'" % self.connector.sg_linked_project)
+            self.log_debug("project '%s' can not be found" % self.connector.sg_linked_project)
+            self.log_debug("unlinking project: '%s'" % self.connector.sg_linked_project)
             self.unlink_project()
         
     def __getattr__(self, name):
@@ -2867,9 +2882,10 @@ class flameMenuProjectconnect(flameMenuApp):
             # btn_Entity.setText('Shot')
             btn_Shot.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Asset.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            lbl_shotTemplate.setText('Shot Publish')
-            lbl_batchTemplate.setText('Shot Batch')
-            lbl_versionTemplate.setText('Shot Version')
+            lbl_templates.setText('Publishing Templates: Shot')
+            # lbl_shotTemplate.setText('Shot Publish')
+            # lbl_batchTemplate.setText('Shot Batch')
+            # lbl_versionTemplate.setText('Shot Version')
             paneAssetTemplates.setVisible(False)
             paneShotTemplates.setVisible(True)
 
@@ -2877,9 +2893,10 @@ class flameMenuProjectconnect(flameMenuApp):
             # btn_Entity.setText('Asset')
             btn_Shot.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
             btn_Asset.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            lbl_shotTemplate.setText('Asset Publish')
-            lbl_batchTemplate.setText('Asset Batch')
-            lbl_versionTemplate.setText('Asset Version')
+            lbl_templates.setText('Publishing Templates: Asset')
+            # lbl_shotTemplate.setText('Asset Publish')
+            # lbl_batchTemplate.setText('Asset Batch')
+            # lbl_versionTemplate.setText('Asset Version')
             paneShotTemplates.setVisible(False)
             paneAssetTemplates.setVisible(True)
 
@@ -2916,23 +2933,23 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish::Tempates: label
 
-        lbl_templates = QtWidgets.QLabel('Publishing Templates', paneTemplates)
+        lbl_templates = QtWidgets.QLabel('Publishing Templates: Shot', paneTemplates)
         lbl_templates.setStyleSheet('QFrame {color: #989898; background-color: #373737}')
         lbl_templates.setFixedSize(840, 28)
         lbl_templates.setAlignment(QtCore.Qt.AlignCenter)
 
         # Publish::Tempates: Publish Template label
-        lbl_shotTemplate = QtWidgets.QLabel('Shot Publish', paneTemplates)
+        lbl_shotTemplate = QtWidgets.QLabel('Publish', paneTemplates)
         lbl_shotTemplate.setFixedSize(88, 28)
         lbl_shotTemplate.move(0, 34)
 
         # Publish::Tempates: Batch Template label
-        lbl_batchTemplate = QtWidgets.QLabel('Shot Batch', paneTemplates)
+        lbl_batchTemplate = QtWidgets.QLabel('Batch', paneTemplates)
         lbl_batchTemplate.setFixedSize(88, 28)
         lbl_batchTemplate.move(0, 68)
 
         # Publish::Tempates: Version Template label
-        lbl_versionTemplate = QtWidgets.QLabel('Shot Version', paneTemplates)
+        lbl_versionTemplate = QtWidgets.QLabel('Version', paneTemplates)
         lbl_versionTemplate.setFixedSize(88, 28)
         lbl_versionTemplate.move(0, 102)
 
@@ -2940,8 +2957,8 @@ class flameMenuProjectconnect(flameMenuApp):
         # depending on an Entity toggle
         
         paneShotTemplates = QtWidgets.QWidget(paneTemplates)
-        paneShotTemplates.setFixedSize(744, 142)
-        paneShotTemplates.move(96, 0)
+        paneShotTemplates.setFixedSize(776, 142)
+        paneShotTemplates.move(64, 34)
         
         # Publish::Templates::ShotPane: Publish default button
         def setShotDefault():
@@ -2949,7 +2966,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotDefault.setFixedSize(88, 28)
-        btn_shotDefault.move(0, 34)
+        btn_shotDefault.move(0, 0)
         btn_shotDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotDefault.clicked.connect(setShotDefault)
@@ -2958,8 +2975,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shot_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('value', '')
         txt_shot = QtWidgets.QLineEdit(txt_shot_value, paneShotTemplates)
         txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_shot.setFixedSize(556, 28)
-        txt_shot.move (94, 34)
+        txt_shot.setFixedSize(588, 28)
+        txt_shot.move (94, 0)
         txt_shot.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Publish template fields button
@@ -2968,7 +2985,7 @@ class flameMenuProjectconnect(flameMenuApp):
         shot_template_fields = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('fields', [])
         btn_shotFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotFields.setFixedSize(88, 28)
-        btn_shotFields.move(656, 34)
+        btn_shotFields.move(688, 0)
         btn_shotFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
@@ -2985,7 +3002,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotBatchDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchDefault.setFixedSize(88, 28)
-        btn_shotBatchDefault.move(0, 68)
+        btn_shotBatchDefault.move(0, 34)
         btn_shotBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotBatchDefault.clicked.connect(setShotBatchDefault)
@@ -2995,17 +3012,17 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotBatch_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_batch').get('value', '')
         txt_shotBatch = QtWidgets.QLineEdit(txt_shotBatch_value, paneShotTemplates)
         txt_shotBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_shotBatch.setMinimumSize(556, 28)
-        txt_shotBatch.move(94, 68)
+        txt_shotBatch.setMinimumSize(588, 28)
+        txt_shotBatch.move(94, 34)
         txt_shotBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
-        print ('line 2999')
+
         # Publish::Templates::ShotPane: Batch template fields button
         def addShotBatchField(field):
             txt_shotBatch.insert(field)
         btn_shotBatchFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotBatchFields.setMinimumSize(88, 28)
-        btn_shotBatchFields.move(656, 68)
+        btn_shotBatchFields.move(688, 34)
         btn_shotBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotBatchFields_menu = QtWidgets.QMenu()
@@ -3021,7 +3038,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionDefault = QtWidgets.QPushButton('Default', paneShotTemplates)
         btn_shotVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionDefault.setMinimumSize(88, 28)
-        btn_shotVersionDefault.move(0, 102)
+        btn_shotVersionDefault.move(0, 68)
         btn_shotVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotVersionDefault.clicked.connect(setShotVersionDefault)
@@ -3032,7 +3049,7 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_shotVersion = QtWidgets.QLineEdit(txt_shotVersion_value, paneShotTemplates)
         txt_shotVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_shotVersion.setMinimumSize(256, 28)
-        txt_shotVersion.move(94, 102)
+        txt_shotVersion.move(94, 68)
         txt_shotVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::ShotPane: Version template fields button
@@ -3041,7 +3058,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotVersionFields = QtWidgets.QPushButton('Add Field', paneShotTemplates)
         btn_shotVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_shotVersionFields.setMinimumSize(88, 28)
-        btn_shotVersionFields.move(356, 102)
+        btn_shotVersionFields.move(356, 68)
         btn_shotVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_shotVersionFields_menu = QtWidgets.QMenu()
@@ -3050,7 +3067,7 @@ class flameMenuProjectconnect(flameMenuApp):
             x = lambda chk=False, field=field: addShotVersionField(field)
             action.triggered[()].connect(x)
         btn_shotVersionFields.setMenu(btn_shotVersionFields_menu)
-        print ('line 3048')
+
         # Publish::Templates::ShotPane: Version zero button
         '''
         def update_shotVersionZero():
@@ -3058,13 +3075,7 @@ class flameMenuProjectconnect(flameMenuApp):
             version_zero = publish_prefs.get('version_zero', False)
             if version_zero:
                 btn_shotVersionZero.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-            else:
-                btn_shotVersionZero.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
-
-        def clicked_shotVersionZero():
-            publish_prefs = self.framework.prefs.get('flameMenuPublisher', {})
-            version_zero = publish_prefs.get('version_zero', False)
-            self.framework.prefs['flameMenuPublisher']['version_zero'] = not version_zero
+            else:sequences/{SeqnuPublisher']['version_zero'] = not version_zero
             update_shotVersionZero()
             update_assetVersionZero()
 
@@ -3097,11 +3108,9 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish::Templates::AssetPane: Show and hide
         # depending on an Entity toggle
 
-        print ('line 3095')
-
         paneAssetTemplates = QtWidgets.QWidget(paneTemplates)
-        paneAssetTemplates.setFixedSize(744, 142)
-        paneAssetTemplates.move(96, 0)
+        paneAssetTemplates.setFixedSize(776, 142)
+        paneAssetTemplates.move(64, 34)
 
         # Publish::Templates::AssetPane: Publish default button
         def setAssetDefault():
@@ -3109,7 +3118,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetDefault.setFixedSize(88, 28)
-        btn_assetDefault.move(0, 34)
+        btn_assetDefault.move(0, 0)
         btn_assetDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetDefault.clicked.connect(setAssetDefault)
@@ -3118,8 +3127,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_asset_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_render').get('value', '')
         txt_asset = QtWidgets.QLineEdit(txt_asset_value, paneAssetTemplates)
         txt_asset.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_asset.setFixedSize(556, 28)
-        txt_asset.move (94, 34)
+        txt_asset.setFixedSize(588, 28)
+        txt_asset.move (94, 0)
         txt_asset.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Publish template fields button
@@ -3129,7 +3138,7 @@ class flameMenuProjectconnect(flameMenuApp):
             txt_asset.insert(field)
         btn_assetFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetFields.setFixedSize(88, 28)
-        btn_assetFields.move(656, 34)
+        btn_assetFields.move(688, 0)
         btn_assetFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
@@ -3146,7 +3155,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetBatchDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetBatchDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchDefault.setFixedSize(88, 28)
-        btn_assetBatchDefault.move(0, 68)
+        btn_assetBatchDefault.move(0, 34)
         btn_assetBatchDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetBatchDefault.clicked.connect(setAssetBatchDefault)
@@ -3155,8 +3164,8 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_assetBatch_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Asset', {}).get('flame_batch').get('value', '')
         txt_assetBatch = QtWidgets.QLineEdit(txt_assetBatch_value, paneAssetTemplates)
         txt_assetBatch.setFocusPolicy(QtCore.Qt.ClickFocus)
-        txt_assetBatch.setMinimumSize(556, 28)
-        txt_assetBatch.move(94, 68)
+        txt_assetBatch.setMinimumSize(588, 28)
+        txt_assetBatch.move(94, 34)
         txt_assetBatch.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Batch template fields button
@@ -3165,7 +3174,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetBatchFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetBatchFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetBatchFields.setMinimumSize(88, 28)
-        btn_assetBatchFields.move(656, 68)
+        btn_assetBatchFields.move(688, 34)
         btn_assetBatchFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetBatchFields_menu = QtWidgets.QMenu()
@@ -3181,7 +3190,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionDefault = QtWidgets.QPushButton('Default', paneAssetTemplates)
         btn_assetVersionDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionDefault.setMinimumSize(88, 28)
-        btn_assetVersionDefault.move(0, 102)
+        btn_assetVersionDefault.move(0, 68)
         btn_assetVersionDefault.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetVersionDefault.clicked.connect(setAssetVersionDefault)
@@ -3191,7 +3200,7 @@ class flameMenuProjectconnect(flameMenuApp):
         txt_assetVersion = QtWidgets.QLineEdit(txt_assetVersion_value, paneAssetTemplates)
         txt_assetVersion.setFocusPolicy(QtCore.Qt.ClickFocus)
         txt_assetVersion.setMinimumSize(256, 28)
-        txt_assetVersion.move(94, 102)
+        txt_assetVersion.move(94, 68)
         txt_assetVersion.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
 
         # Publish::Templates::AssetPane: Version template fields button
@@ -3200,7 +3209,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_assetVersionFields = QtWidgets.QPushButton('Add Field', paneAssetTemplates)
         btn_assetVersionFields.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_assetVersionFields.setMinimumSize(88, 28)
-        btn_assetVersionFields.move(356, 102)
+        btn_assetVersionFields.move(356, 68)
         btn_assetVersionFields.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
                                     'QPushButton:pressed {font:italic; color: #d9d9d9}')
         btn_assetVersionFields_menu = QtWidgets.QMenu()
@@ -3290,8 +3299,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
-            self.log('Rescan Python Hooks')
-
+            self.log_debug('Rescan Python Hooks')
 
 
 class flameBatchBlessing(flameMenuApp):
@@ -3328,7 +3336,7 @@ class flameBatchBlessing(flameMenuApp):
         if not os.path.isdir(flame_batch_path):
             try:
                 os.makedirs(flame_batch_path)
-                self.log('creating %s' % flame_batch_path)
+                self.log_debug('creating %s' % flame_batch_path)
             except:
                 print ('PYTHON\t: %s can not create %s' % (self.framework.bundle_name, flame_batch_path))
                 return False
@@ -3432,7 +3440,7 @@ class flameBatchBlessing(flameMenuApp):
                 for segment in track.segments:
                     new_comment = segment.comment + blessing_string
                     segment.comment = new_comment
-                    self.log ('blessing %s with %s' % (clip.name, blessing_string))
+                    self.log_debug('blessing %s with %s' % (clip.name, blessing_string))
         return True
 
     def bless_batch_renders(self, userData):
@@ -4015,12 +4023,12 @@ class flameMenuNewBatch(flameMenuApp):
                 data = {'project': {'type': 'Project','id': self.connector.sg_linked_project_id},
                 'code': self.asset_name,
                 'task_template': self.asset_task_template}
-                self.log('creating new asset...')
+                self.log_debug('creating new asset...')
                 new_asset = self.connector.sg.create('Asset', data)
-                self.log('new asset:\n%s' % pformat(new_asset))
-                self.log('updating async cache for cuttent_tasks')
+                self.log_debug('new asset:\n%s' % pformat(new_asset))
+                self.log_debug('updating async cache for cuttent_tasks')
                 self.connector.cache_retrive_result('current_tasks', True)
-                self.log('creating new batch')
+                self.log_debug('creating new batch')
                 self.create_new_batch(new_asset)
 
                 for app in self.framework.apps:
@@ -4228,17 +4236,9 @@ class flameMenuNewBatch(flameMenuApp):
         shot_task_templates = self.connector.sg.find('TaskTemplate', [['entity_type', 'is', 'Shot']], ['code'])
         shot_task_templates_by_id = {x.get('id'):x for x in shot_task_templates}
         shot_task_templates_by_code_id = {x.get('code') + '_' + str(x.get('id')):x for x in shot_task_templates}
-        print ('shot_task_templates_by_id')
-        pprint (shot_task_templates_by_id)
-        print ('shot_task_templates_by_code_id')
-        pprint (shot_task_templates_by_code_id)
 
         def selectShotTaskTemplate(template_id):
-            print ('template_id')
-            pprint (template_id)
             template = shot_task_templates_by_id.get(template_id, {})
-            print ('selected template')
-            pprint (template)
             code = template.get('code', 'no_code')
             btn_ShotTaskTemplate.setText(code)
             self.shot_task_template = template
@@ -4330,12 +4330,12 @@ class flameMenuNewBatch(flameMenuApp):
                 'code': self.shot_name,
                 'sg_sequence': shot_sequence,
                 'task_template': self.shot_task_template}
-                self.log('creating new shot...')
+                self.log_debug('creating new shot...')
                 new_shot = self.connector.sg.create('Shot', data)
-                self.log('new shot:\n%s' % pformat(new_shot))
-                self.log('updating async cache for current tasks')
+                self.log_debug('new shot:\n%s' % pformat(new_shot))
+                self.log_debug('updating async cache for current tasks')
                 self.connector.cache_retrive_result('current_tasks', True)
-                self.log('creating new batch')
+                self.log_debug('creating new batch')
                 self.create_new_batch(new_shot)
 
                 # for app in self.framework.apps:
@@ -4440,7 +4440,7 @@ class flameMenuNewBatch(flameMenuApp):
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
-            self.log('Rescan Python Hooks')
+            self.log_debug('Rescan Python Hooks')
 
 
 class flameMenuBatchLoader(flameMenuApp):
@@ -5547,7 +5547,7 @@ class flameMenuPublisher(flameMenuApp):
             human_user = self.connector.sg_human_user
 
         menu = {}
-        menu['name'] = 'Publish ' + entity.get('code') + ':'
+        menu['name'] = self.menu_group_name + ' Publish ' + entity.get('code') + ':'
         menu['actions'] = []
 
         menu_item = {}
@@ -5803,7 +5803,7 @@ class flameMenuPublisher(flameMenuApp):
         versions_failed = set()
         pb_published = dict()
         pb_failed = dict()
-
+        print ('line 5795')
         for clip in selection:
             pb_info, is_cancelled = self.publish_clip(clip, entity, project_path, export_preset_fields)
 
@@ -5905,8 +5905,8 @@ class flameMenuPublisher(flameMenuApp):
 
         # Process info we've got from entity
 
-        self.log('Starting publish_clip for %s with entity:' % pb_info.get('flame_clip_name'))
-        self.log('\n%s' % pformat(entity))
+        self.log_debug('Starting publish_clip for %s with entity:' % pb_info.get('flame_clip_name'))
+        self.log_debug('\n%s' % pformat(entity))
 
         task = entity.get('task')
         task_entity = task.get('entity')
@@ -5929,7 +5929,7 @@ class flameMenuPublisher(flameMenuApp):
         # if the clip consists of several clips with different linked batch setups
         # fall back to the current batch setup (should probably publish all of them?)
 
-        self.log('looking for linked batch setup...')
+        self.log_debug('looking for linked batch setup...')
 
         import ast
 
@@ -5950,11 +5950,11 @@ class flameMenuPublisher(flameMenuApp):
                 except:
                     pass
 
-        self.log('linked batch setup: %s' % linked_batch_path)
+        self.log_debug('linked batch setup: %s' % linked_batch_path)
 
         # basic name/version detection from clip name
 
-        self.log('parsing clip name %s' % pb_info.get('flame_clip_name'))
+        self.log_debug('parsing clip name %s' % pb_info.get('flame_clip_name'))
 
         batch_group_name = self.flame.batch.name.get_value()
 
@@ -5984,21 +5984,21 @@ class flameMenuPublisher(flameMenuApp):
         if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
             clip_name = clip_name[:-1]
 
-        self.log('parsed clip_name: %s' % clip_name)
+        self.log_debug('parsed clip_name: %s' % clip_name)
 
         if version_number == -1:
-            self.log('can not parse version, looking for batch iterations')
+            self.log_debug('can not parse version, looking for batch iterations')
             version_number = len(self.flame.batch.batch_iterations) + 1
             # if (version_number == 0) and (not self.prefs.get('version_zero', False)):
             #    version_number = 1
             version_padding = 3
         
-        self.log('version number: %s' % version_number)
-        self.log('version_zero status: %s' % self.prefs.get('version_zero', False))
+        self.log_debug('version number: %s' % version_number)
+        self.log_debug('version_zero status: %s' % self.prefs.get('version_zero', False))
 
         # collect known template fields
 
-        self.log('preset fields: %s' % pformat(preset_fields))
+        self.log_debug('preset fields: %s' % pformat(preset_fields))
 
         if preset_fields.get('type') == 'movie':
             sg_frame = ''
@@ -6018,26 +6018,26 @@ class flameMenuPublisher(flameMenuApp):
         template_fields['ext'] = preset_fields.get('fileExt')
         template_fields['frame'] = sg_frame
 
-        self.log('template fields:')
-        self.log('\n%s' % pformat(template_fields))
+        self.log_debug('template fields:')
+        self.log_debug('\n%s' % pformat(template_fields))
 
         # compose version name from template
         
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
 
-        self.log('version name template: %s' % version_name)
+        self.log_debug('version name template: %s' % version_name)
 
         version_name = version_name.format(**template_fields)
         update_version_preview = True
         update_version_thumbnail = True
         pb_info['version_name'] = version_name
 
-        self.log('resolved version name: %s' % version_name)  
+        self.log_debug('resolved version name: %s' % version_name)  
         
         # 'flame_render'
         # start with flame_render publish first.
 
-        self.log('starting flame_render publish...') 
+        self.log_debug('starting flame_render publish...') 
 
         pb_file_name = task_entity_name + ', ' + clip_name
 
@@ -6045,7 +6045,7 @@ class flameMenuPublisher(flameMenuApp):
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('value', '')
 
-        self.log('flame_render export preset: %s' % export_path)
+        self.log_debug('flame_render export preset: %s' % export_path)
 
         export_path = export_path.format(**template_fields)
         path_cache = export_path.format(**template_fields)
@@ -6056,19 +6056,19 @@ class flameMenuPublisher(flameMenuApp):
             export_path = export_path.replace('..', '.')
             path_cache = path_cache.replace('..', '.')
 
-        self.log('resolved export path: %s' % export_path)
-        self.log('path_cache %s' % path_cache)
+        self.log_debug('resolved export path: %s' % export_path)
+        self.log_debug('path_cache %s' % path_cache)
 
         # get PublishedFileType from Shotgun
         # if it is not there - create it
         flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
-        self.log('PublishedFile type: %s, querying ShotGrid' % flame_render_type)
+        self.log_debug('PublishedFile type: %s, querying ShotGrid' % flame_render_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
-        self.log('PublishedFile type: found: %s' % pformat(published_file_type))        
+        self.log_debug('PublishedFile type: found: %s' % pformat(published_file_type))        
         if not published_file_type:
-            self.log('creating PublishedFile type %s' % flame_render_type)
-            published_file_type = sg.create("PublishedFileType", {"code": flame_render_type})
-            self.log('created: %s' % pformat(published_file_type))
+            self.log_debug('creating PublishedFile type %s' % flame_render_type)
+            published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_render_type})
+            self.log_debug('created: %s' % pformat(published_file_type))
 
         # fill the pb_info data for 'flame_render'
         pb_info['flame_render']['path_cache'] = path_cache
@@ -6082,7 +6082,7 @@ class flameMenuPublisher(flameMenuApp):
             ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
             ]):
 
-            self.log('found existing version with the same name')
+            self.log_debug('found existing version with the same name')
 
             # do not update version thumbnail and preview
             update_version_preview = False
@@ -6172,7 +6172,7 @@ class flameMenuPublisher(flameMenuApp):
         # Disabling preview bg export block at the moment
         # But leaving thumbnail export
         
-        # self.log('sending preview to background export')
+        # self.log_debug('sending preview to background export')
         # preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
         # clip.name.set_value(version_name + '_preview_' + uid)
         export_dir = '/var/tmp'
@@ -6180,14 +6180,14 @@ class flameMenuPublisher(flameMenuApp):
         # self.prefs_global['temp_files_list'].append(preview_path)
 
         '''
-        self.log('background exporting preview %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
+        self.log_debug('background exporting preview %s' % clip.name.get_value())
+        self.log_debug('with preset: %s' % preset_path)
+        self.log_debug('into folder: %s' % export_dir)
 
         try:
             bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
         except Exception as e:
-            self.log('error exporting in background %s' % e)
+            self.log_debug('error exporting in background %s' % e)
             pass
         '''
 
@@ -6202,15 +6202,15 @@ class flameMenuPublisher(flameMenuApp):
         clip.out_mark = self.prefs.get('poster_frame', 1) + 1
         bg_exporter.export_between_marks = True
 
-        self.log('background exporting thumbnail %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
-        self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+        self.log_debug('background exporting thumbnail %s' % clip.name.get_value())
+        self.log_debug('with preset: %s' % preset_path)
+        self.log_debug('into folder: %s' % export_dir)
+        self.log_debug('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
         try:
             bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
         except Exception as e:
-            self.log('error exporting in background %s' % e)
+            self.log_debug('error exporting in background %s' % e)
             pass
 
         clip.in_mark.set_value(clip_in_mark)
@@ -6219,11 +6219,11 @@ class flameMenuPublisher(flameMenuApp):
 
         # Export using main preset
 
-        self.log('starting export form flame')
+        self.log_debug('starting export form flame')
 
         preset_path = preset_fields.get('path')
 
-        self.log('export preset: %s' % preset_path)
+        self.log_debug('export preset: %s' % preset_path)
 
         class ExportHooks(object):
             def preExport(self, info, userData, *args, **kwargs):
@@ -6253,7 +6253,7 @@ class flameMenuPublisher(flameMenuApp):
         export_dir = str(os.path.dirname(export_path))
 
         if not os.path.isdir(export_dir):
-            self.log('creating folders: %s' % export_dir)
+            self.log_debug('creating folders: %s' % export_dir)
             try:
                 os.makedirs(export_dir)
             except:
@@ -6271,9 +6271,9 @@ class flameMenuPublisher(flameMenuApp):
                 else:
                     return (pb_info, True)
 
-        self.log('exporting clip %s' % clip.name.get_value())
-        self.log('with preset: %s' % preset_path)
-        self.log('into folder: %s' % export_dir)
+        self.log_debug('exporting clip %s' % clip.name.get_value())
+        self.log_debug('with preset: %s' % preset_path)
+        self.log_debug('into folder: %s' % export_dir)
 
         try:
             exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
@@ -6293,7 +6293,7 @@ class flameMenuPublisher(flameMenuApp):
                 return (pb_info, True)
 
         if not (os.path.isfile(preview_path) and os.path.isfile(thumbnail_path)):
-            self.log('no background previews ready, exporting in fg')
+            self.log_debug('no background previews ready, exporting in fg')
             
             # Export preview to temp folder
 
@@ -6307,9 +6307,9 @@ class flameMenuPublisher(flameMenuApp):
             export_dir = '/var/tmp'
             preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
 
-            self.log('exporting preview %s' % clip.name.get_value())
-            self.log('with preset: %s' % preset_path)
-            self.log('into folder: %s' % export_dir)
+            self.log_debug('exporting preview %s' % clip.name.get_value())
+            self.log_debug('with preset: %s' % preset_path)
+            self.log_debug('into folder: %s' % export_dir)
 
             try:
                 exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
@@ -6333,10 +6333,10 @@ class flameMenuPublisher(flameMenuApp):
             clip.out_mark = self.prefs.get('poster_frame', 1) + 1
             exporter.export_between_marks = True
 
-            self.log('exporting thumbnail %s' % clip.name.get_value())
-            self.log('with preset: %s' % preset_path)
-            self.log('into folder: %s' % export_dir)
-            self.log('poster frame: %s' % self.prefs.get('poster_frame', 1))
+            self.log_debug('exporting thumbnail %s' % clip.name.get_value())
+            self.log_debug('with preset: %s' % preset_path)
+            self.log_debug('into folder: %s' % export_dir)
+            self.log_debug('poster frame: %s' % self.prefs.get('poster_frame', 1))
 
             try:
                 exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
@@ -6349,7 +6349,7 @@ class flameMenuPublisher(flameMenuApp):
 
             # Create version in Shotgun
 
-        self.log('creating version in ShotGrid')
+        self.log_debug('creating version in ShotGrid')
 
         self.progress.show()
         self.progress.set_progress(version_name, 'Creating version...')
@@ -6365,7 +6365,7 @@ class flameMenuPublisher(flameMenuApp):
         version = {}
         try:
             version = self.connector.sg.create('Version', version_data)
-            self.log('created Version: \n%s' % pformat(version))
+            self.log_debug('created Version: \n%s' % pformat(version))
         except Exception as e:
             self.progress.hide()
             mbox = QtWidgets.QMessageBox()
@@ -6382,7 +6382,7 @@ class flameMenuPublisher(flameMenuApp):
                 return (pb_info, True)        
 
         if os.path.isfile(thumbnail_path) and update_version_thumbnail:
-            self.log('uploading thumbnail %s' % thumbnail_path)
+            self.log_debug('uploading thumbnail %s' % thumbnail_path)
             self.progress.set_progress(version_name, 'Uploading thumbnail...')
             try:
                 self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
@@ -6402,7 +6402,7 @@ class flameMenuPublisher(flameMenuApp):
                     return (pb_info, True)
 
         if os.path.isfile(preview_path) and update_version_preview:
-            self.log('uploading preview %s' % preview_path)
+            self.log_debug('uploading preview %s' % preview_path)
             self.progress.set_progress(version_name, 'Uploading preview...')
             try:
                 self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
@@ -6426,7 +6426,7 @@ class flameMenuPublisher(flameMenuApp):
 
         # Create 'flame_render' PublishedFile
 
-        self.log('creating flame_render published file in ShotGrid')
+        self.log_debug('creating flame_render published file in ShotGrid')
 
         published_file_data = dict(
             project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
@@ -6459,8 +6459,8 @@ class flameMenuPublisher(flameMenuApp):
                 return (pb_info, True)
 
 
-        self.log('created PublishedFile:\n%s' % pformat(published_file))
-        self.log('uploading thumbnail %s' % thumbnail_path)
+        self.log_debug('created PublishedFile:\n%s' % pformat(published_file))
+        self.log_debug('uploading thumbnail %s' % thumbnail_path)
         self.progress.set_progress(version_name, 'Uploading main publish files thumbnail...')
         try:
             self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
@@ -6488,7 +6488,7 @@ class flameMenuPublisher(flameMenuApp):
         # this won't work for movie, so check the preset first
         # this should be moved in a separate function later
 
-        self.log('getting start and end frames from exported clip')
+        self.log_debug('getting start and end frames from exported clip')
         
         flame_path = ''
         flame_render_path_cache = pb_info.get('flame_render', {}).get('path_cache', '')
@@ -6526,9 +6526,9 @@ class flameMenuPublisher(flameMenuApp):
 
                     if frames:
                         min_frame = min(frames)
-                        self.log('start frame: %s' % min_frame)
+                        self.log_debug('start frame: %s' % min_frame)
                         max_frame = max(frames)
-                        self.log('end_frame %s' % min_frame)
+                        self.log_debug('end_frame %s' % min_frame)
                         format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
                         frame_spec = format_str % (min_frame, max_frame)
                         flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
@@ -6545,7 +6545,7 @@ class flameMenuPublisher(flameMenuApp):
         # publish .batch file
         # compose batch export path and path_cache filed from template fields
 
-        self.log('starting .batch file publish')
+        self.log_debug('starting .batch file publish')
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
         export_path = export_path.format(**template_fields)
@@ -6553,8 +6553,8 @@ class flameMenuPublisher(flameMenuApp):
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
-        self.log('resolved export path: %s' % export_path)
-        self.log('path_cache %s' % path_cache)
+        self.log_debug('resolved export path: %s' % export_path)
+        self.log_debug('path_cache %s' % path_cache)
 
         pb_info['flame_batch']['path_cache'] = path_cache
         pb_info['flame_batch']['pb_file_name'] = task_entity_name
@@ -6563,7 +6563,7 @@ class flameMenuPublisher(flameMenuApp):
 
         export_dir = os.path.dirname(export_path)
         if not os.path.isdir(export_dir):
-            self.log('creating folders: %s' % export_dir)
+            self.log_debug('creating folders: %s' % export_dir)
             try:
                 os.makedirs(export_dir)
             except:
@@ -6586,9 +6586,9 @@ class flameMenuPublisher(flameMenuApp):
 
             self.progress.set_progress(version_name, 'Copying linked batch...')
 
-            self.log('copying linked .batch file')
-            self.log('from %s' % linked_batch_path)
-            slef.log('to %s' % export_path)
+            self.log_debug('copying linked .batch file')
+            self.log_debug('from %s' % linked_batch_path)
+            self.log_debug('to %s' % export_path)
 
             src, ext = os.path.splitext(linked_batch_path)
             dest, ext = os.path.splitext(export_path)
@@ -6612,23 +6612,23 @@ class flameMenuPublisher(flameMenuApp):
                     else:
                         return (pb_info, True)
             else:
-                self.log('no linked .batch file found on filesystem')
-                self.log('saving current batch to: %s' % export_path)
+                self.log_debug('no linked .batch file found on filesystem')
+                self.log_debug('saving current batch to: %s' % export_path)
                 self.flame.batch.save_setup(str(export_path))
         else:
-            self.log('no linked .batch file')
-            self.log('saving current batch to: %s' % export_path)
+            self.log_debug('no linked .batch file')
+            self.log_debug('saving current batch to: %s' % export_path)
             self.progress.set_progress(version_name, 'Saving current batch...')
             self.flame.batch.save_setup(str(export_path))
 
         # get published file type for Flame Batch or create a published file type on the fly
 
         flame_batch_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('PublishedFileType', '')
-        self.log('PublishedFile type: %s, querying ShotGrid' % flame_batch_type)
+        self.log_debug('PublishedFile type: %s, querying ShotGrid' % flame_batch_type)
         published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_batch_type]])
-        self.log('PublishedFile type: found: %s' % pformat(published_file_type))
+        self.log_debug('PublishedFile type: found: %s' % pformat(published_file_type))
         if not published_file_type:
-            self.log('creating PublishedFile type %s' % flame_render_type)
+            self.log_debug('creating PublishedFile type %s' % flame_render_type)
             try:
                 published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
             except Exception as e:
@@ -6646,11 +6646,11 @@ class flameMenuPublisher(flameMenuApp):
                 else:
                     return (pb_info, True)
 
-            self.log('created: %s' % pformat(published_file_type))
+            self.log_debug('created: %s' % pformat(published_file_type))
 
         # update published file data and create PublishedFile for flame batch
 
-        self.log('creating flame_batch published file in shotgun')
+        self.log_debug('creating flame_batch published file in shotgun')
 
         published_file_data['published_file_type'] = published_file_type
         published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
@@ -6677,8 +6677,8 @@ class flameMenuPublisher(flameMenuApp):
             else:
                 return (pb_info, True)
         
-        self.log('created PublishedFile:\n%s' % pformat(published_file))
-        self.log('uploading thumbnail %s' % thumbnail_path)
+        self.log_debug('created PublishedFile:\n%s' % pformat(published_file))
+        self.log_debug('uploading thumbnail %s' % thumbnail_path)
         
         self.progress.set_progress(version_name, 'Uploading batch thumbnail...')
 
@@ -6704,7 +6704,7 @@ class flameMenuPublisher(flameMenuApp):
 
         # clean-up preview and thumbnail files
 
-        self.log('cleaning up preview and thumbnail files')
+        self.log_debug('cleaning up preview and thumbnail files')
 
         self.progress.set_progress(version_name, 'Cleaning up...')
 
@@ -6712,9 +6712,9 @@ class flameMenuPublisher(flameMenuApp):
             os.remove(thumbnail_path)
             os.remove(preview_path)
         except:
-            self.log('cleaning up failed')
+            self.log_debug('cleaning up failed')
         
-        self.log('returning info:\n%s' % pformat(pb_info))
+        self.log_debug('returning info:\n%s' % pformat(pb_info))
 
         self.progress.hide()
 
@@ -7014,7 +7014,7 @@ class flameMenuPublisher(flameMenuApp):
     def create_export_presets(self):
 
         preview_preset = '''<?xml version="1.0"?>
-        <preset version="9">
+        <preset version="11">
         <type>movie</type>
         <comment>Shotgun movie preview</comment>
         <movie>
@@ -7196,7 +7196,7 @@ class flameMenuPublisher(flameMenuApp):
         </preset>'''
 
         thumbnail_preset = '''<?xml version="1.0" encoding="UTF-8"?>
-        <preset version="9">
+        <preset version="11">
         <type>image</type>
         <comment>Shotgun thumbnail</comment>
         <video>
@@ -7407,7 +7407,7 @@ class flameMenuPublisher(flameMenuApp):
 
         if self.flame:
             self.flame.execute_shortcut('Rescan Python Hooks')
-            self.log('Rescan Python Hooks')
+            self.log_debug('Rescan Python Hooks')
 
 
 # --- FLAME STARTUP SEQUENCE ---
