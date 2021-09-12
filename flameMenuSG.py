@@ -2324,6 +2324,7 @@ class flameMenuProjectconnect(flameMenuApp):
         def batchLinkDefault():
             self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = '/var/tmp/flameMenuSG/flame_batch_setups'
             update_batchLinkPathLabel()
+            self.framework.save_prefs()
         btn_batchLinkDefault = QtWidgets.QPushButton('Default', paneGeneral)
         btn_batchLinkDefault.setFocusPolicy(QtCore.Qt.NoFocus)
         btn_batchLinkDefault.setMinimumSize(88, 28)
@@ -2352,6 +2353,7 @@ class flameMenuProjectconnect(flameMenuApp):
                 btn_batchLinkUseProject.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
                 self.framework.prefs['flameBatchBlessing']['use_project'] = True
             update_batchLinkPathLabel()
+            self.framework.save_prefs()
         
         btn_batchLinkUseProject = QtWidgets.QPushButton('Use Project', paneGeneral)
         btn_batchLinkUseProject.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -2375,6 +2377,7 @@ class flameMenuProjectconnect(flameMenuApp):
             if new_path:
                 self.framework.prefs['flameBatchBlessing']['flame_batch_root'] = new_path
                 update_batchLinkPathLabel()
+                self.framework.save_prefs()
 
         btn_batchLinkBrowse = QtWidgets.QPushButton('Browse', paneGeneral)
         btn_batchLinkBrowse.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -3307,7 +3310,7 @@ class flameBatchBlessing(flameMenuApp):
         flameMenuApp.__init__(self, framework)
         
         # app defaults
-        if not self.prefs:
+        if not self.prefs.master.get(self.name):
             self.prefs['flame_batch_root'] = '/var/tmp/flameMenuSG/flame_batch_setups'
             self.prefs['enabled'] = True
             self.prefs['use_project'] = True
@@ -7659,13 +7662,13 @@ def batch_render_end(info, userData, *args, **kwargs):
     if not flameBatchBlessingApp:
         return
 
-    flameBatchBlessingApp.batch_setup_root_folder()
+    flameBatchBlessingApp.root_folder = flameBatchBlessingApp.batch_setup_root_folder()
     flame_batch_path = flameBatchBlessingApp.root_folder
     current_batch_uid = userData.get('current_batch_uid')
     batch_setup_name = flame.batch.name.get_value() + '_' + current_batch_uid
     path = os.path.join(flame_batch_path, batch_setup_name)
     if not info.get('aborted'):
-        print ('saving batch %s.batch' % path)
+        print ('[flameMenuSG] saving batch %s.batch' % path)
         flame.batch.save_setup(path)
         userData['batch_setup_name'] = batch_setup_name
         userData['batch_setup_file'] = path + '.batch'
