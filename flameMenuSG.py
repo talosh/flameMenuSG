@@ -15,6 +15,8 @@ import re
 from pprint import pprint
 from pprint import pformat
 
+__version__ = 'v0.1.2'
+
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
@@ -64,9 +66,6 @@ default_flame_export_presets = {
     'Preview': {'PresetVisibility': 3, 'PresetType': 2, 'PresetFile': 'Generate Preview.xml'},
     'Thumbnail': {'PresetVisibility': 3, 'PresetType': 0, 'PresetFile': 'Generate Thumbnail.xml'}
 }
-
-__version__ = 'v0.1.1 beta 002'
-
 
 class flameAppFramework(object):
     # flameAppFramework class takes care of preferences
@@ -727,7 +726,10 @@ class flameShotgunConnector(object):
         self.sg = None
         if not self.prefs_global.get('user signed out', False):
             self.log_debug('requesting for Shotgun user')
-            self.get_user()
+            try:
+                self.get_user()
+            except Exception as e:
+                self.log_debug(pformat(e))
         
         self.flame_project = None
         self.sg_linked_project = None
@@ -1321,11 +1323,18 @@ class flameShotgunConnector(object):
         except:
             self.prefs_global['user signed out'] = True
             return None
+        try:
+            if self.sg_user.are_credentials_expired():
+                authenticator.clear_default_user()
+                self.sg_user = authenticator.get_user()
+        except Exception as e:
+            self.log(pformat(e))
+            try:
+                authenticator.clear_default_user()
+                self.sg_user = authenticator.get_user()
+            except Exception as e:
+                self.log(pformat(e))
 
-        if self.sg_user.are_credentials_expired():
-            authenticator.clear_default_user()
-            self.sg_user = authenticator.get_user()
-        
         self.prefs_global['user signed out'] = False
         self.update_human_user()
         self.sg = self.sg_user.create_sg_connection()
@@ -7570,7 +7579,7 @@ def get_media_panel_custom_ui_actions():
 
     for app in apps:
         if app.__class__.__name__ == 'flameMenuNewBatch':
-            if scope_desktop(selection):
+            if scope_desktop(selection) or (not selection):
                 app_menu = app.build_menu()
                 if app_menu:
                     menu.append(app_menu)
