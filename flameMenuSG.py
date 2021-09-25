@@ -1935,7 +1935,7 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['name'] = self.menu_group_name
 
             menu_item = {}
-            menu_item['name'] = 'Unlink from ShotGris project `' + self.connector.sg_linked_project + '`'
+            menu_item['name'] = 'Unlink from ShotGrid project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             
