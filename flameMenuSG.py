@@ -5747,7 +5747,8 @@ class flameMenuPublisher(flameMenuApp):
 
                     for key in pbfile_type_id_name_group.keys():
                         pbfile = pbfile_type_id_name_group.get(key)
-                        version_names_set.add(pbfile.get('version.Version.code'))
+                        if pbfile.get('version.Version.code'):
+                            version_names_set.add(pbfile.get('version.Version.code'))
 
                     for name in sorted(version_names_set):
                         version_names.append('* ' + name)
