@@ -15,7 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.3'
+__version__ = 'v0.1.4 beta 001'
 
 # from sgtk.platform.qt import QtGui
 
@@ -4893,7 +4893,16 @@ class flameMenuBatchLoader(flameMenuApp):
                 tasks_by_step[step_name] = []
             tasks_by_step[step_name].append(task)
 
-        for step_name in tasks_by_step.keys():
+
+        current_steps = self.connector.async_cache.get('current_steps').get('result', dict()).values()
+        entity_steps = [x for x in current_steps if x.get('entity_type') == entity_type]
+        entity_steps_by_code = {step.get('code'):step for step in entity_steps}
+        current_step_names = tasks_by_step.keys()
+        current_step_order = []
+        for step in current_step_names:
+            current_step_order.append(entity_steps_by_code.get(step).get('list_order'))
+
+        for step_name in (x for _, x in sorted(zip(current_step_order, current_step_names))):
             step_key = ('Step', step_name)
 
             if step_key not in self.prefs[entity_key].keys():
