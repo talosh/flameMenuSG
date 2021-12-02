@@ -15,7 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.2'
+__version__ = 'v0.1.3'
 
 # from sgtk.platform.qt import QtGui
 
@@ -1138,6 +1138,17 @@ class flameShotgunConnector(object):
             ]
         }, uid = 'current_pbfiles')
 
+        self.current_steps_uid = self.connector.cache_register({
+            'entity': 'Step',
+            'filters': [],
+            'fields': [
+                'code',
+                'list_order',
+                'short_name',
+                'entity_type'
+            ]
+        }, uid = 'current_steps')
+
     def unregister_common_queries(self):
         # un-registers async cache requests
         
@@ -1145,6 +1156,8 @@ class flameShotgunConnector(object):
         self.cache_unregister('current_tasks')
         self.cache_unregister('current_versions')
         self.cache_unregister('current_pbfiles')
+        self.cache_unregister('current_steps')
+
 
     def cache_softupdate(self, sg = None):
         if not sg:
@@ -5610,7 +5623,15 @@ class flameMenuPublisher(flameMenuApp):
             menu_item['isEnabled'] = False
             menu['actions'].append(menu_item)            
 
-        for step_name in tasks_by_step.keys():
+        current_steps = self.connector.async_cache.get('current_steps').get('result', dict()).values()
+        entity_steps = [x for x in current_steps if x.get('entity_type') == entity_type]
+        entity_steps_by_code = {step.get('code'):step for step in entity_steps}
+        current_step_names = tasks_by_step.keys()
+        current_step_order = []
+        for step in current_step_names:
+            current_step_order.append(entity_steps_by_code.get(step).get('list_order'))
+
+        for step_name in (x for _, x in sorted(zip(current_step_order, current_step_names))):
             step_key = ('Step', step_name)
             
             if step_key not in self.prefs[entity_key].keys():
