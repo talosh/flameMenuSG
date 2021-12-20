@@ -15,7 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.4 beta 001'
+__version__ = 'v0.1.4'
 
 # from sgtk.platform.qt import QtGui
 
