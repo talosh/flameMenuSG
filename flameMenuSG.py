@@ -15,7 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.4'
+__version__ = 'v0.1.5'
 
 # from sgtk.platform.qt import QtGui
 
@@ -7407,19 +7407,20 @@ class flameMenuPublisher(flameMenuApp):
         preview_preset_file_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
         if not os.path.isfile(preview_preset_file_path):
             try:
-                with open(preview_preset_file_path, 'a') as preview_preset_file:
+                with open(preview_preset_file_path, 'w') as preview_preset_file:
                     preview_preset_file.write(preview_preset)
                     preview_preset_file.close()
             except:
-                pass
+                self.log('unable to save preview preset to %s' % preview_preset_file_path)
         thumbnail_preset_file_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
         if not os.path.isfile(thumbnail_preset_file_path):
             try:
-                with open(thumbnail_preset_file_path, 'a') as thumbnail_preset_file:
+                with open(thumbnail_preset_file_path, 'w') as thumbnail_preset_file:
                     thumbnail_preset_file.write(thumbnail_preset)
                     thumbnail_preset_file.close()
             except:
-                pass
+                self.log('unable to save thumbnail preset to %s' % preview_preset_file_path)
+
 
     def show_bug_message(self, *args, **kwargs):
         if self.flame_bug_message:
