@@ -15,7 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.5'
+__version__ = 'v0.1.6'
 
 # from sgtk.platform.qt import QtGui
 
@@ -138,6 +138,9 @@ class flameAppFramework(object):
         self.prefs_global = {}
         self.debug = DEBUG
         
+        self.flame_project_name = 'UnknownFlameProject'
+        self.flame_user_name = 'UnknownFlameUser'
+
         try:
             import flame
             self.flame = flame
@@ -145,8 +148,6 @@ class flameAppFramework(object):
             self.flame_user_name = flame.users.current_user.name
         except:
             self.flame = None
-            self.flame_project_name = None
-            self.flame_user_name = None
         
         import socket
         self.hostname = socket.gethostname()
@@ -1782,7 +1783,11 @@ class flameShotgunConnector(object):
     # toolkit related methods
 
     def bootstrap_toolkit(self):
-        import sgtk
+        try:
+            import sgtk
+        except Exception as e:
+            self.log(pformat(e))
+            return
         
         if sgtk.platform.current_engine():
             self.tk_engine = sgtk.platform.current_engine()
@@ -1799,7 +1804,7 @@ class flameShotgunConnector(object):
             else:
                 # let the original engine to pick up
                 break
-        
+
         import sgtk
         self.destroy_toolkit_engine()
 
@@ -3344,9 +3349,14 @@ class flameBatchBlessing(flameMenuApp):
             import flame
         except:
             return False
-
-        flame_batch_name = flame.batch.name.get_value()
-        current_project_name = flame.project.current_project.name
+        
+        flame_batch_name = 'unklnown_batch'
+        current_project_name = 'unknown_project'
+    
+        if flame.batch.name:
+            flame_batch_name = flame.batch.name.get_value()
+        if 'project' in dir(flame):
+            current_project_name = flame.project.current_project.name
 
         if self.prefs.get('use_project'):
             flame_batch_path = os.path.join(
@@ -4864,7 +4874,7 @@ class flameMenuBatchLoader(flameMenuApp):
         for version in versions_with_tasks:
             vtask_id = version.get('sg_task.Task.id')
             if vtask_id not in vtasks_by_id.keys():
-                task = tasks_by_id.get(vtask_id)
+                task = tasks_by_id.get(vtask_id, dict())
                 task['versions'] = [version]
                 task['published_files'] = []
                 for version_pbfile in version.get('published_files'):
@@ -4900,7 +4910,7 @@ class flameMenuBatchLoader(flameMenuApp):
         current_step_names = tasks_by_step.keys()
         current_step_order = []
         for step in current_step_names:
-            current_step_order.append(entity_steps_by_code.get(step).get('list_order'))
+            current_step_order.append(entity_steps_by_code.get(step, dict()).get('list_order'))
 
         for step_name in (x for _, x in sorted(zip(current_step_order, current_step_names))):
             step_key = ('Step', step_name)
@@ -5638,7 +5648,7 @@ class flameMenuPublisher(flameMenuApp):
         current_step_names = tasks_by_step.keys()
         current_step_order = []
         for step in current_step_names:
-            current_step_order.append(entity_steps_by_code.get(step).get('list_order'))
+            current_step_order.append(entity_steps_by_code.get(step, dict()).get('list_order'))
 
         for step_name in (x for _, x in sorted(zip(current_step_order, current_step_names))):
             step_key = ('Step', step_name)
@@ -6693,7 +6703,7 @@ class flameMenuPublisher(flameMenuApp):
 
         # update published file data and create PublishedFile for flame batch
 
-        self.log_debug('creating flame_batch published file in shotgun')
+        self.log_debug('creating flame_batch published file in ShotGrid')
 
         published_file_data['published_file_type'] = published_file_type
         published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
@@ -7072,7 +7082,7 @@ class flameMenuPublisher(flameMenuApp):
             <codecProfile>
                 <rootPath>/opt/Autodesk/mediaconverter/</rootPath>
                 <targetVersion>2020.2</targetVersion>
-                <pathSuffix>/profiles/.33622016/HDTV_720p_8Mbits.cdxprof</pathSuffix>
+                <pathSuffix>/profiles/.33622016/Baseline_RIM_12Mbits.cdxprof</pathSuffix>
             </codecProfile>
             <namePattern>&lt;name&gt;</namePattern>
             <overwriteWithVersions>False</overwriteWithVersions>
@@ -7213,8 +7223,9 @@ class flameMenuPublisher(flameMenuApp):
             <resize>
                 <resizeType>fit</resizeType>
                 <resizeFilter>lanczos</resizeFilter>
-                <width>720</width>
-                <height>400</height>
+                <width>2048</width>
+                <height>1200
+                </height>
                 <bitsPerChannel>8</bitsPerChannel>
                 <numChannels>3</numChannels>
                 <floatingPoint>False</floatingPoint>
@@ -7405,22 +7416,31 @@ class flameMenuPublisher(flameMenuApp):
         </preset>'''
 
         preview_preset_file_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        if not os.path.isdir(os.path.dirname(preview_preset_file_path)):
+            try:
+                os.makedirs(os.path.dirname(preview_preset_file_path))
+            except Exception as e:
+                self.log('unable to create folder %s' % os.path.dirname(preview_preset_file_path))
+                self.log(e)
+
         if not os.path.isfile(preview_preset_file_path):
             try:
                 with open(preview_preset_file_path, 'w') as preview_preset_file:
                     preview_preset_file.write(preview_preset)
                     preview_preset_file.close()
-            except:
+            except Exception as e:
                 self.log('unable to save preview preset to %s' % preview_preset_file_path)
+                self.log(e)                
+
         thumbnail_preset_file_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
         if not os.path.isfile(thumbnail_preset_file_path):
             try:
                 with open(thumbnail_preset_file_path, 'w') as thumbnail_preset_file:
                     thumbnail_preset_file.write(thumbnail_preset)
                     thumbnail_preset_file.close()
-            except:
+            except Exception as e:
                 self.log('unable to save thumbnail preset to %s' % preview_preset_file_path)
-
+                self.log(e)
 
     def show_bug_message(self, *args, **kwargs):
         if self.flame_bug_message:
@@ -7513,11 +7533,15 @@ def cleanup(apps, app_framework, shotgunConnector):
 atexit.register(cleanup, apps, app_framework, shotgunConnector)
 
 def load_apps(apps, app_framework, shotgunConnector):
-    apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
-    apps.append(flameBatchBlessing(app_framework))
-    apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
-    apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
-    apps.append(flameMenuPublisher(app_framework, shotgunConnector))
+    try:
+        apps.append(flameMenuProjectconnect(app_framework, shotgunConnector))
+        apps.append(flameBatchBlessing(app_framework))
+        apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
+        apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
+        apps.append(flameMenuPublisher(app_framework, shotgunConnector))
+    except:
+        pass
+
     app_framework.apps = apps
     if DEBUG:
         print ('[DEBUG %s] loaded:\n%s' % (app_framework.bundle_name, pformat(apps)))
