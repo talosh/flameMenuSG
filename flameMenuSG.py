@@ -15,7 +15,7 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.6'
+__version__ = 'v0.1.7 dev 003'
 
 # from sgtk.platform.qt import QtGui
 
@@ -1953,16 +1953,19 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['name'] = self.menu_group_name
 
             menu_item = {}
+            menu_item['order'] = 1
             menu_item['name'] = 'Unlink from ShotGrid project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
             menu['actions'].append(menu_item)
             
             menu_item = {}
+            menu_item['order'] = 2
             menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
             
             menu_item = {}
+            menu_item['order'] = 3
             menu_item['name'] = 'Preferences'
             menu_item['execute'] = self.preferences_window
             menu_item['waitCursor'] = False
@@ -1973,11 +1976,13 @@ class flameMenuProjectconnect(flameMenuApp):
             menu['name'] = self.menu_group_name + ': Link to ShotGrid'
 
             menu_item = {}
+            menu_item['order'] = 1
             menu_item['name'] = '~ Rescan ShotGrid Projects'
             menu_item['execute'] = self.rescan
             menu['actions'].append(menu_item)
 
             menu_item = {}
+            menu_item['order'] = 2
             menu_item['name'] = '---'
             menu_item['execute'] = self.rescan
             menu['actions'].append(menu_item)
@@ -1987,26 +1992,30 @@ class flameMenuProjectconnect(flameMenuApp):
             for project in projects:
                 projects_by_name[project.get('name')] = project
 
-            for project_name in sorted(projects_by_name.keys()):
+            for index, project_name in enumerate(sorted(projects_by_name.keys())):
                 project = projects_by_name.get(project_name)
                 self.dynamic_menu_data[str(id(project))] = project
 
                 menu_item = {}
+                menu_item['order'] = index + 2
                 menu_item['name'] = project_name
                 menu_item['execute'] = getattr(self, str(id(project)))
                 menu['actions'].append(menu_item)
             
             menu_item = {}
+            menu_item['order'] = index + 3
             menu_item['name'] = '--'
             menu_item['execute'] = self.rescan
             menu['actions'].append(menu_item)
 
             menu_item = {}
+            menu_item['order'] = index + 4
             menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
             menu['actions'].append(menu_item)
 
             menu_item = {}
+            menu_item['order'] = index + 5
             menu_item['name'] = 'Preferences'
             menu_item['execute'] = self.preferences_window
             menu_item['waitCursor'] = False
@@ -4303,6 +4312,9 @@ class flameMenuNewBatch(flameMenuApp):
         lbl_ShotName.setAlignment(QtCore.Qt.AlignCenter)
         vbox.addWidget(lbl_ShotName)
 
+        # shot name and buttons hbox
+        # hbox_shotname = QtWidgets.QHBoxLayout()
+
         # Shot Name Text Field
         def txt_ShotName_textChanged():
             self.shot_name = txt_ShotName.text()
@@ -4311,6 +4323,17 @@ class flameMenuNewBatch(flameMenuApp):
         txt_ShotName.setMinimumSize(280, 28)
         txt_ShotName.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; border-top: 1px inset #black; border-bottom: 1px inset #545454}')
         txt_ShotName.textChanged.connect(txt_ShotName_textChanged)
+
+        # From Folder Button
+        # btn_FromFolder = QtWidgets.QPushButton('From Folder', window)
+        # btn_FromFolder.setFocusPolicy(QtCore.Qt.NoFocus)
+        # btn_FromFolder.setMinimumSize(78, 28)
+        # btn_FromFolder.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+        #                        'QPushButton:pressed {font:italic; color: #d9d9d9}')
+
+        # hbox_shotname.addWidget(txt_ShotName)
+        # hbox_shotname.addWidget(btn_FromFolder)
+        # vbox.addLayout(hbox_shotname)
         vbox.addWidget(txt_ShotName)
 
         # Spacer Label
@@ -5002,7 +5025,8 @@ class flameMenuBatchLoader(flameMenuApp):
                         pbfile = pbfile_type_id_name_group.get(key)
                         version_name = pbfile.get('version.Version.code')
                         version_id = pbfile.get('version.Version.id')
-                        version_names_ids.add((version_name, version_id))
+                        if version_id:
+                            version_names_ids.add((version_name, version_id))
                     
                     for version_name_id in sorted(version_names_ids):
                         version = task_versions_by_id.get(version_name_id[1])
