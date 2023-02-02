@@ -15,12 +15,12 @@ import re
 from pprint import pprint
 from pprint import pformat
 
-__version__ = 'v0.1.2'
-
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
+__version__ = 'v0.1.2 dev 004'
 DEBUG = False
+
 default_templates = {
 # Resolved fields are:
 # {Sequence},{sg_asset_type},{Asset},{Shot},{Step},{Step_code},{name},{version},{version_four},{frame},{ext}
@@ -189,7 +189,6 @@ class flameAppFramework(object):
     def log_debug(self, message):
         if self.debug:
             print ('[DEBUG %s] %s' % (self.bundle_name, message))
-
 
     def load_prefs(self):
         import pickle
@@ -1334,7 +1333,7 @@ class flameShotgunConnector(object):
                 self.sg_user = authenticator.get_user()
             except Exception as e:
                 self.log(pformat(e))
-
+        
         self.prefs_global['user signed out'] = False
         self.update_human_user()
         self.sg = self.sg_user.create_sg_connection()
@@ -1922,6 +1921,7 @@ class flameMenuProjectconnect(flameMenuApp):
         self.connector.sg_linked_project = self.flame.project.current_project.shotgun_project_name.get_value()
 
         menu = {'actions': []}
+        menu_item_order = 0
 
         if not self.connector.sg_user:
             menu['name'] = self.menu_group_name
@@ -1929,6 +1929,8 @@ class flameMenuProjectconnect(flameMenuApp):
             menu_item = {}
             menu_item['name'] = 'Sign in to ShotGrid'
             menu_item['execute'] = self.sign_in
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
         elif self.connector.sg_linked_project:
@@ -1937,17 +1939,23 @@ class flameMenuProjectconnect(flameMenuApp):
             menu_item = {}
             menu_item['name'] = 'Unlink from ShotGrid project `' + self.connector.sg_linked_project + '`'
             menu_item['execute'] = self.unlink_project
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
             
             menu_item = {}
             menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
             
             menu_item = {}
             menu_item['name'] = 'Preferences'
             menu_item['execute'] = self.preferences_window
             menu_item['waitCursor'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
         else:
@@ -1957,11 +1965,15 @@ class flameMenuProjectconnect(flameMenuApp):
             menu_item = {}
             menu_item['name'] = '~ Rescan ShotGrid Projects'
             menu_item['execute'] = self.rescan
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
             menu_item = {}
             menu_item['name'] = '---'
             menu_item['execute'] = self.rescan
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
             projects = self.get_projects()
@@ -1976,22 +1988,30 @@ class flameMenuProjectconnect(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = project_name
                 menu_item['execute'] = getattr(self, str(id(project)))
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
             
             menu_item = {}
             menu_item['name'] = '--'
             menu_item['execute'] = self.rescan
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
             menu_item = {}
             menu_item['name'] = 'Sign Out: ' + str(self.connector.sg_user_name)
             menu_item['execute'] = self.sign_out
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
             menu_item = {}
             menu_item['name'] = 'Preferences'
             menu_item['execute'] = self.preferences_window
             menu_item['waitCursor'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
         return menu
@@ -2885,8 +2905,7 @@ class flameMenuProjectconnect(flameMenuApp):
 
         # Publish: End of upper storage root and export preset section
         vbox_publish.addLayout(hbox_storage_root)
-
-
+        
         ### PUBLISH::TEMPLATES ###
         # Publish::Tempates actions
 
@@ -2971,7 +2990,7 @@ class flameMenuProjectconnect(flameMenuApp):
         paneShotTemplates = QtWidgets.QWidget(paneTemplates)
         paneShotTemplates.setFixedSize(776, 142)
         paneShotTemplates.move(64, 34)
-        
+
         # Publish::Templates::ShotPane: Publish default button
         def setShotDefault():
             txt_shot.setText(self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('default', ''))
@@ -2984,6 +3003,7 @@ class flameMenuProjectconnect(flameMenuApp):
         btn_shotDefault.clicked.connect(setShotDefault)
 
         # Publish::Templates::ShotPane: Publish template text field
+        
         txt_shot_value = self.framework.prefs.get('flameMenuPublisher', {}).get('templates', {}).get('Shot', {}).get('flame_render').get('value', '')
         txt_shot = QtWidgets.QLineEdit(txt_shot_value, paneShotTemplates)
         txt_shot.setFocusPolicy(QtCore.Qt.ClickFocus)
@@ -3119,7 +3139,7 @@ class flameMenuProjectconnect(flameMenuApp):
         # Publish::Templates::ShotPane: END OF SECTION
         # Publish::Templates::AssetPane: Show and hide
         # depending on an Entity toggle
-
+        
         paneAssetTemplates = QtWidgets.QWidget(paneTemplates)
         paneAssetTemplates.setFixedSize(776, 142)
         paneAssetTemplates.move(64, 34)
@@ -3631,10 +3651,13 @@ class flameMenuNewBatch(flameMenuApp):
 
         menu = {'actions': []}
         menu['name'] = self.menu_group_name + ' Create new batch:'
-        
+        menu_item_order = 0
+
         menu_item = {}
         menu_item['name'] = '~ Rescan'
         menu_item['execute'] = self.rescan
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         menu_item = {}
@@ -3643,6 +3666,8 @@ class flameMenuNewBatch(flameMenuApp):
         else:
             menu_item['name'] = '~ Show All Avaliable'
         menu_item['execute'] = self.flip_assigned
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         # found entities menu
@@ -3657,12 +3682,16 @@ class flameMenuNewBatch(flameMenuApp):
             menu_item['name'] = '- [ Assets ] [+]'
             menu_item['execute'] = self.create_asset_dialog
             menu_item['waitCursor'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu_main_body.append(menu_item)
 
             menu_item = {}
             menu_item['name'] = '- [ Shots ] [+]'
             menu_item['execute'] = self.create_shot_dialog
             menu_item['waitCursor'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu_main_body.append(menu_item)
         
         if len(found_entities.keys()) == 1:
@@ -3671,6 +3700,8 @@ class flameMenuNewBatch(flameMenuApp):
                 menu_item['name'] = '- [ Assets ] [+]'
                 menu_item['execute'] = self.create_asset_dialog
                 menu_item['waitCursor'] = False
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu_main_body.append(menu_item)
 
         menu_ctrls_len = len(menu)
@@ -3691,6 +3722,8 @@ class flameMenuNewBatch(flameMenuApp):
             else:
                 menu_item['execute'] = self.rescan
             menu_item['waitCursor'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu_main_body.append(menu_item)
                 
             entities_by_name = {}
@@ -3720,6 +3753,8 @@ class flameMenuNewBatch(flameMenuApp):
         # controls and entites fits within menu size
         # we do not need additional page switch controls
             for menu_item in menu_main_body:
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
         else:
@@ -3733,6 +3768,8 @@ class flameMenuNewBatch(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = '<<[ prev page ' + str(curr_page) + ' of ' + str(num_of_pages) + ' ]'
                 menu_item['execute'] = self.page_bkw
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
             # calculate the start and end position of a window
@@ -3743,6 +3780,8 @@ class flameMenuNewBatch(flameMenuApp):
             end_index = window_size*curr_page+window_size + ((curr_page+1) // num_of_pages)
 
             for menu_item in menu_main_body[start_index:end_index]:
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
             
             # decorate bottom with move forward control
@@ -3751,6 +3790,8 @@ class flameMenuNewBatch(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = '[ next page ' + str(curr_page+2) + ' of ' + str(num_of_pages) + ' ]>>'
                 menu_item['execute'] = self.page_fwd
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
         # for action in menu['actions']:
@@ -4458,6 +4499,7 @@ class flameMenuNewBatch(flameMenuApp):
 class flameMenuBatchLoader(flameMenuApp):
     def __init__(self, framework, connector):
         self.types_to_include = [
+            'Hiero Plate',
             'Image Sequence',
             'Flame Render',
             'Flame Batch File',
@@ -4736,8 +4778,9 @@ class flameMenuBatchLoader(flameMenuApp):
                         pbfiles_by_id[pbfile_id] = pbfile
 
         # remove published files with type not listed in types_to_include
+        pbfile_ids = list(pbfiles_by_id.keys())
 
-        for pbfile_id in pbfiles_by_id.keys():
+        for pbfile_id in pbfile_ids:
             pbfile = pbfiles_by_id.get(pbfile_id)
             published_file_type = pbfile.get('published_file_type')
             if not published_file_type:
@@ -5736,20 +5779,20 @@ class flameMenuPublisher(flameMenuApp):
                             loose_versions.append(version)
                                                             
                     if len(loose_versions) > 3:
-                        first = loose_versions[0].get('code')
-                        last = loose_versions[-1].get('code')
+                        first = loose_versions[0].get('code', 'untitled')
+                        last = loose_versions[-1].get('code', 'untitled')
                         version_names.append(' '*3 + first)
                         version_names.append(' '*8 + ' '*(max(len(first), len(last))//2 - 4) + '. . . . .')
                         version_names.append(' '*3 + last)
                     else:
                         for loose_version in loose_versions:
-                            version_names.append(' '*3 + loose_version.get('code'))
+                            version_names.append(' '*3 + loose_version.get('code', 'untitled'))
 
                     for key in pbfile_type_id_name_group.keys():
                         pbfile = pbfile_type_id_name_group.get(key)
-                        if pbfile.get('version.Version.code'):
-                            version_names_set.add(pbfile.get('version.Version.code'))
+                        version_names_set.add(pbfile.get('version.Version.code', 'unknown version'))
 
+                    version_names_set = filter(None, version_names_set)
                     for name in sorted(version_names_set):
                         version_names.append('* ' + name)
 
@@ -5816,7 +5859,7 @@ class flameMenuPublisher(flameMenuApp):
         versions_failed = set()
         pb_published = dict()
         pb_failed = dict()
-        print ('line 5795')
+
         for clip in selection:
             pb_info, is_cancelled = self.publish_clip(clip, entity, project_path, export_preset_fields)
 
