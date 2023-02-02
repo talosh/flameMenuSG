@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 dev 004'
+__version__ = 'v0.1.2 dev 005'
 DEBUG = False
 
 default_templates = {
