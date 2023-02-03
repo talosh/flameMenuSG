@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 dev 006'
+__version__ = 'v0.1.2 dev 008'
 DEBUG = False
 
 default_templates = {
@@ -4613,10 +4613,13 @@ class flameMenuBatchLoader(flameMenuApp):
 
         menu = {'actions': []}
         menu['name'] = '- ' + self.menu_group_name + ' Add/Remove'
+        menu_item_order = 0
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
         menu_item['execute'] = self.rescan
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         menu_item = {}
@@ -4625,6 +4628,8 @@ class flameMenuBatchLoader(flameMenuApp):
         else:
             menu_item['name'] = '~ Show All Avaliable'
         menu_item['execute'] = self.flip_assigned
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         user_only = not self.prefs['show_all']
@@ -4664,6 +4669,8 @@ class flameMenuBatchLoader(flameMenuApp):
         # controls and entites fits within menu size
         # we do not need additional page switch controls
             for menu_item in menu_main_body:
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
         else:
@@ -4677,6 +4684,8 @@ class flameMenuBatchLoader(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = '<<[ prev page ' + str(curr_page) + ' of ' + str(num_of_pages) + ' ]'
                 menu_item['execute'] = self.page_bkw
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
             # calculate the start and end position of a window
@@ -4687,6 +4696,8 @@ class flameMenuBatchLoader(flameMenuApp):
             end_index = window_size*curr_page+window_size + ((curr_page+1) // num_of_pages)
 
             for menu_item in menu_main_body[start_index:end_index]:
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
             
             # decorate bottom with move forward control
@@ -4695,6 +4706,8 @@ class flameMenuBatchLoader(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = '[ next page ' + str(curr_page+2) + ' of ' + str(num_of_pages) + ' ]>>'
                 menu_item['execute'] = self.page_fwd
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
         return menu
@@ -4731,10 +4744,13 @@ class flameMenuBatchLoader(flameMenuApp):
         menu = {}
         menu['name'] = '- ' + chr(127) + entity.get('code') + ':'
         menu['actions'] = []
+        menu_item_order = 0
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
         menu_item['execute'] = self.rescan
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         menu_item = {}        
@@ -4748,6 +4764,8 @@ class flameMenuBatchLoader(flameMenuApp):
 
         self.dynamic_menu_data[str(id(show_latest_entity))] = show_latest_entity
         menu_item['execute'] = getattr(self, str(id(show_latest_entity)))
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         # for the loader we're only interested in versions with published files
@@ -4815,6 +4833,8 @@ class flameMenuBatchLoader(flameMenuApp):
             else:
                 menu_item['name'] = '- [ ' + 'No Task' + ' ]'
             menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
             if not self.prefs[entity_key][task_key].get('isFolded'):
@@ -4873,6 +4893,8 @@ class flameMenuBatchLoader(flameMenuApp):
                             menu_item['name'] = ' '*8 + version.get('code')
                         self.dynamic_menu_data[str(id(version))] = version
                         menu_item['execute'] = getattr(self, str(id(version)))
+                        menu_item['order'] = menu_item_order
+                        menu_item_order += 1
                         menu['actions'].append(menu_item)
 
                 else:
@@ -4883,6 +4905,8 @@ class flameMenuBatchLoader(flameMenuApp):
                         menu_item['name'] = ' '*8 + version.get('code')
                         self.dynamic_menu_data[str(id(version))] = version
                         menu_item['execute'] = getattr(self, str(id(version)))
+                        menu_item['order'] = menu_item_order
+                        menu_item_order += 1
                         menu['actions'].append(menu_item)
 
         # build list of tasks from versions with tasks.
@@ -4939,10 +4963,14 @@ class flameMenuBatchLoader(flameMenuApp):
 
             if self.prefs[entity_key][step_key].get('isFolded') and len(tasks_by_step[step_name]) != 1:
                 menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 continue
             elif self.prefs[entity_key][step_key].get('isFolded') and tasks_by_step[step_name][0].get('content') != step_name:
                 menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 continue
 
@@ -4976,6 +5004,8 @@ class flameMenuBatchLoader(flameMenuApp):
                     else:
                         menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
                 menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 if self.prefs[entity_key][task_key].get('isFolded'): continue
 
@@ -5026,6 +5056,8 @@ class flameMenuBatchLoader(flameMenuApp):
                             menu_item['name'] = ' '*8 + version.get('code')
                         self.dynamic_menu_data[str(id(version))] = version
                         menu_item['execute'] = getattr(self, str(id(version)))
+                        menu_item['order'] = menu_item_order
+                        menu_item_order += 1
                         menu['actions'].append(menu_item)
                 else:
                     # show all versions sorted alphabetically
@@ -5037,6 +5069,8 @@ class flameMenuBatchLoader(flameMenuApp):
                         menu_item['name'] = ' '*8 + version.get('code')
                         self.dynamic_menu_data[str(id(version))] = version
                         menu_item['execute'] = getattr(self, str(id(version)))
+                        menu_item['order'] = menu_item_order
+                        menu_item_order += 1
                         menu['actions'].append(menu_item)
 
         '''                
