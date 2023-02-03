@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 dev 005'
+__version__ = 'v0.1.2 dev 006'
 DEBUG = False
 
 default_templates = {
@@ -5476,10 +5476,13 @@ class flameMenuPublisher(flameMenuApp):
 
         menu = {'actions': []}
         menu['name'] = self.menu_group_name + ' Add/Remove'
+        menu_item_order = 0
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
         menu_item['execute'] = self.rescan
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         menu_item = {}
@@ -5488,6 +5491,8 @@ class flameMenuPublisher(flameMenuApp):
         else:
             menu_item['name'] = '~ Show All'
         menu_item['execute'] = self.flip_assigned
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         user_only = not self.prefs['show_all']
@@ -5503,6 +5508,8 @@ class flameMenuPublisher(flameMenuApp):
                 menu_item['name'] = ' '*4 + 'No assigned tasks found'
             menu_item['execute'] = self.rescan
             menu_item['isEnabled'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)
 
         menu_ctrls_len = len(menu)
@@ -5538,6 +5545,8 @@ class flameMenuPublisher(flameMenuApp):
         # controls and entites fits within menu size
         # we do not need additional page switch controls
             for menu_item in menu_main_body:
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
         else:
@@ -5551,6 +5560,8 @@ class flameMenuPublisher(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = '<<[ prev page ' + str(curr_page) + ' of ' + str(num_of_pages) + ' ]'
                 menu_item['execute'] = self.page_bkw
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
             # calculate the start and end position of a window
@@ -5561,6 +5572,8 @@ class flameMenuPublisher(flameMenuApp):
             end_index = window_size*curr_page+window_size + ((curr_page+1) // num_of_pages)
 
             for menu_item in menu_main_body[start_index:end_index]:
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
             
             # decorate bottom with move forward control
@@ -5569,6 +5582,8 @@ class flameMenuPublisher(flameMenuApp):
                 menu_item = {}
                 menu_item['name'] = '[ next page ' + str(curr_page+2) + ' of ' + str(num_of_pages) + ' ]>>'
                 menu_item['execute'] = self.page_fwd
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
         return menu
@@ -5604,10 +5619,13 @@ class flameMenuPublisher(flameMenuApp):
         menu = {}
         menu['name'] = self.menu_group_name + ' Publish ' + entity.get('code') + ':'
         menu['actions'] = []
+        menu_item_order = 0
 
         menu_item = {}
         menu_item['name'] = '~ Rescan'
         menu_item['execute'] = self.rescan
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         menu_item = {}        
@@ -5621,6 +5639,8 @@ class flameMenuPublisher(flameMenuApp):
 
         self.dynamic_menu_data[str(id(show_all_entity))] = show_all_entity
         menu_item['execute'] = getattr(self, str(id(show_all_entity)))
+        menu_item['order'] = menu_item_order
+        menu_item_order += 1
         menu['actions'].append(menu_item)
 
         tasks_by_step = {}
@@ -5651,6 +5671,8 @@ class flameMenuPublisher(flameMenuApp):
                 menu_item['name'] = ' '*4 + 'No assigned tasks found'
             menu_item['execute'] = self.rescan
             menu_item['isEnabled'] = False
+            menu_item['order'] = menu_item_order
+            menu_item_order += 1
             menu['actions'].append(menu_item)            
 
         for step_name in tasks_by_step.keys():
@@ -5669,18 +5691,26 @@ class flameMenuPublisher(flameMenuApp):
 
             if self.prefs[entity_key][step_key].get('isFolded') and len(tasks_by_step[step_name]) != 1:
                 menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 continue
             elif self.prefs[entity_key][step_key].get('isFolded') and tasks_by_step[step_name][0].get('content') != step_name:
                 menu_item['name'] = '+ [ ' + step_name + ' ]'
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 continue
 
             if len(tasks_by_step[step_name]) != 1:
                 menu_item['name'] = '- [ ' + step_name + ' ]'
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
             elif tasks_by_step[step_name][0].get('content') != step_name:
                 menu_item['name'] = '- [ ' + step_name + ' ]'
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
 
             for task in tasks_by_step[step_name]:
@@ -5715,6 +5745,8 @@ class flameMenuPublisher(flameMenuApp):
                     else:
                         menu_item['name'] = ' '*4 + '- [ ' + task_name + ' ]'
                 menu_item['execute'] = getattr(self, str(id(fold_task_entity)))
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 if self.prefs[entity_key][task_key].get('isFolded'): continue
 
@@ -5801,6 +5833,8 @@ class flameMenuPublisher(flameMenuApp):
                     menu_item['name'] = ' '*8 + version_name
                     menu_item['execute'] = self.rescan
                     menu_item['isEnabled'] = False
+                    menu_item['order'] = menu_item_order
+                    menu_item_order += 1
                     menu['actions'].append(menu_item)
                 
                 menu_item = {}
@@ -5811,6 +5845,8 @@ class flameMenuPublisher(flameMenuApp):
                 self.dynamic_menu_data[str(id(publish_entity))] = publish_entity
                 menu_item['execute'] = getattr(self, str(id(publish_entity)))
                 menu_item['waitCursor'] = False
+                menu_item['order'] = menu_item_order
+                menu_item_order += 1
                 menu['actions'].append(menu_item)
                 
         return menu
