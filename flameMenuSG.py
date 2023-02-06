@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 dev 008'
+__version__ = 'v0.1.2 Ghostvfx dev 009'
 DEBUG = False
 
 default_templates = {
@@ -32,11 +32,11 @@ default_templates = {
 # Publishing into asset will just replace {Shot} fied with asset name
 'Shot': {
     'flame_render': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
+        'default': 'sequences/{Sequence}/{Shot}/{Step_code}/work/flame/{Shot}_{name}_v{version}/{Shot}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/publish/flame_batch/{Shot}_{name}_v{version}.batch',
+        'default': 'sequences/{Sequence}/{Shot}/{Step}/work/flame/flame_batch/{Shot}_{name}_v{version}.batch',
         'PublishedFileType': 'Flame Batch File'                  
         },
     'version_name': {
@@ -46,11 +46,11 @@ default_templates = {
 },
 'Asset':{
     'flame_render': {
-        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.{ext}',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/work/flame/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
-        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/publish/flame_batch/{Asset}_{name}_v{version}.batch',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/work/flame/flame_batch/{Asset}_{name}_v{version}.batch',
         'PublishedFileType': 'Flame Batch File'                  
         },
     'version_name': {
@@ -1337,6 +1337,7 @@ class flameShotgunConnector(object):
         self.prefs_global['user signed out'] = False
         self.update_human_user()
         self.sg = self.sg_user.create_sg_connection()
+
         return self.sg_user
 
     def clear_user(self, *args, **kwargs):
@@ -1461,8 +1462,14 @@ class flameShotgunConnector(object):
     def sg_storage_root(self, value):
         self.prefs['sg_storage_root'] = value
 
-    def resolve_project_path(self):
+    def farmfx_resolve_project_path(self):
+        tank_name = self.get_tank_name()
+        return os.path.join(
+            '/Volumes/VFX',
+            tank_name)
 
+
+    def resolve_project_path(self):
         # returns resoved project location on a file system
         # or empty string if project location can not be resolved
 
@@ -1472,6 +1479,9 @@ class flameShotgunConnector(object):
         if (not self.connector.sg_user) or (not self.connector.sg_linked_project_id):
             return ''
         
+        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+            return self.farmfx_resolve_project_path()
+
         # check if we have any storage roots defined in shotgun
         
         sg_storage_data = self.get_sg_storage_roots()
