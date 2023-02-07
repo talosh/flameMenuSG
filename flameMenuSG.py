@@ -18,8 +18,8 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 Ghostvfx dev 009'
-DEBUG = False
+__version__ = 'v0.1.2 Ghostvfx dev 010'
+DEBUG = True
 
 default_templates = {
 # Resolved fields are:
@@ -36,7 +36,7 @@ default_templates = {
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
-        'default': 'sequences/{Sequence}/{Shot}/{Step}/work/flame/flame_batch/{Shot}_{name}_v{version}.batch',
+        'default': 'sequences/{Sequence}/{Shot}/{Step_code}/work/flame/flame_batch/{Shot}_{name}_v{version}.batch',
         'PublishedFileType': 'Flame Batch File'                  
         },
     'version_name': {
@@ -46,11 +46,11 @@ default_templates = {
 },
 'Asset':{
     'flame_render': {
-        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/work/flame/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.{ext}',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step_code}/work/flame/{Asset}_{name}_v{version}/{Asset}_{name}_v{version}.{frame}.{ext}',
         'PublishedFileType': 'Flame Render'
         },
     'flame_batch': {
-        'default': 'assets/{sg_asset_type}/{Asset}/{Step}/work/flame/flame_batch/{Asset}_{name}_v{version}.batch',
+        'default': 'assets/{sg_asset_type}/{Asset}/{Step_code}/work/flame/flame_batch/{Asset}_{name}_v{version}.batch',
         'PublishedFileType': 'Flame Batch File'                  
         },
     'version_name': {
@@ -5952,6 +5952,8 @@ class flameMenuPublisher(flameMenuApp):
                 data = pb_published.get(version_name, [])
                 data.append(pb_info)
                 pb_published[version_name] = data
+                if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                    self.farmfx_pickle_pb_info(pb_info)
             else:
                 version_name = pb_info.get('version_name')
                 versions_failed.add(version_name)
@@ -6006,7 +6008,888 @@ class flameMenuPublisher(flameMenuApp):
         
         return True
 
+    def farmfx_pickle_pb_info(self, pb_info):
+        import pickle
+
+        pprint (pb_info)
+        return
+
+        try:
+            flame_render_path_cache = pb_info['flame_render']['path_cache']
+            prefs_file = open(prefs_file_path, 'wb')
+            pickle.dump(self.prefs, prefs_file)
+            prefs_file.close()
+            self.log_debug('preferences saved to %s' % prefs_file_path)
+            self.log_debug('preferences contents:\n' + pformat(self.prefs))
+        except Exception as e:
+            self.log('unable to save preferences to %s' % prefs_file_path)
+            self.log_debug(e)
+
+
+        pprint (pb_info)
+
+    def farmfx_publish_clip(self, clip, entity, project_path, preset_fields):
+
+        # Publishes the clip and returns published files info and status
+        
+        # Each flame clip publish will create primary publish, and batch file.
+        # there could be potentially secondary published defined in the future.
+        # the function will return the dictionary with information on that publishes
+        # to be presented to user, as well as is_cancelled flag.
+        # If there's an error and current publish should be stopped that gives
+        # user the possibility to stop other selected clips from being published
+        # returns: (dict)pb_info , (bool)is_cancelled
+
+        # dictionary that holds information about publish
+        # publish_clip will return the list of info dicts
+        # along with the status. It is purely to be able
+        # to inform user of the status after we processed multpile clips
+
+        from PySide2 import QtWidgets
+
+        pb_info = {
+            'flame_clip_name': clip.name.get_value(),        # name of the clip selected in flame
+            'version_name': '',     # name of a version in shotgun
+            'version': {},
+            'flame_render': {       # 'flame_render' related data
+                'path_cache': '',
+                'pb_file_name': '',
+                'pb_file': {}
+            },
+            'flame_batch': {        # 'flame_batch' related data
+                'path_cache': '',
+                'pb_file_name': '',
+                'pb_file': {}
+            },
+            'status': False         # status of the flame clip publish
+        }
+
+        # Process info we've got from entity
+
+        self.log_debug('Starting publish_clip for %s with entity:' % pb_info.get('flame_clip_name'))
+        self.log_debug('\n%s' % pformat(entity))
+
+        task = entity.get('task')
+        task_entity = task.get('entity')
+        task_entity_type = task_entity.get('type')
+        task_entity_name = task_entity.get('name')
+        task_entity_id = task_entity.get('id')
+        task_step = task.get('step.Step.code')
+        task_step_code = task.get('step.Step.short_name')
+        if not task_step_code:
+            task_step_code = task_step.upper()
+        sequence = task.get('entity.Shot.sg_sequence')
+        if not sequence:
+            sequence_name = 'NoSequence'
+        else:
+            sequence_name = sequence.get('name', 'NoSequence')
+        sg_asset_type = task.get('entity.Asset.sg_asset_type','NoType')
+        uid = self.create_uid()    
+        
+        # linked .batch file path resolution
+        # if the clip consists of several clips with different linked batch setups
+        # fall back to the current batch setup (should probably publish all of them?)
+
+        self.log_debug('looking for linked batch setup...')
+
+        import ast
+
+        linked_batch_path = None
+        comments = set()
+        for version in clip.versions:
+            for track in version.tracks:
+                for segment in track.segments:
+                    comments.add(segment.comment.get_value())
+        if len(comments) == 1:
+            comment = comments.pop()
+            start_index = comment.find("{'batch_file': ")
+            end_index = comment.find("'}", start_index)
+            if (start_index > 0) and (end_index > 0):
+                try:
+                    linked_batch_path_dict = ast.literal_eval(comment[start_index:end_index+2])
+                    linked_batch_path = linked_batch_path_dict.get('batch_file')
+                except:
+                    pass
+
+        self.log_debug('linked batch setup: %s' % linked_batch_path)
+
+        # basic name/version detection from clip name
+
+        self.log_debug('parsing clip name %s' % pb_info.get('flame_clip_name'))
+
+        batch_group_name = self.flame.batch.name.get_value()
+
+        clip_name = clip.name.get_value()
+        version_number = -1
+        version_padding = -1
+        if clip_name.startswith(batch_group_name):
+            clip_name = clip_name[len(batch_group_name):]
+        if len(clip_name) == 0:
+            clip_name = task_step_code.lower()
+
+        if clip_name[-1].isdigit():
+            match = re.split('(\d+)', clip_name)
+            try:
+                version_number = int(match[-2])
+            except:
+                pass
+
+            version_padding = len(match[-2])
+            clip_name = clip_name[: -version_padding]
+        
+        if clip_name.endswith('v'):
+            clip_name = clip_name[:-1] 
+        
+        if any([clip_name.startswith('_'), clip_name.startswith(' '), clip_name.startswith('.')]):
+            clip_name = clip_name[1:]
+        if any([clip_name.endswith('_'), clip_name.endswith(' '), clip_name.endswith('.')]):
+            clip_name = clip_name[:-1]
+
+        self.log_debug('parsed clip_name: %s' % clip_name)
+
+        if version_number == -1:
+            self.log_debug('can not parse version, looking for batch iterations')
+            version_number = len(self.flame.batch.batch_iterations) + 1
+            # if (version_number == 0) and (not self.prefs.get('version_zero', False)):
+            #    version_number = 1
+            version_padding = 3
+        
+        self.log_debug('version number: %s' % version_number)
+        self.log_debug('version_zero status: %s' % self.prefs.get('version_zero', False))
+
+        # collect known template fields
+
+        self.log_debug('preset fields: %s' % pformat(preset_fields))
+
+        if preset_fields.get('type') == 'movie':
+            sg_frame = ''
+        else:
+            sg_frame = '%' + '{:02d}'.format(preset_fields.get('framePadding')) + 'd'
+
+        template_fields = {}
+        template_fields['Shot'] = task_entity_name
+        template_fields['Asset'] = task_entity_name
+        template_fields['sg_asset_type'] = sg_asset_type
+        template_fields['name'] = clip_name
+        template_fields['Step'] = task_step
+        template_fields['Step_code'] = task_step_code
+        template_fields['Sequence'] = sequence_name
+        template_fields['version'] = '{:03d}'.format(version_number)
+        template_fields['version_four'] = '{:04d}'.format(version_number)
+        template_fields['ext'] = preset_fields.get('fileExt')
+        template_fields['frame'] = sg_frame
+
+        self.log_debug('template fields:')
+        self.log_debug('\n%s' % pformat(template_fields))
+
+        # compose version name from template
+        
+        version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
+
+        self.log_debug('version name template: %s' % version_name)
+
+        version_name = version_name.format(**template_fields)
+        update_version_preview = True
+        update_version_thumbnail = True
+        pb_info['version_name'] = version_name
+
+        self.log_debug('resolved version name: %s' % version_name)  
+        
+        # 'flame_render'
+        # start with flame_render publish first.
+
+        self.log_debug('starting flame_render publish...') 
+
+        pb_file_name = task_entity_name + ', ' + clip_name
+
+        # compose export path anf path_cache filed from template fields
+
+        export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('value', '')
+
+        self.log_debug('flame_render export preset: %s' % export_path)
+
+        export_path = export_path.format(**template_fields)
+        path_cache = export_path.format(**template_fields)
+        export_path = os.path.join(project_path, export_path)
+        path_cache = os.path.join(os.path.basename(project_path), path_cache)
+
+        if preset_fields.get('type') == 'movie':
+            export_path = export_path.replace('..', '.')
+            path_cache = path_cache.replace('..', '.')
+
+        self.log_debug('resolved export path: %s' % export_path)
+        self.log_debug('path_cache %s' % path_cache)
+
+        # get PublishedFileType from Shotgun
+        # if it is not there - create it
+        flame_render_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('PublishedFileType', '')
+        self.log_debug('PublishedFile type: %s, querying ShotGrid' % flame_render_type)
+        published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_render_type]])
+        self.log_debug('PublishedFile type: found: %s' % pformat(published_file_type))        
+        if not published_file_type:
+            self.log_debug('creating PublishedFile type %s' % flame_render_type)
+            published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_render_type})
+            self.log_debug('created: %s' % pformat(published_file_type))
+
+        # fill the pb_info data for 'flame_render'
+        pb_info['flame_render']['path_cache'] = path_cache
+        pb_info['flame_render']['pb_file_name'] = pb_file_name
+
+        # check if we're adding publishes to existing version
+
+        if self.connector.sg.find('Version', [
+            ['entity', 'is', task_entity], 
+            ['code', 'is', version_name],
+            ['sg_task', 'is', {'type': 'Task', 'id': task.get('id')}]
+            ]):
+
+            self.log_debug('found existing version with the same name')
+
+            # do not update version thumbnail and preview
+            update_version_preview = False
+            update_version_thumbnail = False
+
+            # if it is a case:
+            # check if we already have published file of the same sg_published_file_type
+            # and with the same name and path_cache
+
+            task_published_files = self.connector.sg.find(
+                'PublishedFile',
+                [['task', 'is', {'type': 'Task', 'id': task.get('id')}]],
+                ['published_file_type', 
+                'path_cache', 
+                'name',
+                'version_number']
+            )
+
+            sg_pbf_type_flag = False
+            path_cache_flag = False
+            name_flag = False
+            version_number_flag = False
+
+            for task_published_file in task_published_files:
+                if task_published_file.get('published_file_type', {}).get('id') == published_file_type.get('id'):
+                    sg_pbf_type_flag = True
+                if task_published_file.get('name') == pb_file_name:
+                    name_flag = True
+                if task_published_file.get('version_number') == version_number:
+                    version_number_flag = True
+                if task_published_file.get('path_cache') == path_cache:
+                    path_cache_flag = True
+
+            if sg_pbf_type_flag and path_cache_flag and name_flag and version_number:
+
+                # we don't need to move down to .batch file publishing.
+                # inform user that published file already exists:
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Publish for flame clip %s\nalready exists in ShotGrid version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+                detailed_msg = ''
+                detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
+                mbox.setDetailedText(detailed_msg)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
+        # Export section
+
+        original_clip_name = clip.name.get_value()
+
+        # Try to export preview and thumbnail in background
+                
+        class BgExportHooks(object):
+            def preExport(self, info, userData, *args, **kwargs):
+                pass
+            def postExport(self, info, userData, *args, **kwargs):
+                pass
+            def preExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def postExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def preExportAsset(self, info, userData, *args, **kwargs):
+                pass
+            def postExportAsset(self, info, userData, *args, **kwargs):
+                del args, kwargs
+                pass
+            def exportOverwriteFile(self, path, *args, **kwargs):
+                del path, args, kwargs
+                return "overwrite"
+        
+        bg_exporter = self.flame.PyExporter()
+        bg_exporter.foreground = False
+
+        # Exporting previews in background 
+        # doesn'r really work with concurrent exports in FG
+        # Render queue just becomes cluttered with
+        # unneeded and unfinished exports
+
+        # Disabling preview bg export block at the moment
+        # But leaving thumbnail export
+        
+        # self.log_debug('sending preview to background export')
+        # preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+        # clip.name.set_value(version_name + '_preview_' + uid)
+        export_dir = '/var/tmp'
+        preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+        # self.prefs_global['temp_files_list'].append(preview_path)
+
+        '''
+        self.log_debug('background exporting preview %s' % clip.name.get_value())
+        self.log_debug('with preset: %s' % preset_path)
+        self.log_debug('into folder: %s' % export_dir)
+
+        try:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
+        except Exception as e:
+            self.log_debug('error exporting in background %s' % e)
+            pass
+        '''
+
+        preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+        clip.name.set_value(version_name + '_thumbnail_' + uid)
+        export_dir = '/var/tmp'
+        thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+        self.prefs_global['temp_files_list'].append(thumbnail_path)
+        clip_in_mark = clip.in_mark.get_value()
+        clip_out_mark = clip.out_mark.get_value()
+        clip.in_mark = self.prefs.get('poster_frame', 1)
+        clip.out_mark = self.prefs.get('poster_frame', 1) + 1
+        bg_exporter.export_between_marks = True
+
+        self.log_debug('background exporting thumbnail %s' % clip.name.get_value())
+        self.log_debug('with preset: %s' % preset_path)
+        self.log_debug('into folder: %s' % export_dir)
+        self.log_debug('poster frame: %s' % self.prefs.get('poster_frame', 1))
+
+        try:
+            bg_exporter.export(clip, preset_path, export_dir,  hooks=BgExportHooks())
+        except Exception as e:
+            self.log_debug('error exporting in background %s' % e)
+            pass
+
+        clip.in_mark.set_value(clip_in_mark)
+        clip.out_mark.set_value(clip_out_mark)
+        clip.name.set_value(original_clip_name)
+
+        # Export using main preset
+
+        self.log_debug('starting export form flame')
+
+        preset_path = preset_fields.get('path')
+
+        self.log_debug('export preset: %s' % preset_path)
+
+        class ExportHooks(object):
+            def preExport(self, info, userData, *args, **kwargs):
+                pass
+            def postExport(self, info, userData, *args, **kwargs):
+                pass
+            def preExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def postExportSequence(self, info, userData, *args, **kwargs):
+                pass
+            def preExportAsset(self, info, userData, *args, **kwargs):
+                pass
+            def postExportAsset(self, info, userData, *args, **kwargs):
+                del args, kwargs
+                pass
+            def exportOverwriteFile(self, path, *args, **kwargs):
+                del path, args, kwargs
+                return "overwrite"
+
+        exporter = self.flame.PyExporter()
+        exporter.foreground = True
+        export_clip_name, ext = os.path.splitext(os.path.basename(export_path))
+        export_clip_name = export_clip_name.replace(sg_frame, '')
+        if export_clip_name.endswith('.'):
+            export_clip_name = export_clip_name[:-1]
+        clip.name.set_value(str(export_clip_name))
+        export_dir = str(os.path.dirname(export_path))
+
+        if not os.path.isdir(export_dir):
+            self.log_debug('creating folders: %s' % export_dir)
+            try:
+                os.makedirs(export_dir)
+            except:
+                clip.name.set_value(original_clip_name)
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error publishing flame clip %s:\nunable to create destination folder.' % pb_info.get('flame_clip_name', ''))
+                mbox.setDetailedText('Path: ' + export_dir)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
+        self.log_debug('exporting clip %s' % clip.name.get_value())
+        self.log_debug('with preset: %s' % preset_path)
+        self.log_debug('into folder: %s' % export_dir)
+
+        try:
+            exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
+            clip.name.set_value(original_clip_name)
+        except Exception as e:
+            clip.name.set_value(original_clip_name)
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Error publishing flame clip %s:\n%s.' % (pb_info.get('flame_clip_name', ''), e))
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)
+
+        if not (os.path.isfile(preview_path) and os.path.isfile(thumbnail_path)):
+            self.log_debug('no background previews ready, exporting in fg')
+            
+            # Export preview to temp folder
+
+            # preset_dir = self.flame.PyExporter.get_presets_dir(
+            #   self.flame.PyExporter.PresetVisibility.Shotgun,
+            #   self.flame.PyExporter.PresetType.Movie
+            # )
+            # preset_path = os.path.join(preset_dir, 'Generate Preview.xml')
+            preset_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
+            clip.name.set_value(version_name + '_preview_' + uid)
+            export_dir = '/var/tmp'
+            preview_path = os.path.join(export_dir, version_name + '_preview_' + uid + '.mov')
+
+            self.log_debug('exporting preview %s' % clip.name.get_value())
+            self.log_debug('with preset: %s' % preset_path)
+            self.log_debug('into folder: %s' % export_dir)
+
+            try:
+                exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+            except:
+                pass
+
+            # Set clip in and out marks and export thumbnail to temp folder
+
+            # preset_dir = self.flame.PyExporter.get_presets_dir(
+            #    self.flame.PyExporter.PresetVisibility.Shotgun,
+            #    self.flame.PyExporter.PresetType.Image_Sequence
+            # )
+            # preset_path = os.path.join(preset_dir, 'Generate Thumbnail.xml')
+            preset_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
+            clip.name.set_value(version_name + '_thumbnail_' + uid)
+            export_dir = '/var/tmp'
+            thumbnail_path = os.path.join(export_dir, version_name + '_thumbnail_' + uid + '.jpg')
+            clip_in_mark = clip.in_mark.get_value()
+            clip_out_mark = clip.out_mark.get_value()
+            clip.in_mark = self.prefs.get('poster_frame', 1)
+            clip.out_mark = self.prefs.get('poster_frame', 1) + 1
+            exporter.export_between_marks = True
+
+            self.log_debug('exporting thumbnail %s' % clip.name.get_value())
+            self.log_debug('with preset: %s' % preset_path)
+            self.log_debug('into folder: %s' % export_dir)
+            self.log_debug('poster frame: %s' % self.prefs.get('poster_frame', 1))
+
+            try:
+                exporter.export(clip, preset_path, export_dir,  hooks=ExportHooks())
+            except:
+                pass
+            
+            clip.in_mark.set_value(clip_in_mark)
+            clip.out_mark.set_value(clip_out_mark)
+            clip.name.set_value(original_clip_name)
+
+            # Create version in Shotgun
+
+        self.log_debug('creating version in ShotGrid')
+
+        self.progress.show()
+        self.progress.set_progress(version_name, 'Creating version...')
+
+        version_data = dict(
+            project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
+            code = version_name,
+            #description=item.description,
+            entity = task_entity,
+            sg_task = {'type': 'Task', 'id': task.get('id')},
+            #sg_path_to_frames=path
+        )
+        version = {}
+        try:
+            version = self.connector.sg.create('Version', version_data)
+            self.log_debug('created Version: \n%s' % pformat(version))
+            pb_info['version'] = version
+        except Exception as e:
+            self.progress.hide()
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Error creating version in ShotGrid')
+            mbox.setDetailedText(pformat(e))
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)        
+
+        if os.path.isfile(thumbnail_path) and update_version_thumbnail:
+            self.log_debug('uploading thumbnail %s' % thumbnail_path)
+            self.progress.set_progress(version_name, 'Uploading thumbnail...')
+            try:
+                self.connector.sg.upload_thumbnail('Version', version.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading version thumbnail to ShotGrid')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
+        if os.path.isfile(preview_path) and update_version_preview:
+            self.log_debug('uploading preview %s' % preview_path)
+            self.progress.set_progress(version_name, 'Uploading preview...')
+            try:
+                self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+            except:
+                try:
+                    self.connector.sg.upload('Version', version.get('id'), preview_path, 'sg_uploaded_movie')
+                except Exception as e:
+                    self.progress.hide()
+                    mbox = QtWidgets.QMessageBox()
+                    mbox.setText('Error uploading version preview to ShotGrid')
+                    mbox.setDetailedText(pformat(e))
+                    mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                    # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                    btn_Continue.setText('Continue')
+                    mbox.exec_()
+                    if mbox.clickedButton() == btn_Continue:
+                        return (pb_info, False)
+                    else:
+                        return (pb_info, True)
+
+        # Create 'flame_render' PublishedFile
+
+        self.log_debug('creating flame_render published file in ShotGrid')
+
+        published_file_data = dict(
+            project = {'type': 'Project', 'id': self.connector.sg_linked_project_id},
+            version_number = version_number,
+            task = {'type': 'Task', 'id': task.get('id')},
+            version = version,
+            entity = task_entity,
+            published_file_type = published_file_type,
+            # path = {'relative_path': path_cache},
+            path_cache = path_cache,
+            code = os.path.basename(path_cache),
+            name = pb_file_name
+        )
+        self.progress.set_progress(version_name, 'Registering main publish files...')
+        try:
+            published_file = self.connector.sg.create('PublishedFile', published_file_data)
+            pb_info['flame_render']['pb_file'] = published_file
+        except Exception as e:
+            self.progress.hide()
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Error creating published file in ShotGrid')
+            mbox.setDetailedText(pformat(e))
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)
+
+
+        self.log_debug('created PublishedFile:\n%s' % pformat(published_file))
+        self.log_debug('uploading thumbnail %s' % thumbnail_path)
+        self.progress.set_progress(version_name, 'Uploading main publish files thumbnail...')
+        try:
+            self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+        except:
+            try:
+                self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading thumbnail to ShotGrid')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)        
+
+        pb_info['status'] = True
+
+        # check what we've actually exported and get start and end frames from there
+        # this won't work for movie, so check the preset first
+        # this should be moved in a separate function later
+
+        self.log_debug('getting start and end frames from exported clip')
+        
+        flame_path = ''
+        flame_render_path_cache = pb_info.get('flame_render', {}).get('path_cache', '')
+        flame_render_export_dir = os.path.join(os.path.dirname(project_path), os.path.dirname(flame_render_path_cache))
+
+        self.log_debug('flame_render_path_cache %s' % flame_render_path_cache)
+        self.log_debug('flame_render_export_dir %s' % flame_render_export_dir)
+
+        if preset_fields.get('type', 'image') == 'image':
+            import fnmatch
+
+            try:
+                file_names = [f for f in os.listdir(flame_render_export_dir) if os.path.isfile(os.path.join(flame_render_export_dir, f))]
+            except:
+                file_names = []
+                                    
+            frame_pattern = re.compile(r"^(.+?)([0-9#]+|[%]0\dd)$")
+            root, ext = os.path.splitext(os.path.basename(flame_render_path_cache))
+            match = re.search(frame_pattern, root)
+            if match:
+                pattern = os.path.join("%s%s" % (re.sub(match.group(2), "*", root), ext))
+                files = list()
+                for file_name in file_names:
+                    if fnmatch.fnmatch(file_name, pattern):
+                        files.append(os.path.join(export_dir, file_name))
+                
+                if files:
+                    file_roots = [os.path.splitext(f)[0] for f in files]
+                    frame_padding = len(re.search(frame_pattern, file_roots[0]).group(2))
+                    offset = len(match.group(1))
+                    frames = list()
+                    for f in file_roots:
+                        try:
+                            frame = int(os.path.basename(f)[offset:offset+frame_padding])
+                        except:
+                            continue
+                        frames.append(frame)
+
+                    if frames:
+                        min_frame = min(frames)
+                        self.log_debug('start frame: %s' % min_frame)
+                        max_frame = max(frames)
+                        self.log_debug('end_frame %s' % min_frame)
+                        format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
+                        frame_spec = format_str % (min_frame, max_frame)
+                        flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
+                        flame_path = os.path.join(export_dir, flame_file_name)
+
+                        self.connector.sg.update('Version', version.get('id'), {'sg_first_frame': min_frame, 'sg_last_frame': max_frame})
+
+            pb_info['flame_render']['flame_path'] = flame_path
+        
+        elif preset_fields.get('type', 'image') == 'movie':
+            pass
+            # placeholder for movie export
+
+        # publish .batch file
+        # compose batch export path and path_cache filed from template fields
+
+        self.log_debug('starting .batch file publish')
+
+        export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
+        export_path = export_path.format(**template_fields)
+        path_cache = export_path.format(**template_fields)
+        export_path = os.path.join(project_path, export_path)
+        path_cache = os.path.join(os.path.basename(project_path), path_cache)
+
+        self.log_debug('resolved export path: %s' % export_path)
+        self.log_debug('path_cache %s' % path_cache)
+
+        pb_info['flame_batch']['path_cache'] = path_cache
+        pb_info['flame_batch']['pb_file_name'] = task_entity_name
+        
+        # copy flame .batch file linked to the clip or save current one if not resolved from comments
+
+        export_dir = os.path.dirname(export_path)
+        if not os.path.isdir(export_dir):
+            self.log_debug('creating folders: %s' % export_dir)
+            try:
+                os.makedirs(export_dir)
+            except:
+                clip.name.set_value(original_clip_name)
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error publishing flame clip %s:\nunable to create destination .batch folder.' % pb_info.get('flame_clip_name', ''))
+                mbox.setDetailedText('Path: ' + export_dir)
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
+        if linked_batch_path:
+
+            self.progress.set_progress(version_name, 'Copying linked batch...')
+
+            self.log_debug('copying linked .batch file')
+            self.log_debug('from %s' % linked_batch_path)
+            self.log_debug('to %s' % export_path)
+
+            src, ext = os.path.splitext(linked_batch_path)
+            dest, ext = os.path.splitext(export_path)
+            if os.path.isfile(linked_batch_path) and  os.path.isdir(src):
+                try:
+                    from subprocess import call
+                    call(['cp', '-a', src, dest])
+                    call(['cp', '-a', linked_batch_path, export_path])
+                except:
+                    self.progress.hide()
+                    mbox = QtWidgets.QMessageBox()
+                    mbox.setText('Error publishing flame clip %s:\nunable to copy flame batch.' % pb_info.get('flame_clip_name', ''))
+                    mbox.setDetailedText('Path: ' + export_path)
+                    mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                    # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                    btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                    btn_Continue.setText('Continue')
+                    mbox.exec_()
+                    if mbox.clickedButton() == btn_Continue:
+                        return (pb_info, False)
+                    else:
+                        return (pb_info, True)
+            else:
+                self.log_debug('no linked .batch file found on filesystem')
+                self.log_debug('saving current batch to: %s' % export_path)
+                self.flame.batch.save_setup(str(export_path))
+        else:
+            self.log_debug('no linked .batch file')
+            self.log_debug('saving current batch to: %s' % export_path)
+            self.progress.set_progress(version_name, 'Saving current batch...')
+            self.flame.batch.save_setup(str(export_path))
+
+        # get published file type for Flame Batch or create a published file type on the fly
+
+        flame_batch_type = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('PublishedFileType', '')
+        self.log_debug('PublishedFile type: %s, querying ShotGrid' % flame_batch_type)
+        published_file_type = self.connector.sg.find_one('PublishedFileType', filters=[["code", "is", flame_batch_type]])
+        self.log_debug('PublishedFile type: found: %s' % pformat(published_file_type))
+        if not published_file_type:
+            self.log_debug('creating PublishedFile type %s' % flame_render_type)
+            try:
+                published_file_type = self.connector.sg.create("PublishedFileType", {"code": flame_batch_type})
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error creating published file type in ShotGrid')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
+            self.log_debug('created: %s' % pformat(published_file_type))
+
+        # update published file data and create PublishedFile for flame batch
+
+        self.log_debug('creating flame_batch published file in shotgun')
+
+        published_file_data['published_file_type'] = published_file_type
+        # published_file_data['path'] =  {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root}
+        published_file_data['path_cache'] = path_cache
+        published_file_data['code'] = os.path.basename(path_cache)
+        published_file_data['name'] = task_entity_name
+
+        self.progress.set_progress(version_name, 'Registering batch...')
+
+        try:
+            published_file = self.connector.sg.create('PublishedFile', published_file_data)
+            pb_info['flame_batch']['pb_file'] = published_file
+        except Exception as e:
+            self.progress.hide()
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Error creating published file in ShotGrid')
+            mbox.setDetailedText(pformat(e))
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)
+        
+        self.log_debug('created PublishedFile:\n%s' % pformat(published_file))
+        self.log_debug('uploading thumbnail %s' % thumbnail_path)
+        
+        self.progress.set_progress(version_name, 'Uploading batch thumbnail...')
+
+        try:
+            self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+        except:
+            try:
+                self.connector.sg.upload_thumbnail('PublishedFile', published_file.get('id'), thumbnail_path)
+            except Exception as e:
+                self.progress.hide()
+                mbox = QtWidgets.QMessageBox()
+                mbox.setText('Error uploading thumbnail to ShotGrid')
+                mbox.setDetailedText(pformat(e))
+                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+                btn_Continue.setText('Continue')
+                mbox.exec_()
+                if mbox.clickedButton() == btn_Continue:
+                    return (pb_info, False)
+                else:
+                    return (pb_info, True)
+
+        # clean-up preview and thumbnail files
+
+        self.log_debug('cleaning up preview and thumbnail files')
+
+        self.progress.set_progress(version_name, 'Cleaning up...')
+
+        try:
+            os.remove(thumbnail_path)
+            os.remove(preview_path)
+        except:
+            self.log_debug('cleaning up failed')
+        
+        self.log_debug('returning info:\n%s' % pformat(pb_info))
+
+        self.progress.hide()
+
+        return (pb_info, False)
+
     def publish_clip(self, clip, entity, project_path, preset_fields):
+
+        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+            return self.farmfx_publish_clip(clip, entity, project_path, preset_fields)
 
         # Publishes the clip and returns published files info and status
         
@@ -6571,7 +7454,7 @@ class flameMenuPublisher(flameMenuApp):
             version = version,
             entity = task_entity,
             published_file_type = published_file_type,
-            path = {'relative_path': path_cache, 'local_storage': self.connector.sg_storage_root},
+            # path = {'relative_path': path_cache},
             path_cache = path_cache,
             code = os.path.basename(path_cache),
             name = pb_file_name
@@ -7497,22 +8380,26 @@ class flameMenuPublisher(flameMenuApp):
         </name>
         </preset>'''
 
+        self.framework.save_prefs()
         preview_preset_file_path = os.path.join(self.framework.prefs_folder, 'GeneratePreview.xml')
         if not os.path.isfile(preview_preset_file_path):
             try:
                 with open(preview_preset_file_path, 'a') as preview_preset_file:
                     preview_preset_file.write(preview_preset)
                     preview_preset_file.close()
-            except:
-                pass
+            except Exception as e:
+                self.log('unable to save export preset %s' % preview_preset_file_path)
+                self.log_debug(e)
+
         thumbnail_preset_file_path = os.path.join(self.framework.prefs_folder, 'GenerateThumbnail.xml')
         if not os.path.isfile(thumbnail_preset_file_path):
             try:
                 with open(thumbnail_preset_file_path, 'a') as thumbnail_preset_file:
                     thumbnail_preset_file.write(thumbnail_preset)
                     thumbnail_preset_file.close()
-            except:
-                pass
+            except Exception as e:
+                self.log('unable to save export preset %s' % preview_preset_file_path)
+                self.log_debug(e)
 
     def show_bug_message(self, *args, **kwargs):
         if self.flame_bug_message:
