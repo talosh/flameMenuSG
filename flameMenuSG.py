@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 Ghostvfx dev 012'
+__version__ = 'v0.1.2 Ghostvfx dev 013'
 DEBUG = True
 
 default_templates = {
@@ -6009,7 +6009,7 @@ class flameMenuPublisher(flameMenuApp):
         return True
 
     def farmfx_pickle_pb_info(self, pb_info):
-        import pickle
+        import json
         
         pb_info['human_user'] = self.connector.sg_human_user
 
@@ -6019,10 +6019,13 @@ class flameMenuPublisher(flameMenuApp):
             export_dir = os.path.dirname(
                 os.path.dirname(flame_render_path_cache)
             )
-            pickle_file_path = os.path.join(export_dir, version_name + '.pickle')
+            pickle_file_path = os.path.join(export_dir, version_name + '.json')
             self.log_debug('pickle_file_path: %s' % pickle_file_path)
-            pickle_file = open(pickle_file_path, 'wb')
-            pickle.dump(pb_info, pickle_file)
+
+            json_string = json.dumps(pb_info, indent=4)
+
+            pickle_file = open(pickle_file_path, 'w')
+            pickle_file.write(json_string)
             pickle_file.close()
             self.log_debug('preferences saved to %s' % pickle_file_path)
             self.log_debug('preferences contents:\n' + pformat(pb_info))
