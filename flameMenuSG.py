@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 Ghostvfx dev 010'
+__version__ = 'v0.1.2 Ghostvfx dev 011'
 DEBUG = True
 
 default_templates = {
@@ -6010,23 +6010,21 @@ class flameMenuPublisher(flameMenuApp):
 
     def farmfx_pickle_pb_info(self, pb_info):
         import pickle
-
-        pprint (pb_info)
-        return
-
+        
+        pb_info['human_user'] = self.connector.sg_human_user
         try:
             flame_render_path_cache = pb_info['flame_render']['path_cache']
-            prefs_file = open(prefs_file_path, 'wb')
-            pickle.dump(self.prefs, prefs_file)
-            prefs_file.close()
-            self.log_debug('preferences saved to %s' % prefs_file_path)
-            self.log_debug('preferences contents:\n' + pformat(self.prefs))
+            version_name = pb_info.get('version_name', 'unknown')
+            export_dir = os.path.dirname(flame_render_path_cache)
+            pickle_file_path = os.path.join(export_dir, version_name + '.pickle')
+            pickle_file = open(pickle_file_path, 'wb')
+            pickle.dump(pb_info, pickle_file)
+            pickle_file.close()
+            self.log_debug('preferences saved to %s' % pickle_file_path)
+            self.log_debug('preferences contents:\n' + pformat(pb_info))
         except Exception as e:
-            self.log('unable to save preferences to %s' % prefs_file_path)
+            self.log('unable to save preferences to %s' % pickle_file_path)
             self.log_debug(e)
-
-
-        pprint (pb_info)
 
     def farmfx_publish_clip(self, clip, entity, project_path, preset_fields):
 
@@ -6658,6 +6656,7 @@ class flameMenuPublisher(flameMenuApp):
 
         self.log_debug('flame_render_path_cache %s' % flame_render_path_cache)
         self.log_debug('flame_render_export_dir %s' % flame_render_export_dir)
+        self.log_debug('preset_fields: %s' % pformat(preset_fields))
 
         if preset_fields.get('type', 'image') == 'image':
             import fnmatch
@@ -6675,7 +6674,7 @@ class flameMenuPublisher(flameMenuApp):
                 files = list()
                 for file_name in file_names:
                     if fnmatch.fnmatch(file_name, pattern):
-                        files.append(os.path.join(export_dir, file_name))
+                        files.append(os.path.join(flame_render_export_dir, file_name))
                 
                 if files:
                     file_roots = [os.path.splitext(f)[0] for f in files]
@@ -6697,7 +6696,7 @@ class flameMenuPublisher(flameMenuApp):
                         format_str = "[%%0%sd-%%0%sd]" % (frame_padding, frame_padding)
                         frame_spec = format_str % (min_frame, max_frame)
                         flame_file_name = "%s%s%s" % (match.group(1), frame_spec, ext)
-                        flame_path = os.path.join(export_dir, flame_file_name)
+                        flame_path = os.path.join(flame_render_export_dir, flame_file_name)
 
                         self.connector.sg.update('Version', version.get('id'), {'sg_first_frame': min_frame, 'sg_last_frame': max_frame})
 
