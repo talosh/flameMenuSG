@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.2 Ghostvfx dev 015'
+__version__ = 'v0.1.2 Ghostvfx'
 DEBUG = True
 
 default_templates = {
@@ -638,7 +638,7 @@ class flameMenuApp(object):
             preset_path = preset.get('PresetFile')
         else:
             path_prefix = self.flame.PyExporter.get_presets_dir(
-                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 2)),
+                self.flame.PyExporter.PresetVisibility.values.get(preset.get('PresetVisibility', 1)),
                 self.flame.PyExporter.PresetType.values.get(preset.get('PresetType', 0))
             )
             preset_file = preset.get('PresetFile')
