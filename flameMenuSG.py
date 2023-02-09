@@ -4622,7 +4622,7 @@ class flameMenuBatchLoader(flameMenuApp):
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
-        menu['name'] = '- ' + self.menu_group_name + ' Add/Remove'
+        menu['name'] = '- ' + self.menu_group_name + ' Add/Remove shots'
         menu_item_order = 0
 
         menu_item = {}
@@ -5519,7 +5519,7 @@ class flameMenuPublisher(flameMenuApp):
             entities_to_mark.append(item.get('id'))
 
         menu = {'actions': []}
-        menu['name'] = self.menu_group_name + ' Add/Remove'
+        menu['name'] = self.menu_group_name + ' Add/Remove shots for publish'
         menu_item_order = 0
 
         menu_item = {}
