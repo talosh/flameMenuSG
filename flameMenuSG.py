@@ -17,8 +17,8 @@ from pprint import pformat
 
 # from sgtk.platform.qt import QtGui
 
-menu_group_name = 'Menu(SG)'
-__version__ = 'v0.1.2 Ghostvfx dev 013'
+menu_group_name = 'GhostVFX'
+__version__ = 'v0.1.2 Ghostvfx'
 DEBUG = True
 
 default_templates = {
@@ -2233,7 +2233,7 @@ class flameMenuProjectconnect(flameMenuApp):
         window.setWindowTitle(self.framework.bundle_name + ' Preferences')
         window.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
         window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        window.setStyleSheet('background-color: #2e2e2e')
+        window.setStyleSheet('font-size: 11px; background-color: #2e2e2e')
 
         screen_res = QtWidgets.QDesktopWidget().screenGeometry()
         window.move((screen_res.width()/2)-400, (screen_res.height() / 2)-180)
@@ -6011,15 +6011,12 @@ class flameMenuPublisher(flameMenuApp):
     def farmfx_pickle_pb_info(self, pb_info):
         import json
         
+        watch_folder_path = '/Volumes/VFX/_Scratch/Flame/to_process/'
         pb_info['human_user'] = self.connector.sg_human_user
 
         try:
-            flame_render_path_cache = pb_info['flame_render']['flame_path']
             version_name = pb_info.get('version_name', 'unknown')
-            export_dir = os.path.dirname(
-                os.path.dirname(flame_render_path_cache)
-            )
-            pickle_file_path = os.path.join(export_dir, version_name + '.json')
+            pickle_file_path = os.path.join(watch_folder_path, version_name + '.json')
             self.log_debug('pickle_file_path: %s' % pickle_file_path)
 
             json_string = json.dumps(pb_info, indent=4)
