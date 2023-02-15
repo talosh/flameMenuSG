@@ -18,8 +18,8 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.2 Ghostvfx'
-DEBUG = True
+__version__ = 'v0.1.4 GhostVFX'
+DEBUG = False
 
 default_templates = {
 # Resolved fields are:
@@ -3856,7 +3856,120 @@ class flameMenuNewBatch(flameMenuApp):
 
         return entities
 
+    def farmfx_create_new_batch(self, entity):
+        sg = self.connector.sg
+
+        # check if flame batch with entity name already in desktop
+
+        entity = sg.find_one (
+            entity.get('type'),
+            [['id', 'is', entity.get('id')]],
+            ['code', 'sg_head_in', 'sg_tail_out', 'sg_vfx_requirements']
+        )
+
+        batch_groups = []
+        for batch_group in self.flame.project.current_project.current_workspace.desktop.batch_groups:
+            batch_groups.append(batch_group.name.get_value())
+
+        code = entity.get('code')
+        if not code:
+            code = 'New Batch'
+
+        if code in batch_groups:
+            return False
+
+        publishes = sg.find (
+            'PublishedFile',
+            [['entity', 'is', {'id': entity.get('id'), 'type': entity.get('type')}]],
+            [
+                'path_cache',
+                'path_cache_storage',
+                'name',
+                'version_number',
+                'published_file_type',
+                'version.Version.code',
+                'task.Task.step.Step.code',
+                'task.Task.step.Step.short_name'
+            ]
+        )
+
+        publishes_to_import = []
+        publishes_by_step = {}
+        for publish in publishes:
+            step_short_name = publish.get('task.Task.step.Step.short_name')
+            if step_short_name in self.steps_to_ignore:
+                continue
+            if step_short_name not in publishes_by_step.keys():
+                publishes_by_step[step_short_name] = []
+            published_file_type = publish.get('published_file_type')
+            if published_file_type:
+                published_file_type_name = published_file_type.get('name')
+            if published_file_type_name in self.types_to_include:
+                publishes_by_step[step_short_name].append(publish)
+        
+        for step in publishes_by_step.keys():
+            step_group = publishes_by_step.get(step)
+            names_group = dict()
+            
+            for publish in step_group:
+                name = publish.get('name')
+                if name not in names_group.keys():
+                    names_group[name] = []
+                names_group[name].append(publish)
+            
+            for name in names_group.keys():
+                version_numbers = []
+                for publish in names_group[name]:
+                    version_number = publish.get('version_number')
+                    version_numbers.append(version_number)
+                max_version = max(version_numbers)
+                for publish in names_group[name]:
+                    version_number = publish.get('version_number')
+                    if version_number == max_version:
+                        publishes_to_import.append(publish)
+        
+        flame_paths_to_import = []
+        for publish in publishes_to_import:
+            path_cache = publish.get('path_cache')
+            if not path_cache:
+                continue            
+            storage_root = self.connector.resolve_storage_root(publish.get('path_cache_storage'))
+            if not storage_root:
+                continue
+            path = os.path.join(storage_root, path_cache)
+            flame_path = self.build_flame_friendly_path(path)
+            flame_paths_to_import.append(flame_path)
+        
+        sg_head_in = entity.get('sg_head_in')
+        if not sg_head_in:
+            sg_head_in = 1001
+        
+        sg_tail_out = entity.get('sg_tail_out')
+        if not sg_tail_out:
+            sg_tail_out = 1100
+
+        sg_vfx_req = entity.get('sg_vfx_requirements')
+        if not sg_vfx_req:
+            sg_vfx_req = 'no requirements specified'
+
+        dur = (sg_tail_out - sg_head_in) + 1
+
+        self.flame.batch.create_batch_group (
+            code, start_frame = 1, duration = dur
+        )
+        
+        for flame_path in flame_paths_to_import:
+            self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
+
+        render_node = self.flame.batch.create_node('Render')
+        render_node.name.set_value('<batch name>_v<iteration###>')
+
+        self.flame.batch.organize()
+
     def create_new_batch(self, entity):
+        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+            return self.farmfx_create_new_batch(entity)
+
         sg = self.connector.sg
 
         # check if flame batch with entity name already in desktop
@@ -6187,10 +6300,13 @@ class flameMenuPublisher(flameMenuApp):
         # compose version name from template
         
         version_name = self.prefs.get('templates', {}).get(task_entity_type, {}).get('version_name', {}).get('value', '')
+        if not clip_name:
+            version_name = version_name.replace('_{name}_', '_')
 
         self.log_debug('version name template: %s' % version_name)
 
         version_name = version_name.format(**template_fields)
+        # version_name = version_name.replace('__', '_')
         update_version_preview = True
         update_version_thumbnail = True
         pb_info['version_name'] = version_name
@@ -6207,6 +6323,8 @@ class flameMenuPublisher(flameMenuApp):
         # compose export path anf path_cache filed from template fields
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_render', {}).get('value', '')
+        if not clip_name:
+            export_path = export_path.replace('_{name}_', '_')
 
         self.log_debug('flame_render export preset: %s' % export_path)
 
@@ -6214,6 +6332,9 @@ class flameMenuPublisher(flameMenuApp):
         path_cache = export_path.format(**template_fields)
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
+
+        # export_path = export_path.replace('__', '_')
+        # path_cache = path_cache.replace('__', '_')
 
         if preset_fields.get('type') == 'movie':
             export_path = export_path.replace('..', '.')
@@ -6716,6 +6837,8 @@ class flameMenuPublisher(flameMenuApp):
         self.log_debug('starting .batch file publish')
 
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
+        if not clip_name:
+            export_path = export_path.replace('_{name}_', '_')
         export_path = export_path.format(**template_fields)
         path_cache = export_path.format(**template_fields)
         export_path = os.path.join(project_path, export_path)
@@ -7050,6 +7173,8 @@ class flameMenuPublisher(flameMenuApp):
         self.log_debug('version name template: %s' % version_name)
 
         version_name = version_name.format(**template_fields)
+        version_name = version_name.replace('__', '_')
+
         update_version_preview = True
         update_version_thumbnail = True
         pb_info['version_name'] = version_name
@@ -7073,6 +7198,9 @@ class flameMenuPublisher(flameMenuApp):
         path_cache = export_path.format(**template_fields)
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
+
+        export_path = export_path.replace('__', '_')
+        path_cache = path_cache.replace('__', '_')
 
         if preset_fields.get('type') == 'movie':
             export_path = export_path.replace('..', '.')
@@ -7572,6 +7700,7 @@ class flameMenuPublisher(flameMenuApp):
         export_path = self.prefs.get('templates', {}).get(task_entity_type, {}).get('flame_batch', {}).get('value', '')
         export_path = export_path.format(**template_fields)
         path_cache = export_path.format(**template_fields)
+
         export_path = os.path.join(project_path, export_path)
         path_cache = os.path.join(os.path.basename(project_path), path_cache)
 
