@@ -18,7 +18,7 @@ from pprint import pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.4 GhostVFX'
+__version__ = 'v0.1.5 GhostVFX'
 DEBUG = False
 
 default_templates = {
@@ -3864,7 +3864,12 @@ class flameMenuNewBatch(flameMenuApp):
         entity = sg.find_one (
             entity.get('type'),
             [['id', 'is', entity.get('id')]],
-            ['code', 'sg_head_in', 'sg_tail_out', 'sg_vfx_requirements']
+            [
+            'code', 
+            'sg_head_in', 
+            'sg_tail_out', 
+            'sg_sequence.Sequence.code'
+            ]
         )
 
         batch_groups = []
@@ -3878,68 +3883,44 @@ class flameMenuNewBatch(flameMenuApp):
         if code in batch_groups:
             return False
 
-        publishes = sg.find (
-            'PublishedFile',
-            [['entity', 'is', {'id': entity.get('id'), 'type': entity.get('type')}]],
-            [
-                'path_cache',
-                'path_cache_storage',
-                'name',
-                'version_number',
-                'published_file_type',
-                'version.Version.code',
-                'task.Task.step.Step.code',
-                'task.Task.step.Step.short_name'
-            ]
+        plates_folder = os.path.join(
+            self.connector.resolve_project_path(),
+            'sequences',
+            entity.get('sg_sequence.Sequence.code', ''),
+            entity.get('code', ''),
+            'editorial',
+            'plates'
         )
 
-        publishes_to_import = []
-        publishes_by_step = {}
-        for publish in publishes:
-            step_short_name = publish.get('task.Task.step.Step.short_name')
-            if step_short_name in self.steps_to_ignore:
-                continue
-            if step_short_name not in publishes_by_step.keys():
-                publishes_by_step[step_short_name] = []
-            published_file_type = publish.get('published_file_type')
-            if published_file_type:
-                published_file_type_name = published_file_type.get('name')
-            if published_file_type_name in self.types_to_include:
-                publishes_by_step[step_short_name].append(publish)
-        
-        for step in publishes_by_step.keys():
-            step_group = publishes_by_step.get(step)
-            names_group = dict()
-            
-            for publish in step_group:
-                name = publish.get('name')
-                if name not in names_group.keys():
-                    names_group[name] = []
-                names_group[name].append(publish)
-            
-            for name in names_group.keys():
-                version_numbers = []
-                for publish in names_group[name]:
-                    version_number = publish.get('version_number')
-                    version_numbers.append(version_number)
-                max_version = max(version_numbers)
-                for publish in names_group[name]:
-                    version_number = publish.get('version_number')
-                    if version_number == max_version:
-                        publishes_to_import.append(publish)
-        
+        subfolders = []
+        if os.path.isdir(plates_folder):
+            subfolders = [ f.path for f in os.scandir(plates_folder) if f.is_dir() ]
+
         flame_paths_to_import = []
-        for publish in publishes_to_import:
-            path_cache = publish.get('path_cache')
-            if not path_cache:
-                continue            
-            storage_root = self.connector.resolve_storage_root(publish.get('path_cache_storage'))
-            if not storage_root:
+
+        for subfolder in subfolders:
+            try:
+                file_names = sorted([f for f in os.listdir(subfolder) if (os.path.isfile(os.path.join(subfolder, f)) and f.startswith(os.path.basename(subfolder)))])
+            except:
+                file_names = []
+            
+            if not file_names:
                 continue
-            path = os.path.join(storage_root, path_cache)
-            flame_path = self.build_flame_friendly_path(path)
-            flame_paths_to_import.append(flame_path)
-        
+
+            try:
+                first_file_name, ext = os.path.splitext(file_names[0])
+                last_file_name, ext = os.path.splitext(file_names[-1])
+                first_frame = int(first_file_name[len(os.path.basename(subfolder)) + 1:])
+                last_frame = int(last_file_name[len(os.path.basename(subfolder)) + 1:])
+                flame_paths_to_import.append(
+                    os.path.join(
+                        subfolder,
+                        os.path.basename(subfolder) + '.[' + str(first_frame) + '-' + str(last_frame) + ']' + ext
+                    )
+                )
+            except:
+                continue
+                
         sg_head_in = entity.get('sg_head_in')
         if not sg_head_in:
             sg_head_in = 1001
