@@ -1,6 +1,6 @@
 '''
 flameMenuSG
-Flame 2020 and higher
+Flame 2023 and higher
 written by Andrii Toloshnyy
 andriy.toloshnyy@gmail.com
 '''
@@ -12,13 +12,16 @@ import threading
 import atexit
 import inspect
 import re
-from pprint import pprint
-from pprint import pformat
+from xml.dom import minidom
+from datetime import datetime, timedelta
+from struct import unpack
+
+from pprint import pprint, pformat
 
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.5 GhostVFX'
+__version__ = 'v0.1.6 GhostVFX dev 001'
 DEBUG = False
 
 default_templates = {
@@ -1064,6 +1067,12 @@ class flameShotgunConnector(object):
         self.async_cache = {}
         return True
     
+    def cache_uids(self):
+        if isinstance(self.async_cache, dict):
+            return self.async_cache.keys()
+        else:
+            return []
+
     def register_common_queries(self):
         self.unregister_common_queries()
 
@@ -3301,11 +3310,30 @@ class flameMenuProjectconnect(flameMenuApp):
         paneSuperclips.setFixedSize(840, 264)
         paneSuperclips.move(172, 20)
         paneSuperclips.setVisible(False)
-        lbl_paneSuperclips = QtWidgets.QLabel('Superclis', paneSuperclips)
-        lbl_paneSuperclips.setStyleSheet('QFrame {color: #989898}')
-        lbl_paneSuperclips.setFixedSize(840, 264)
-        lbl_paneSuperclips.setAlignment(QtCore.Qt.AlignCenter)
-        lbl_paneSuperclips.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+        # lbl_paneSuperclips = QtWidgets.QLabel('Superclis', paneSuperclips)
+        # lbl_paneSuperclips.setStyleSheet('QFrame {color: #989898}')
+        # lbl_paneSuperclips.setFixedSize(840, 264)
+        # lbl_paneSuperclips.setAlignment(QtCore.Qt.AlignCenter)
+        # lbl_paneSuperclips.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
+
+        def enableSuperclips():
+            if self.framework.prefs['flameSuperclips'].get('enabled', True):
+                btn_enableSuperclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+                self.framework.prefs['flameSuperclips']['enabled'] = False
+            else:
+                btn_enableSuperclips.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+                self.framework.prefs['flameSuperclips']['enabled'] = True
+
+        btn_enableSuperclips = QtWidgets.QPushButton('Enabled', paneSuperclips)
+        btn_enableSuperclips.setFocusPolicy(QtCore.Qt.NoFocus)
+        btn_enableSuperclips.setMinimumSize(88, 28)
+        btn_enableSuperclips.move(0, 34)
+        if self.framework.prefs['flameSuperclips'].get('enabled', True):
+            btn_enableSuperclips.setStyleSheet('QPushButton {font:italic; background-color: #4f4f4f; color: #d9d9d9; border-top: 1px inset black; border-bottom: 1px inset #555555}')
+        else:
+            btn_enableSuperclips.setStyleSheet('QPushButton {color: #989898; background-color: #373737; border-top: 1px inset #555555; border-bottom: 1px inset black}')
+        btn_enableSuperclips.pressed.connect(enableSuperclips)
+
 
         # Close button
 
@@ -8526,6 +8554,268 @@ class flameMenuPublisher(flameMenuApp):
             self.log_debug('Rescan Python Hooks')
 
 
+class flameSuperclips(flameMenuApp):
+    def __init__(self, framework, connector):
+        flameMenuApp.__init__(self, framework)
+
+        # app defaults
+        if not self.prefs.master.get(self.name):
+            self.prefs['enabled'] = True
+        if not self.prefs.get('SUPERCLIPS_FOLDER'):
+            self.prefs['SUPERCLIPS_FOLDER'] = '/var/tmp/flameSuperclips'
+        self.framework.save_prefs()
+
+        self.connector = connector
+
+        self.shotgun_steps_list = {}
+        self.active_projects = {}
+        self.verified_pb_files = set()
+
+        self.register_superclip_queries()
+
+        self.loops = []
+        self.threads = True
+        self.loops.append(threading.Thread(target=self.short_loop, args=(30, )))
+        self.loops.append(threading.Thread(target=self.utility_loop, args=(4, )))
+
+        for loop in self.loops:
+            loop.daemon = True
+            loop.start()
+
+    def terminate_loops(self):
+        self.log_debug('trying to terminate Superclips loops...')
+        self.threads = False
+        for loop in self.loops:
+            loop.join()
+        self.log_debug('Superclips loops terminated')
+
+    def loop_timeout(self, timeout, start):
+        time_passed = int(time.time()-start)
+        if timeout <= time_passed:
+            return
+        else:
+            for n in range((timeout-time_passed)*10):
+                if not self.threads:
+                    break
+                time.sleep(0.1)
+
+    def short_loop(self, timeout):
+        while self.threads:
+            start = time.time()
+
+            # pprint (self.prefs['enabled'])
+            
+            # pb_files = self.get_sg_publishes([
+            #    ['updated_at', 'in_last', SHORT_LOOP, 'HOUR']
+            #    ])
+
+            # self.process_publishes(pb_files, 'short')
+            self.loop_timeout(timeout, start)
+
+    def utility_loop(self, timeout):
+        while self.threads:
+            start = time.time()
+
+            if self.prefs['enabled']:
+                self.ensure_superclips_folder(self.prefs['SUPERCLIPS_FOLDER'])
+                self.ensure_superclips_in_bookmarks()
+                self.register_superclip_queries()
+            else:
+                self.remove_superclips_from_bookmarks()
+                self.unregister_superclip_queries()
+            
+            if not self.threads:
+                break
+
+            self.loop_timeout(timeout, start)
+
+    def ensure_superclips_folder(self, folder):
+        if not os.path.isdir(folder):
+            try:
+                os.makedirs(folder)
+            except:
+                self.log ('can not create %s' % folder)
+                return False
+        return True
+
+    def ensure_superclips_in_bookmarks(self):
+        SUPERCLIPS_FOLDER = self.prefs.get('SUPERCLIPS_FOLDER', '/var/tmp/flameSuperclips')
+        bookmark_file = '/opt/Autodesk/shared/bookmarks/cf_bookmarks.xml'
+        if os.path.isfile(bookmark_file):
+            self.log_debug ('reading %s' % bookmark_file)
+            with open(bookmark_file, 'rb') as xml_file:
+                xml_string = xml_file.read()
+                xml_file.close()
+        
+        xml_string = xml_string.decode()
+        minify_step1 = xml_string.split('\n')
+        minify_step2 = []
+        for x in minify_step1:
+            y = x.strip()
+            if y: minify_step2.append(y)
+        minify_step3 = ''.join(minify_step2)
+        minify_step4 = minify_step3.replace('  ', '').replace('> <', '><')
+
+        try:
+            bookmarks = minidom.parseString(minify_step4)
+        except:
+            self.log('superclips: can not parse bookmark file %s' % bookmark_file)
+            return False
+
+        sections = bookmarks.getElementsByTagName('Section')
+        for section in sections:
+            if section.getAttribute('Name') == 'Shared':
+                shared_bookmarks = section.getElementsByTagName('Bookmark')
+                for shared_bookmark in shared_bookmarks:
+                    if shared_bookmark.getAttribute('Name') == 'flameSuperclips':
+                        return True
+                superclips_bookmark = bookmarks.createElement('Bookmark')
+                superclips_bookmark.setAttribute('Name', 'flameSuperclips')
+                superclips_bookmark.setAttribute('Path', SUPERCLIPS_FOLDER)
+                section.appendChild(superclips_bookmark)
+
+        with open(bookmark_file, 'wb') as xml_file:
+            try:
+                xml_file.write(bookmarks.toprettyxml(encoding='utf-8'))
+                xml_file.close()
+            except Exception as e:
+                self.log (pformat(e))
+                return False
+
+        return True
+
+    def remove_superclips_from_bookmarks(self):
+        SUPERCLIPS_FOLDER = self.prefs.get('SUPERCLIPS_FOLDER', '/var/tmp/flameSuperclips')
+        bookmark_file = '/opt/Autodesk/shared/bookmarks/cf_bookmarks.xml'
+        if os.path.isfile(bookmark_file):
+            with open(bookmark_file, 'r') as xml_file:
+                xml_string = xml_file.read()
+                xml_file.close()
+        if not xml_string:
+            return False
+        minify_step1 = xml_string.split('\n')
+        minify_step2 = []
+        for x in minify_step1:
+            y = x.strip()
+            if y: minify_step2.append(y)
+        minify_step3 = ''.join(minify_step2)
+        minify_step4 = minify_step3.replace('  ', '').replace('> <', '><')
+
+        try:
+            bookmarks = minidom.parseString(minify_step4)
+        except:
+            self.log ('superclips: can not parse bookmark file %s' % bookmark_file)
+            return False
+        
+        sections = bookmarks.getElementsByTagName('Section')
+        for section in sections:
+            if section.getAttribute('Name') == 'Shared':
+                shared_bookmarks = section.getElementsByTagName('Bookmark')
+                for shared_bookmark in shared_bookmarks:
+                    name = shared_bookmark.getAttribute('Name')
+                    path = shared_bookmark.getAttribute('Path')
+                    if name == 'flameSuperclips' and path == SUPERCLIPS_FOLDER:
+                        section.removeChild(shared_bookmark)
+        with open(bookmark_file, 'wb') as xml_file:
+            try:
+                xml_file.write(bookmarks.toprettyxml(encoding='utf-8'))
+                xml_file.close()
+            except Exception as e:
+                self.log (pformat(e))
+                return False
+
+        return True
+
+    def register_superclip_queries(self):
+        self.steps = self.connector.cache_register({
+                'entity': 'Step',
+                'filters': [],
+                'fields': [
+                    'short_name'
+                ]
+            }, uid = 'spclip_steps')
+
+        self.active_projects = self.connector.cache_register({
+                    'entity': 'Project',
+                    'filters': [['archived', 'is', False], ['is_template', 'is', False]],
+                    'fields': ['name', 'tank_name', 'sg_fps']
+                    }, uid = 'spclip_active_projects')
+
+        self.sequences = self.connector.cache_register({
+                    'entity': 'Sequence',
+                    'filters': [],
+                    'fields': ['id', 'code', 'episode', 'shots']
+                    }, uid = 'spclip_sequences')
+
+        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+            version_fields = [
+                    'code',
+                    'created_at',
+                    'project.Project.id',
+                    'project.Project.tank_name',
+                    'entity',
+                    'sg_task.Task.step.Step.id',
+                    'sg_path_to_frames'
+                ]
+
+            self.recent_versions = self.connector.cache_register({
+                'entity': 'Version',
+                'filters': [['updated_at', 'in_last', 2, 'HOUR']],
+                'fields': version_fields
+            }, uid = 'spclip_most_recent_versions')
+
+            self.recent_versions = self.connector.cache_register({
+                'entity': 'Version',
+                'filters': [['updated_at', 'in_last', 9, 'DAY']],
+                'fields': version_fields
+            }, uid = 'spclip_recent_versions')
+
+            self.all_versions = self.connector.cache_register({
+                'entity': 'Version',
+                'filters': [],
+                'fields': version_fields
+            }, uid = 'spclip_all_versions')
+
+        else:
+            pbfile_fields = [
+                    'name',
+                    'created_at',
+                    'published_file_type',
+                    'path_cache',
+                    'path_cache_storage',
+                    'project.Project.id',
+                    'task.Task.entity',
+                    'task.Task.step.Step.id',
+                    'version.Version.id',
+                    'version.Version.code',
+                    'version_number',
+                    'version.Version.sg_artists_status'
+                ]
+
+            self.recent_pbfiles = self.connector.cache_register({
+                'entity': 'Version',
+                'filters': [['updated_at', 'in_last', 2, 'HOUR']],
+                'fields': pbfile_fields
+            }, uid = 'spclip_most_recent_pbfiles')
+
+            self.recent_pbfiles = self.connector.cache_register({
+                'entity': 'Version',
+                'filters': [['updated_at', 'in_last', 9, 'DAY']],
+                'fields': pbfile_fields
+            }, uid = 'spclip_recent_pbfiles')
+
+            self.all_pbfiles = self.connector.cache_register({
+                'entity': 'Version',
+                'filters': [],
+                'fields': pbfile_fields
+            }, uid = 'spclip_all_pbfiles')
+
+    def unregister_superclip_queries(self):
+        cache_uids = self.connector.cache_uids()
+        for cache_uid in cache_uids:
+            if cache_uid.startswith('spclip'):
+                self.connector.cache_unregister(cache_uid)
+
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
 # If the app installed in /opt/Autodesk/<user>/python
@@ -8570,6 +8860,8 @@ def cleanup(apps, app_framework, shotgunConnector):
             print ('[DEBUG %s] unloading apps:\n%s' % ('flameMenuSG', pformat(apps)))
         while len(apps):
             app = apps.pop()
+            if 'terminate_loops' in dir(app):
+                app.terminate_loops()
             if DEBUG:
                 print ('[DEBUG %s] unloading: %s' % ('flameMenuSG', app.name))
             del app        
@@ -8590,6 +8882,7 @@ def load_apps(apps, app_framework, shotgunConnector):
     apps.append(flameMenuNewBatch(app_framework, shotgunConnector))
     apps.append(flameMenuBatchLoader(app_framework, shotgunConnector))
     apps.append(flameMenuPublisher(app_framework, shotgunConnector))
+    apps.append(flameSuperclips(app_framework, shotgunConnector))
     app_framework.apps = apps
     if DEBUG:
         print ('[DEBUG %s] loaded:\n%s' % (app_framework.bundle_name, pformat(apps)))
