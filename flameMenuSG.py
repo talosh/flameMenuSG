@@ -5991,6 +5991,9 @@ class flameMenuPublisher(flameMenuApp):
 
     def publish(self, entity, selection):
         
+        self.progress.show()
+        self.progress.set_progress(self.menu_group_name, 'Preparing to publish...')
+
         # Main publishing function
 
         # temporary move built-in integration out of the way
@@ -6056,6 +6059,12 @@ class flameMenuPublisher(flameMenuApp):
                 pb_failed[version_name] = data
             if is_cancelled:
                 break
+        
+        # try hide the progress just in case
+        try:
+            self.progress.hide()
+        except:
+            pass
 
         # report user of the status
         
@@ -6140,6 +6149,7 @@ class flameMenuPublisher(flameMenuApp):
         # publish_clip will return the list of info dicts
         # along with the status. It is purely to be able
         # to inform user of the status after we processed multpile clips
+
 
         from PySide2 import QtWidgets
 
@@ -6292,7 +6302,7 @@ class flameMenuPublisher(flameMenuApp):
         update_version_thumbnail = True
         pb_info['version_name'] = version_name
 
-        self.log_debug('resolved version name: %s' % version_name)  
+        self.log_debug('resolved version name: %s' % version_name)
         
         # 'flame_render'
         # start with flame_render publish first.
@@ -6349,57 +6359,25 @@ class flameMenuPublisher(flameMenuApp):
 
             self.log_debug('found existing version with the same name')
 
-            # do not update version thumbnail and preview
-            update_version_preview = False
-            update_version_thumbnail = False
+            # we don't need to move down to .batch file publishing.
+            # inform user that published file already exists:
+            self.progress.hide()
 
-            # if it is a case:
-            # check if we already have published file of the same sg_published_file_type
-            # and with the same name and path_cache
+            mbox = QtWidgets.QMessageBox()
+            mbox.setText('Publish for flame clip %s\nalready exists in ShotGrid version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
+            detailed_msg = ''
+            detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
+            mbox.setDetailedText(detailed_msg)
+            mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
+            # mbox.setStyleSheet('QLabel{min-width: 400px;}')
+            btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
+            btn_Continue.setText('Continue')
+            mbox.exec_()
 
-            task_published_files = self.connector.sg.find(
-                'PublishedFile',
-                [['task', 'is', {'type': 'Task', 'id': task.get('id')}]],
-                ['published_file_type', 
-                'path_cache', 
-                'name',
-                'version_number']
-            )
-
-            sg_pbf_type_flag = False
-            path_cache_flag = False
-            name_flag = False
-            version_number_flag = False
-
-            for task_published_file in task_published_files:
-                if task_published_file.get('published_file_type', {}).get('id') == published_file_type.get('id'):
-                    sg_pbf_type_flag = True
-                if task_published_file.get('name') == pb_file_name:
-                    name_flag = True
-                if task_published_file.get('version_number') == version_number:
-                    version_number_flag = True
-                if task_published_file.get('path_cache') == path_cache:
-                    path_cache_flag = True
-
-            if sg_pbf_type_flag and path_cache_flag and name_flag and version_number:
-
-                # we don't need to move down to .batch file publishing.
-                # inform user that published file already exists:
-                mbox = QtWidgets.QMessageBox()
-                mbox.setText('Publish for flame clip %s\nalready exists in ShotGrid version %s' % (pb_info.get('flame_clip_name', ''), pb_info.get('version_name', '')))
-                detailed_msg = ''
-                detailed_msg += 'Path: ' + os.path.join(project_path, pb_info.get('flame_render', {}).get('path_cache', ''))
-                mbox.setDetailedText(detailed_msg)
-                mbox.setStandardButtons(QtWidgets.QMessageBox.Ok|QtWidgets.QMessageBox.Cancel)
-                # mbox.setStyleSheet('QLabel{min-width: 400px;}')
-                btn_Continue = mbox.button(QtWidgets.QMessageBox.Ok)
-                btn_Continue.setText('Continue')
-                mbox.exec_()
-
-                if mbox.clickedButton() == btn_Continue:
-                    return (pb_info, False)
-                else:
-                    return (pb_info, True)
+            if mbox.clickedButton() == btn_Continue:
+                return (pb_info, False)
+            else:
+                return (pb_info, True)
 
         # Export section
 
@@ -6538,6 +6516,8 @@ class flameMenuPublisher(flameMenuApp):
         self.log_debug('exporting clip %s' % clip.name.get_value())
         self.log_debug('with preset: %s' % preset_path)
         self.log_debug('into folder: %s' % export_dir)
+
+        self.progress.hide()
 
         try:
             exporter.export(clip, preset_path, export_dir, hooks=ExportHooks())
