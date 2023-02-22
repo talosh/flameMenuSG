@@ -8594,14 +8594,16 @@ class flameSuperclips(flameMenuApp):
         self.storage_root = '/Volumes/VFX'
 
         if self.prefs['enabled']:
+            self.ensure_superclips_folder(self.prefs['SUPERCLIPS_FOLDER'])
+            self.ensure_superclips_in_bookmarks()
             self.initial_superclip_queries()
 
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.onoff_loop, args=(1, )))
         self.loops.append(threading.Thread(target=self.short_loop, args=(30, )))
-        self.loops.append(threading.Thread(target=self.long_loop, args=(120, )))
-        self.loops.append(threading.Thread(target=self.retro_loop, args=(900, )))
+        self.loops.append(threading.Thread(target=self.long_loop, args=(300, )))
+        self.loops.append(threading.Thread(target=self.retro_loop, args=(43200, )))
         self.loops.append(threading.Thread(target=self.utility_loop, args=(300, )))
 
         for loop in self.loops:
@@ -8664,7 +8666,7 @@ class flameSuperclips(flameMenuApp):
                     ['updated_at', 'in_last', self.SHORT_LOOP, 'HOUR']
                     ])
 
-                self.log('short loop found %s publishes for %s hours in %s sec' % (
+                self.log_debug('short loop found %s publishes for %s hours in %s sec' % (
                     len(pb_files), 
                     self.SHORT_LOOP, 
                     time.time()-start
@@ -8672,7 +8674,7 @@ class flameSuperclips(flameMenuApp):
 
                 self.process_publishes(pb_files, 'short')
             except Exception as e:
-                self.log('Superclips: short_loop: %s' % pformat(e))
+                self.log_debug('Superclips: short_loop: %s' % pformat(e))
 
             self.loop_timeout(timeout, start)
 
@@ -8693,7 +8695,7 @@ class flameSuperclips(flameMenuApp):
                 pb_files = self.get_sg_publishes([
                     ['updated_at', 'in_last', self.LONG_LOOP, 'DAY']
                 ])
-                self.log('long loop found %s publishes for %s days in %s sec' % (
+                self.log_debug('long loop found %s publishes for %s days in %s sec' % (
                     len(pb_files), 
                     self.LONG_LOOP, 
                     time.time()-start
@@ -8701,7 +8703,7 @@ class flameSuperclips(flameMenuApp):
 
                 self.process_publishes(pb_files, 'long')
             except Exception as e:
-                self.log('Superclips: long_loop: %s' % pformat(e))
+                self.log_debug('Superclips: long_loop: %s' % pformat(e))
 
             self.loop_timeout(timeout, start)
 
@@ -9051,7 +9053,7 @@ class flameSuperclips(flameMenuApp):
         return pbfiles
 
     def process_publishes(self, pb_files, loop):
-        self.log('process_publishes: starting with %s published files for %s loop' % (
+        self.log_debug('process_publishes: starting with %s published files for %s loop' % (
             len(pb_files),
             loop
         ))
@@ -9070,7 +9072,7 @@ class flameSuperclips(flameMenuApp):
                     entity_ids.add(entity_id)
                     entity_types[entity_id] = entity.get('type')
 
-        self.log('process_publishes: found %s entities in %s loop' % (
+        self.log_debug('process_publishes: found %s entities in %s loop' % (
             len(entity_ids),
             loop 
         ))
@@ -9481,11 +9483,11 @@ class flameSuperclips(flameMenuApp):
             #                        sequence_name,
             #                        (entity_name + '.clip')))
 
-            path.add(os.path.join(
-                                    self.prefs['SUPERCLIPS_FOLDER'], 
-                                    project_name, 
-                                    (str(entity_type)+'s').lower(),
-                                    (entity_name + '.clip')))
+            # path.add(os.path.join(
+            #                        self.prefs['SUPERCLIPS_FOLDER'], 
+            #                        project_name, 
+            #                        (str(entity_type)+'s').lower(),
+            #                        (entity_name + '.clip')))
 
         return list(path)
 
