@@ -21,7 +21,7 @@ from pprint import pprint, pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.6 GhostVFX dev 001'
+__version__ = 'v0.1.6 GhostVFX dev 002'
 DEBUG = False
 
 default_templates = {
@@ -8567,11 +8567,17 @@ class flameSuperclips(flameMenuApp):
         flameMenuApp.__init__(self, framework)
 
         # app defaults
+        self.SHORT_LOOP = 2      # Hours
+        self.LONG_LOOP = 9       # Days
+        self.RETRO_LOOP = 299    # Days
+
+
         if not self.prefs.master.get(self.name):
             self.prefs['enabled'] = True
         if not self.prefs.get('SUPERCLIPS_FOLDER'):
             self.prefs['SUPERCLIPS_FOLDER'] = '/var/tmp/flameSuperclips'
         self.framework.save_prefs()
+
 
         self.connector = connector
 
@@ -8580,14 +8586,15 @@ class flameSuperclips(flameMenuApp):
         self.verified_pb_files = set()
 
         if self.prefs['enabled']:
-            self.register_superclip_queries()
+            self.initial_superclip_queries()
 
         self.loops = []
         self.threads = True
+        self.loops.append(threading.Thread(target=self.onoff_loop, args=(1, )))
         self.loops.append(threading.Thread(target=self.short_loop, args=(30, )))
         self.loops.append(threading.Thread(target=self.long_loop, args=(120, )))
-        self.loops.append(threading.Thread(target=self.retro_loop, args=(900, )))
-        self.loops.append(threading.Thread(target=self.utility_loop, args=(4, )))
+        # self.loops.append(threading.Thread(target=self.retro_loop, args=(900, )))
+        # self.loops.append(threading.Thread(target=self.utility_loop, args=(300, )))
 
         for loop in self.loops:
             loop.daemon = True
@@ -8610,39 +8617,95 @@ class flameSuperclips(flameMenuApp):
                     break
                 time.sleep(0.1)
 
+    def onoff_loop(self, timeout):
+        previous_state = self.prefs['enabled']
+        while self.threads:
+            start = time.time()
+            if not self.connector.sg_user:
+                self.loop_timeout(1, start)
+                continue
+            if not self.threads:
+                break
+
+            if previous_state != self.prefs['enabled']:
+                if self.prefs['enabled']:
+                    self.ensure_superclips_folder(self.prefs['SUPERCLIPS_FOLDER'])
+                    self.ensure_superclips_in_bookmarks()
+                    self.initial_superclip_queries()
+                else:
+                    self.remove_superclips_from_bookmarks()
+
+            previous_state = self.prefs['enabled']
+            self.loop_timeout(timeout, start)
+
     def short_loop(self, timeout):
         while self.threads:
-            start = time.time()            
-            pb_files = self.get_sg_publishes('short')
-            self.process_publishes(pb_files, 'short')
+            start = time.time()
+
+            if not self.connector.sg_user:
+                self.loop_timeout(1, start)
+                continue
+            if not self.prefs['enabled']:
+                self.loop_timeout(1, start)
+                continue
+            if not self.threads:
+                break
+            
+            try:
+                pb_files = self.get_sg_publishes([
+                    ['updated_at', 'in_last', self.SHORT_LOOP, 'HOUR']
+                    ])
+
+                self.log('short loop found %s publishes for %s hours in %s sec' % (
+                    len(pb_files), 
+                    self.SHORT_LOOP, 
+                    time.time()-start
+                ))
+
+                self.process_publishes(pb_files, 'short')
+            except Exception as e:
+                self.log('Superclips: short_loop: %s' % pformat(e))
+
             self.loop_timeout(timeout, start)
 
     def long_loop(self, timeout):
         while self.threads:
-            start = time.time()            
-            pb_files = self.get_sg_publishes('long')
-            self.process_publishes(pb_files, 'long')
+            start = time.time()
+
+            if not self.connector.sg_user:
+                self.loop_timeout(1, start)
+                continue
+            if not self.prefs['enabled']:
+                self.loop_timeout(1, start)
+                continue
+            if not self.threads:
+                break
+            
+            try:
+                pb_files = self.get_sg_publishes([
+                    ['updated_at', 'in_last', self.LONG_LOOP, 'DAY']
+                ])
+                self.log('long loop found %s publishes for %s days in %s sec' % (
+                    len(pb_files), 
+                    self.LONG_LOOP, 
+                    time.time()-start
+                ))
+
+                self.process_publishes(pb_files, 'long')
+            except Exception as e:
+                self.log('Superclips: long_loop: %s' % pformat(e))
+
             self.loop_timeout(timeout, start)
 
     def retro_loop(self, timeout):
         while self.threads:
             start = time.time()            
-            pb_files = self.get_sg_publishes('retro')
-            self.process_publishes(pb_files, 'retro')
             self.loop_timeout(timeout, start)
 
     def utility_loop(self, timeout):
         while self.threads:
             start = time.time()
 
-            if self.prefs['enabled']:
-                self.ensure_superclips_folder(self.prefs['SUPERCLIPS_FOLDER'])
-                self.ensure_superclips_in_bookmarks()
-                self.register_superclip_queries()
-            else:
-                self.remove_superclips_from_bookmarks()
-                self.unregister_superclip_queries()
-            
             if not self.threads:
                 break
 
@@ -8745,143 +8808,73 @@ class flameSuperclips(flameMenuApp):
 
         return True
 
-    def farmfx_register_superclip_queries(self):
-        if 'spclip_steps' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                    'entity': 'Step',
-                    'filters': [],
-                    'fields': [
-                        'short_name'
-                    ]
-                }, uid = 'spclip_steps')
-            self.steps = self.connector.cache_retrive_result('spclip_steps', perform_query = True)
+    def initial_superclip_queries(self):
+        self.log_debug('initial_superclip_queries')
+        self.update_sg_steps()
+        self.update_active_projects()
+        self.sequences = self.get_sequences()
 
-        if 'spclip_active_projects' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                        'entity': 'Project',
-                        'filters': [['archived', 'is', False], ['is_template', 'is', False]],
-                        'fields': ['name', 'tank_name', 'sg_fps']
-                        }, uid = 'spclip_active_projects')
-            self.active_projects = self.connector.cache_retrive_result('spclip_active_projects', perform_query = True)
+    def update_sg_steps(self):
+        steps = []
+        try:
+            sg = self.connector.sg_user.create_sg_connection()
+            steps = sg.find('Step', [], ['short_name'])
+
+            for step in steps:
+                id = step.get('id')
+                short_name = step.get('short_name')
+                self.shotgun_steps_list[id] = short_name
+
+            sg.close()
+            del sg
+
+        except Exception as e:
+            self.log('Superclips: update_sg_steps: %s' % pformat(e))
         
-        if 'spclip_sequences' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                        'entity': 'Sequence',
-                        'filters': [],
-                        'fields': ['id', 'code', 'episode', 'shots']
-                        }, uid = 'spclip_sequences')
-            self.sequences = self.connector.cache_retrive_result('spclip_sequences', perform_query = True)
+        return steps
 
-        version_fields = [
-                'code',
-                'created_at',
-                'project.Project.id',
-                'project.Project.tank_name',
-                'entity',
-                'sg_task.Task.step.Step.id',
-                'sg_path_to_frames'
-            ]
+    def update_active_projects(self):
+        active_projects = {}
 
-        if 'spclip_most_recent_versions' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                'entity': 'Version',
-                'filters': [['updated_at', 'in_last', 2, 'HOUR']],
-                'fields': version_fields
-            }, uid = 'spclip_most_recent_versions')
-            self.most_recent_versions = self.connector.cache_retrive_result('spclip_most_recent_versions', perform_query = True)
-
-        if 'spclip_recent_versions' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                'entity': 'Version',
-                'filters': [['updated_at', 'in_last', 9, 'DAY']],
-                'fields': version_fields
-            }, uid = 'spclip_recent_versions')
-            self.recent_versions = self.connector.cache_retrive_result('spclip_recent_versions', perform_query = True)
-
-        if 'spclip_all_versions' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                'entity': 'Version',
-                'filters': [],
-                'fields': version_fields
-            }, uid = 'spclip_all_versions')
-            self.all_versions = self.connector.cache_retrive_result('spclip_all_versions', perform_query = True)
-
-    def register_superclip_queries(self):
-        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            return self.farmfx_register_superclip_queries()
-
-        if 'spclip_steps' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                    'entity': 'Step',
-                    'filters': [],
-                    'fields': [
-                        'short_name'
-                    ]
-                }, uid = 'spclip_steps')
-            self.steps = self.connector.cache_retrive_result('spclip_steps', perform_query = True)
-
-        if 'spclip_active_projects' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                        'entity': 'Project',
-                        'filters': [['archived', 'is', False], ['is_template', 'is', False]],
-                        'fields': ['name', 'tank_name', 'sg_fps']
-                        }, uid = 'spclip_active_projects')
-            self.active_projects = self.connector.cache_retrive_result('spclip_active_projects', perform_query = True)
+        project_ignore_statuses = [
+        #    'Finished',
+        #    'Lost'
+        ]
         
-        if 'spclip_sequences' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                        'entity': 'Sequence',
-                        'filters': [],
-                        'fields': ['id', 'code', 'episode', 'shots']
-                        }, uid = 'spclip_sequences')
-            self.sequences = self.connector.cache_retrive_result('spclip_sequences', perform_query = True)
+        try:
+            sg = self.connector.sg_user.create_sg_connection()
 
-        pbfile_fields = [
-                'name',
-                'created_at',
-                'published_file_type',
-                'path_cache',
-                'path_cache_storage',
-                'project.Project.id',
-                'task.Task.entity',
-                'task.Task.step.Step.id',
-                'version.Version.id',
-                'version.Version.code',
-                'version_number',
-                'version.Version.sg_artists_status'
-            ]
+            all_projects = sg.find('Project', [], ['name', 'tank_name', 'sg_status', 'sg_fps'])
+                
+            for project in all_projects:
+                if project.get('sg_status') not in project_ignore_statuses:
+                    active_projects[project.get('id')] = project
+            self.active_projects = dict(active_projects)
 
-        if 'spclip_most_recent_pbfiles' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                'entity': 'PublishedFile',
-                'filters': [['updated_at', 'in_last', 2, 'HOUR']],
-                'fields': pbfile_fields
-            }, uid = 'spclip_most_recent_pbfiles')
-            self.recent_pbfiles = self.connector.cache_retrive_result('spclip_most_recent_pbfiles', perform_query = True)
+            sg.close()
+            del sg
+        
+        except Exception as e:
+            self.log('Superclips: update_active_projects: %s' % pformat(e))
+        
+        return active_projects
 
-        if 'spclip_recent_pbfiles' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                'entity': 'PublishedFile',
-                'filters': [['updated_at', 'in_last', 9, 'DAY']],
-                'fields': pbfile_fields
-            }, uid = 'spclip_recent_pbfiles')
-            self.recent_pbfiles = self.connector.cache_retrive_result('spclip_recent_pbfiles', perform_query = True)
+    def get_sequences(self):
+        sequences = []
+        try:
+            sg = self.connector.sg_user.create_sg_connection()
 
-        if 'spclip_all_pbfiles' not in self.connector.cache_uids():
-            self.connector.cache_register({
-                'entity': 'PublishedFile',
-                'filters': [],
-                'fields': pbfile_fields
-            }, uid = 'spclip_all_pbfiles')
-            self.all_pbfiles = self.connector.cache_retrive_result('spclip_all_pbfiles', perform_query = True)
+            sequences = sg.find('Sequence', [], ['id', 'code', 'episode', 'shots'])
+            
+            sg.close()
+            del sg
+        
+        except Exception as e:
+            self.log('Superclips: get_sequences: %s' % pformat(e))
+        
+        return sequences
 
-    def unregister_superclip_queries(self):
-        cache_uids = self.connector.cache_uids()
-        for cache_uid in list(cache_uids):
-            if cache_uid.startswith('spclip'):
-                self.connector.cache_unregister(cache_uid)
-
-    def farmfx_get_sg_publishes(self, loop_name):
+    def farmfx_get_sg_publishes(self, filters):
         '''
         {'created_at': datetime.datetime(2023, 2, 21, 17, 58, 57, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x193926a00>),
         'id': 50468,
@@ -8900,52 +8893,29 @@ class flameSuperclips(flameMenuApp):
         'version.Version.code': 'PIL_101_SC007_0080_comp_v004',
         'version.Version.id': 68176,
         'version_number': 4},
-        {'created_at': datetime.datetime(2023, 2, 21, 18, 52, 30, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x193926a00>),
-        'id': 50469,
-        'name': 'PIL_101_SC033_0010,',
-        'path_cache': 'pillow23/sequences/pil_101/PIL_101_SC033_0010/CMP/work/flame/PIL_101_SC033_0010_v001/PIL_101_SC033_0010_v001.%04d.exr',
-        'path_cache_storage': None,
-        'project.Project.id': 3928,
-        'published_file_type': {'id': 36,
-                                'name': 'Flame Render',
-                                'type': 'PublishedFileType'},
-        'task.Task.entity': {'id': 24221,
-                            'name': 'PIL_101_SC033_0010',
-                            'type': 'Shot'},
-        'task.Task.step.Step.id': 8,
-        'type': 'PublishedFile',
-        'version.Version.code': 'PIL_101_SC033_0010_v001',
-        'version.Version.id': 68177,
-        'version_number': 1},
-        {'created_at': datetime.datetime(2023, 2, 21, 18, 52, 35, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x193926a00>),
-        'id': 50470,
-        'name': 'PIL_101_SC033_0010',
-        'path_cache': 'pillow23/sequences/pil_101/PIL_101_SC033_0010/CMP/work/flame/flame_batch/PIL_101_SC033_0010_v001.batch',
-        'path_cache_storage': None,
-        'project.Project.id': 3928,
-        'published_file_type': {'id': 35,
-                                'name': 'Flame Batch File',
-                                'type': 'PublishedFileType'},
-        'task.Task.entity': {'id': 24221,
-                            'name': 'PIL_101_SC033_0010',
-                            'type': 'Shot'},
-        'task.Task.step.Step.id': 8,
-        'type': 'PublishedFile',
-        'version.Version.code': 'PIL_101_SC033_0010_v001',
-        'version.Version.id': 68177,
-        'version_number': 1}]
         '''
 
-        if loop_name == 'short':
-            versions = self.connector.cache_retrive_result('spclip_most_recent_versions')
-        elif loop_name == 'long':
-            versions = self.connector.cache_retrive_result('spclip_recent_versions')
-        elif loop_name == 'retro':
-            versions = self.connector.cache_retrive_result('spclip_all_versions')
-        else:
-            versions = []
-
         pbfiles = []
+        versions = []
+        
+        version_fields = [
+                'code',
+                'created_at',
+                'project.Project.id',
+                'project.Project.tank_name',
+                'entity',
+                'sg_task.Task.step.Step.id',
+                'sg_path_to_frames'
+            ]
+
+        try:
+            sg = self.connector.sg_user.create_sg_connection()
+            versions = sg.find('Version', filters, version_fields)
+            sg.close()
+            del sg
+        except Exception as e:
+                self.log('Superclips: farmfx_get_sg_publishes: %s' % pformat(e))
+
         for version in versions:
             pbfile = {}
             pbfile['created_at'] = version.get('created_at')
@@ -8969,23 +8939,43 @@ class flameSuperclips(flameMenuApp):
             pbfile['version.Version.id'] = version.get('id')
 
             pbfiles.append(pbfile)
+
         return pbfiles
 
-    def get_sg_publishes(self, loop_name):
+    def get_sg_publishes(self, filters):
         if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            return self.farmfx_get_sg_publishes(loop_name)
+            return self.farmfx_get_sg_publishes(filters)
 
-        if loop_name == 'short':
-            return self.connector.cache_retrive_result('spclip_most_recent_pbfiles')
-        elif loop_name == 'long':
-            return self.connector.cache_retrive_result('spclip_recent_pbfiles')
-        elif loop_name == 'retro':
-            return self.connector.cache_retrive_result('spclip_all_pbfiles')
-        else:
-            return []
+        pbfiles = []
+
+        pbfile_fields = [
+                'name',
+                'created_at',
+                'published_file_type',
+                'path_cache',
+                'path_cache_storage',
+                'project.Project.id',
+                'task.Task.entity',
+                'task.Task.step.Step.id',
+                'version.Version.id',
+                'version.Version.code',
+                'version_number',
+                'version.Version.sg_artists_status'
+            ]
+
+        try:
+            sg = self.connector.sg_user.create_sg_connection()
+            pbfiles = sg.find('PublishedFile', filters, pbfile_fields)
+            sg.close()
+            del sg
+
+        except Exception as e:
+                self.log('Superclips: get_sg_publishes: %s' % pformat(e))
+
+        return pbfiles
 
     def process_publishes(self, pb_files, loop):
-        self.log_debug('process_publishes: starting with %s published files for %s loop' % (
+        self.log('process_publishes: starting with %s published files for %s loop' % (
             len(pb_files),
             loop
         ))
@@ -8993,9 +8983,6 @@ class flameSuperclips(flameMenuApp):
         start = time.time()
         
         pb_files = self.filter_publishes(pb_files)
-
-        pprint (pb_files)
-        return
             
         entity_ids = set()
         entity_types = dict()
@@ -9007,7 +8994,7 @@ class flameSuperclips(flameMenuApp):
                     entity_ids.add(entity_id)
                     entity_types[entity_id] = entity.get('type')
 
-        self.log_debug('process_publishes: found %s entities in %s loop' % (
+        self.log('process_publishes: found %s entities in %s loop' % (
             len(entity_ids),
             loop 
         ))
@@ -9030,6 +9017,8 @@ class flameSuperclips(flameMenuApp):
             entity_pb_files = self.filter_publishes(found_entity_publishes)
             if not entity_pb_files:
                 continue
+
+            return
 
             sorted_entity_pb_files = list()
             sorted_entity_pb_files = self.sort_published_files(entity_pb_files)
