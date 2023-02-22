@@ -917,7 +917,11 @@ class flameShotgunConnector(object):
                     self.log_debug('error performing long fetch on register %s' % e)
 
                 flag.append(True )
-                self.async_cache[uid]['result'] = result_by_id
+                try:
+                    if uid in self.async_cache.keys():
+                        self.async_cache[uid]['result'] = result_by_id
+                except Exception as e:
+                    self.log(pformat(e))
 
                 self.preformat_common_queries()
 
@@ -976,7 +980,11 @@ class flameShotgunConnector(object):
                         self.log_debug('error performing quick_fetch query on register %s' % e)
 
                     for entity_id in result_by_id.keys():
-                        self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
+                        try:
+                            if uid in self.async_cache.keys():
+                                self.async_cache[uid]['result'][entity_id] = result_by_id.get(entity_id)
+                        except Exception as e:
+                            self.log(pformat(e))
 
                     self.preformat_common_queries()
 
@@ -8571,11 +8579,14 @@ class flameSuperclips(flameMenuApp):
         self.active_projects = {}
         self.verified_pb_files = set()
 
-        self.register_superclip_queries()
+        if self.prefs['enabled']:
+            self.register_superclip_queries()
 
         self.loops = []
         self.threads = True
         self.loops.append(threading.Thread(target=self.short_loop, args=(30, )))
+        self.loops.append(threading.Thread(target=self.long_loop, args=(120, )))
+        self.loops.append(threading.Thread(target=self.retro_loop, args=(900, )))
         self.loops.append(threading.Thread(target=self.utility_loop, args=(4, )))
 
         for loop in self.loops:
@@ -8601,15 +8612,23 @@ class flameSuperclips(flameMenuApp):
 
     def short_loop(self, timeout):
         while self.threads:
-            start = time.time()
+            start = time.time()            
+            pb_files = self.get_sg_publishes('short')
+            self.process_publishes(pb_files, 'short')
+            self.loop_timeout(timeout, start)
 
-            # pprint (self.prefs['enabled'])
-            
-            # pb_files = self.get_sg_publishes([
-            #    ['updated_at', 'in_last', SHORT_LOOP, 'HOUR']
-            #    ])
+    def long_loop(self, timeout):
+        while self.threads:
+            start = time.time()            
+            pb_files = self.get_sg_publishes('long')
+            self.process_publishes(pb_files, 'long')
+            self.loop_timeout(timeout, start)
 
-            # self.process_publishes(pb_files, 'short')
+    def retro_loop(self, timeout):
+        while self.threads:
+            start = time.time()            
+            pb_files = self.get_sg_publishes('retro')
+            self.process_publishes(pb_files, 'retro')
             self.loop_timeout(timeout, start)
 
     def utility_loop(self, timeout):
@@ -8726,95 +8745,427 @@ class flameSuperclips(flameMenuApp):
 
         return True
 
-    def register_superclip_queries(self):
-        self.steps = self.connector.cache_register({
-                'entity': 'Step',
-                'filters': [],
-                'fields': [
-                    'short_name'
-                ]
-            }, uid = 'spclip_steps')
-
-        self.active_projects = self.connector.cache_register({
-                    'entity': 'Project',
-                    'filters': [['archived', 'is', False], ['is_template', 'is', False]],
-                    'fields': ['name', 'tank_name', 'sg_fps']
-                    }, uid = 'spclip_active_projects')
-
-        self.sequences = self.connector.cache_register({
-                    'entity': 'Sequence',
+    def farmfx_register_superclip_queries(self):
+        if 'spclip_steps' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                    'entity': 'Step',
                     'filters': [],
-                    'fields': ['id', 'code', 'episode', 'shots']
-                    }, uid = 'spclip_sequences')
+                    'fields': [
+                        'short_name'
+                    ]
+                }, uid = 'spclip_steps')
+            self.steps = self.connector.cache_retrive_result('spclip_steps', perform_query = True)
 
-        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            version_fields = [
-                    'code',
-                    'created_at',
-                    'project.Project.id',
-                    'project.Project.tank_name',
-                    'entity',
-                    'sg_task.Task.step.Step.id',
-                    'sg_path_to_frames'
-                ]
+        if 'spclip_active_projects' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                        'entity': 'Project',
+                        'filters': [['archived', 'is', False], ['is_template', 'is', False]],
+                        'fields': ['name', 'tank_name', 'sg_fps']
+                        }, uid = 'spclip_active_projects')
+            self.active_projects = self.connector.cache_retrive_result('spclip_active_projects', perform_query = True)
+        
+        if 'spclip_sequences' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                        'entity': 'Sequence',
+                        'filters': [],
+                        'fields': ['id', 'code', 'episode', 'shots']
+                        }, uid = 'spclip_sequences')
+            self.sequences = self.connector.cache_retrive_result('spclip_sequences', perform_query = True)
 
-            self.recent_versions = self.connector.cache_register({
+        version_fields = [
+                'code',
+                'created_at',
+                'project.Project.id',
+                'project.Project.tank_name',
+                'entity',
+                'sg_task.Task.step.Step.id',
+                'sg_path_to_frames'
+            ]
+
+        if 'spclip_most_recent_versions' not in self.connector.cache_uids():
+            self.connector.cache_register({
                 'entity': 'Version',
                 'filters': [['updated_at', 'in_last', 2, 'HOUR']],
                 'fields': version_fields
             }, uid = 'spclip_most_recent_versions')
+            self.most_recent_versions = self.connector.cache_retrive_result('spclip_most_recent_versions', perform_query = True)
 
-            self.recent_versions = self.connector.cache_register({
+        if 'spclip_recent_versions' not in self.connector.cache_uids():
+            self.connector.cache_register({
                 'entity': 'Version',
                 'filters': [['updated_at', 'in_last', 9, 'DAY']],
                 'fields': version_fields
             }, uid = 'spclip_recent_versions')
+            self.recent_versions = self.connector.cache_retrive_result('spclip_recent_versions', perform_query = True)
 
-            self.all_versions = self.connector.cache_register({
+        if 'spclip_all_versions' not in self.connector.cache_uids():
+            self.connector.cache_register({
                 'entity': 'Version',
                 'filters': [],
                 'fields': version_fields
             }, uid = 'spclip_all_versions')
+            self.all_versions = self.connector.cache_retrive_result('spclip_all_versions', perform_query = True)
 
-        else:
-            pbfile_fields = [
-                    'name',
-                    'created_at',
-                    'published_file_type',
-                    'path_cache',
-                    'path_cache_storage',
-                    'project.Project.id',
-                    'task.Task.entity',
-                    'task.Task.step.Step.id',
-                    'version.Version.id',
-                    'version.Version.code',
-                    'version_number',
-                    'version.Version.sg_artists_status'
-                ]
+    def register_superclip_queries(self):
+        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+            return self.farmfx_register_superclip_queries()
 
-            self.recent_pbfiles = self.connector.cache_register({
-                'entity': 'Version',
+        if 'spclip_steps' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                    'entity': 'Step',
+                    'filters': [],
+                    'fields': [
+                        'short_name'
+                    ]
+                }, uid = 'spclip_steps')
+            self.steps = self.connector.cache_retrive_result('spclip_steps', perform_query = True)
+
+        if 'spclip_active_projects' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                        'entity': 'Project',
+                        'filters': [['archived', 'is', False], ['is_template', 'is', False]],
+                        'fields': ['name', 'tank_name', 'sg_fps']
+                        }, uid = 'spclip_active_projects')
+            self.active_projects = self.connector.cache_retrive_result('spclip_active_projects', perform_query = True)
+        
+        if 'spclip_sequences' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                        'entity': 'Sequence',
+                        'filters': [],
+                        'fields': ['id', 'code', 'episode', 'shots']
+                        }, uid = 'spclip_sequences')
+            self.sequences = self.connector.cache_retrive_result('spclip_sequences', perform_query = True)
+
+        pbfile_fields = [
+                'name',
+                'created_at',
+                'published_file_type',
+                'path_cache',
+                'path_cache_storage',
+                'project.Project.id',
+                'task.Task.entity',
+                'task.Task.step.Step.id',
+                'version.Version.id',
+                'version.Version.code',
+                'version_number',
+                'version.Version.sg_artists_status'
+            ]
+
+        if 'spclip_most_recent_pbfiles' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                'entity': 'PublishedFile',
                 'filters': [['updated_at', 'in_last', 2, 'HOUR']],
                 'fields': pbfile_fields
             }, uid = 'spclip_most_recent_pbfiles')
+            self.recent_pbfiles = self.connector.cache_retrive_result('spclip_most_recent_pbfiles', perform_query = True)
 
-            self.recent_pbfiles = self.connector.cache_register({
-                'entity': 'Version',
+        if 'spclip_recent_pbfiles' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                'entity': 'PublishedFile',
                 'filters': [['updated_at', 'in_last', 9, 'DAY']],
                 'fields': pbfile_fields
             }, uid = 'spclip_recent_pbfiles')
+            self.recent_pbfiles = self.connector.cache_retrive_result('spclip_recent_pbfiles', perform_query = True)
 
-            self.all_pbfiles = self.connector.cache_register({
-                'entity': 'Version',
+        if 'spclip_all_pbfiles' not in self.connector.cache_uids():
+            self.connector.cache_register({
+                'entity': 'PublishedFile',
                 'filters': [],
                 'fields': pbfile_fields
             }, uid = 'spclip_all_pbfiles')
+            self.all_pbfiles = self.connector.cache_retrive_result('spclip_all_pbfiles', perform_query = True)
 
     def unregister_superclip_queries(self):
         cache_uids = self.connector.cache_uids()
-        for cache_uid in cache_uids:
+        for cache_uid in list(cache_uids):
             if cache_uid.startswith('spclip'):
                 self.connector.cache_unregister(cache_uid)
+
+    def farmfx_get_sg_publishes(self, loop_name):
+        '''
+        {'created_at': datetime.datetime(2023, 2, 21, 17, 58, 57, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x193926a00>),
+        'id': 50468,
+        'name': 'PIL_101_SC007_0080',
+        'path_cache': 'pillow23/sequences/pil_101/PIL_101_SC007_0080/CMP/work/flame/flame_batch/PIL_101_SC007_0080_comp_v004.batch',
+        'path_cache_storage': None,
+        'project.Project.id': 3928,
+        'published_file_type': {'id': 35,
+                                'name': 'Flame Batch File',
+                                'type': 'PublishedFileType'},
+        'task.Task.entity': {'id': 24195,
+                            'name': 'PIL_101_SC007_0080',
+                            'type': 'Shot'},
+        'task.Task.step.Step.id': 8,
+        'type': 'PublishedFile',
+        'version.Version.code': 'PIL_101_SC007_0080_comp_v004',
+        'version.Version.id': 68176,
+        'version_number': 4},
+        {'created_at': datetime.datetime(2023, 2, 21, 18, 52, 30, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x193926a00>),
+        'id': 50469,
+        'name': 'PIL_101_SC033_0010,',
+        'path_cache': 'pillow23/sequences/pil_101/PIL_101_SC033_0010/CMP/work/flame/PIL_101_SC033_0010_v001/PIL_101_SC033_0010_v001.%04d.exr',
+        'path_cache_storage': None,
+        'project.Project.id': 3928,
+        'published_file_type': {'id': 36,
+                                'name': 'Flame Render',
+                                'type': 'PublishedFileType'},
+        'task.Task.entity': {'id': 24221,
+                            'name': 'PIL_101_SC033_0010',
+                            'type': 'Shot'},
+        'task.Task.step.Step.id': 8,
+        'type': 'PublishedFile',
+        'version.Version.code': 'PIL_101_SC033_0010_v001',
+        'version.Version.id': 68177,
+        'version_number': 1},
+        {'created_at': datetime.datetime(2023, 2, 21, 18, 52, 35, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x193926a00>),
+        'id': 50470,
+        'name': 'PIL_101_SC033_0010',
+        'path_cache': 'pillow23/sequences/pil_101/PIL_101_SC033_0010/CMP/work/flame/flame_batch/PIL_101_SC033_0010_v001.batch',
+        'path_cache_storage': None,
+        'project.Project.id': 3928,
+        'published_file_type': {'id': 35,
+                                'name': 'Flame Batch File',
+                                'type': 'PublishedFileType'},
+        'task.Task.entity': {'id': 24221,
+                            'name': 'PIL_101_SC033_0010',
+                            'type': 'Shot'},
+        'task.Task.step.Step.id': 8,
+        'type': 'PublishedFile',
+        'version.Version.code': 'PIL_101_SC033_0010_v001',
+        'version.Version.id': 68177,
+        'version_number': 1}]
+        '''
+
+        if loop_name == 'short':
+            versions = self.connector.cache_retrive_result('spclip_most_recent_versions')
+        elif loop_name == 'long':
+            versions = self.connector.cache_retrive_result('spclip_recent_versions')
+        elif loop_name == 'retro':
+            versions = self.connector.cache_retrive_result('spclip_all_versions')
+        else:
+            versions = []
+
+        pbfiles = []
+        for version in versions:
+            pbfile = {}
+            pbfile['created_at'] = version.get('created_at')
+            pbfile['id'] = version.get('id')
+            pbfile['name'] = version.get('code')
+
+            # reconstruct path_cache from windows path
+            sg_path_to_frames = version.get('sg_path_to_frames')
+            project_tank_name = version.get('project.Project.tank_name')
+            if not sg_path_to_frames:
+                continue
+            prefix, suffix = sg_path_to_frames.split(project_tank_name)
+            pbfile['path_cache'] = project_tank_name + suffix
+
+            pbfile['project.Project.id'] = version.get('project.Project.id')
+            pbfile['published_file_type'] = {'name': 'Manchester Version'}
+            pbfile['task.Task.entity'] = version.get('entity')
+            pbfile['task.Task.step.Step.id'] = version.get('sg_task.Task.step.Step.id')
+            pbfile['type'] = 'PublishedFile'
+            pbfile['version.Version.code'] = version.get('code')
+            pbfile['version.Version.id'] = version.get('id')
+
+            pbfiles.append(pbfile)
+        return pbfiles
+
+    def get_sg_publishes(self, loop_name):
+        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+            return self.farmfx_get_sg_publishes(loop_name)
+
+        if loop_name == 'short':
+            return self.connector.cache_retrive_result('spclip_most_recent_pbfiles')
+        elif loop_name == 'long':
+            return self.connector.cache_retrive_result('spclip_recent_pbfiles')
+        elif loop_name == 'retro':
+            return self.connector.cache_retrive_result('spclip_all_pbfiles')
+        else:
+            return []
+
+    def process_publishes(self, pb_files, loop):
+        self.log_debug('process_publishes: starting with %s published files for %s loop' % (
+            len(pb_files),
+            loop
+        ))
+
+        start = time.time()
+        
+        pb_files = self.filter_publishes(pb_files)
+
+        pprint (pb_files)
+        return
+            
+        entity_ids = set()
+        entity_types = dict()
+        for pb_file in pb_files:
+            entity = pb_file.get('task.Task.entity')
+            if entity:
+                entity_id = entity.get('id')
+                if entity_id:
+                    entity_ids.add(entity_id)
+                    entity_types[entity_id] = entity.get('type')
+
+        self.log_debug('process_publishes: found %s entities in %s loop' % (
+            len(entity_ids),
+            loop 
+        ))
+
+        for entity_id in sorted(list(entity_ids), reverse=True):
+            
+            entity_pb_files = list()
+            found_entity_publishes = self.get_sg_publishes([
+                ['entity', 'is', {'type': entity_types.get(entity_id), 'id': entity_id}]
+            ])
+
+            if not self.threads:
+                return False
+
+            for entity_pb_file in found_entity_publishes:
+                entity_pb_file_id = entity_pb_file.get('id')
+                if entity_pb_file_id:
+                    self.verified_pb_files.add(entity_pb_file_id)
+
+            entity_pb_files = self.filter_publishes(found_entity_publishes)
+            if not entity_pb_files:
+                continue
+
+            sorted_entity_pb_files = list()
+            sorted_entity_pb_files = self.sort_published_files(entity_pb_files)
+            if not sorted_entity_pb_files:
+                continue
+            scanned_entity_pb_files = self.scan_folders(sorted_entity_pb_files)
+            if not scanned_entity_pb_files:
+                continue
+
+            if not self.threads:
+                return False
+
+            verified_entity_pb_files = list()
+            verified_entity_pb_files = self.verify_published_files(sorted_entity_pb_files)
+            if not verified_entity_pb_files:
+                continue
+            
+            superclip = self.compose_superclip(verified_entity_pb_files)
+            superclip_path = self.compose_superclip_path(verified_entity_pb_files)
+
+            if not self.threads:
+                return False
+
+            for path in superclip_path:
+                if os.path.isfile(path):
+                    try:
+                        openclip_file = open(path, 'rb')
+                    except:
+                        self.log.info('unable to open superclip file %s' % path)
+                        continue
+                else:
+                    self.log.info('creating superclip ** %s' % str(path)[len(SUPERCLIPS_FOLDER)+1:])
+                    self.write_openclip(path, superclip)
+                    continue
+
+                if openclip_file.read() != superclip:
+                    self.log.info('updating superclip ** %s' % str(path)[len(SUPERCLIPS_FOLDER)+1:])
+                    self.write_openclip(path, superclip)
+                else:
+                    continue
+                
+        self.log_debug('process_publishes: processed %s enteties for %s loop in %s sec' % (
+            len(entity_ids),
+            loop,
+            time.time()-start
+        ))
+
+        return True
+
+    def filter_publishes(self, pb_files):
+        pb_file_types = [
+            'Deep Image Sequence',
+            'Image Sequence',
+            'Playblast',
+            'Rendered Image',
+            'Movie',
+            'Flame Render',
+            'Manchester Version'
+        ]
+
+        allowed_extensions = [
+            'dpx', 
+            'cin', 
+            'exr', 
+            'jpg', 
+            'jpeg', 
+            'tiff', 
+            'tif', 
+            'png'
+        ]
+
+        omit_steps = [
+            'mm',
+            'roto'
+        ]
+
+        filtered_pb_files = list()
+
+        for pb_file in pb_files:
+
+            # testing and debug filter
+            # filter start:
+            '''
+            entity = pb_file.get('task.Task.entity')
+            if not entity:
+                continue
+            if entity.get('id') != 30523:
+                continue
+            '''
+            # filter end
+
+            # filter out unnesessary published file types
+            pb_file_type = pb_file.get('published_file_type', None)
+            if pb_file_type:
+                pb_file_type_name = pb_file_type.get('name', None)
+            else:
+                continue
+            if pb_file_type_name not in pb_file_types:
+                continue
+
+            # check if there's entity to work with
+            pb_task_enitiy = pb_file.get('task.Task.entity')
+            if not pb_task_enitiy:
+                continue
+            
+            # check if there's a pipeline step connected to task
+            pb_task_step_id = pb_file.get('task.Task.step.Step.id')
+            if not pb_task_step_id:
+                continue
+
+            # filter out steps to omit
+            pb_task_step_name = self.shotgun_steps_list.get(pb_task_step_id)
+            if pb_task_step_name and (pb_task_step_name.lower() in omit_steps):
+                continue
+
+            # check if there's a version linked
+            pb_file_version_id = pb_file.get('version.Version.id')
+            if not pb_file_version_id:
+                continue
+            
+            # filter out extensions that are not in the list above
+            path_cache = pb_file.get('path_cache')
+            if not path_cache:
+                continue
+            root, ext = os.path.splitext(os.path.basename(path_cache))
+
+            if ext[1:].lower() not in allowed_extensions:
+                continue
+            
+            # filter out artists declined versions
+            if pb_file.get('version.Version.sg_artists_status') == 'decl':
+                continue
+
+            filtered_pb_files.append(pb_file)
+        
+        return filtered_pb_files
 
 # --- FLAME STARTUP SEQUENCE ---
 # Flame startup sequence is a bit complicated
