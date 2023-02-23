@@ -12,7 +12,7 @@ import threading
 import atexit
 import inspect
 import re
-
+import hashlib
 import collections
 import fnmatch
 import shutil
@@ -27,7 +27,7 @@ from pprint import pprint, pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.6 GhostVFX'
+__version__ = 'v0.1.7 GhostVFX dev 001'
 DEBUG = False
 
 default_templates = {
@@ -1491,7 +1491,6 @@ class flameShotgunConnector(object):
             '/Volumes/VFX',
             tank_name)
 
-
     def resolve_project_path(self):
         # returns resoved project location on a file system
         # or empty string if project location can not be resolved
@@ -1501,9 +1500,9 @@ class flameShotgunConnector(object):
 
         if (not self.connector.sg_user) or (not self.connector.sg_linked_project_id):
             return ''
-        
-        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            return self.farmfx_resolve_project_path()
+        if self.connector.sg: 
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                return self.farmfx_resolve_project_path()
 
         # check if we have any storage roots defined in shotgun
         
@@ -3990,8 +3989,9 @@ class flameMenuNewBatch(flameMenuApp):
         self.flame.batch.organize()
 
     def create_new_batch(self, entity):
-        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            return self.farmfx_create_new_batch(entity)
+        if self.connector.sg:
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                return self.farmfx_create_new_batch(entity)
 
         sg = self.connector.sg
 
@@ -6091,8 +6091,9 @@ class flameMenuPublisher(flameMenuApp):
                 data = pb_published.get(version_name, [])
                 data.append(pb_info)
                 pb_published[version_name] = data
-                if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-                    self.farmfx_pickle_pb_info(pb_info)
+                if self.connector.sg:
+                    if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                        self.farmfx_pickle_pb_info(pb_info)
             else:
                 version_name = pb_info.get('version_name')
                 versions_failed.add(version_name)
@@ -7016,9 +7017,9 @@ class flameMenuPublisher(flameMenuApp):
         return (pb_info, False)
 
     def publish_clip(self, clip, entity, project_path, preset_fields):
-
-        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            return self.farmfx_publish_clip(clip, entity, project_path, preset_fields)
+        if self.connector.sg:
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                return self.farmfx_publish_clip(clip, entity, project_path, preset_fields)
 
         # Publishes the clip and returns published files info and status
         
@@ -8604,7 +8605,7 @@ class flameSuperclips(flameMenuApp):
         self.loops.append(threading.Thread(target=self.short_loop, args=(30, )))
         self.loops.append(threading.Thread(target=self.long_loop, args=(300, )))
         self.loops.append(threading.Thread(target=self.retro_loop, args=(43200, )))
-        self.loops.append(threading.Thread(target=self.utility_loop, args=(300, )))
+        # self.loops.append(threading.Thread(target=self.utility_loop, args=(30, )))
 
         for loop in self.loops:
             loop.daemon = True
@@ -8662,6 +8663,7 @@ class flameSuperclips(flameMenuApp):
                 break
             
             try:
+                self.initial_superclip_queries()
                 pb_files = self.get_sg_publishes([
                     ['updated_at', 'in_last', self.SHORT_LOOP, 'HOUR']
                     ])
@@ -8692,6 +8694,7 @@ class flameSuperclips(flameMenuApp):
                 break
             
             try:
+                self.initial_superclip_queries()
                 pb_files = self.get_sg_publishes([
                     ['updated_at', 'in_last', self.LONG_LOOP, 'DAY']
                 ])
@@ -8726,14 +8729,20 @@ class flameSuperclips(flameMenuApp):
             day_start = time.time()
             start_window = datetime.now() - timedelta(days=day)
             end_window = datetime.now() - timedelta(days=day+1)
-            pb_files = self.get_sg_publishes([
-                ['updated_at', 'between', start_window, end_window]
-            ])
-            self.log_debug('retro loop found %s publishes for day %s in %s sec' % (
-                len(pb_files), 
-                day, 
-                time.time()-day_start
-            ))
+            try:
+                self.initial_superclip_queries()
+                pb_files = self.get_sg_publishes([
+                    ['updated_at', 'between', start_window, end_window]
+                ])
+                self.log_debug('retro loop found %s publishes for day %s in %s sec' % (
+                    len(pb_files), 
+                    day, 
+                    time.time()-day_start
+                ))
+            except Exception as e:
+                self.log_debug('Superclips: retro_loop: %s' % pformat(e))
+                self.loop_timeout(1, start)
+                continue
             
             # filter out published files already found on a basis of entity id
             # (added to self.verified_pb_files in self.process_publishes() function)
@@ -8887,12 +8896,45 @@ class flameSuperclips(flameMenuApp):
         return True
 
     def initial_superclip_queries(self):
+        if not self.connector.sg_user:
+            return
         self.log_debug('initial_superclip_queries')
         self.update_sg_steps()
         self.update_active_projects()
         self.sequences = self.get_sequences()
 
+    def farmfx_update_sg_steps(self):
+        steps = []
+        try:
+            sg = self.connector.sg_user.create_sg_connection()
+            steps = sg.find('Step', [], ['short_name'])
+
+            # we need to add fake steps here for Plates and Reference
+            step_ids = [x.get('id') for x in steps]
+            max_id = max(step_ids)
+            steps.extend([
+                {'id': max_id + 1, 'short_name': 'PLT', 'type': 'Step'},
+                {'id': max_id + 2, 'short_name': 'REF', 'type': 'Step'},
+                ])
+
+            for step in steps:
+                id = step.get('id')
+                short_name = step.get('short_name')
+                self.shotgun_steps_list[id] = short_name
+
+            sg.close()
+            del sg
+
+        except Exception as e:
+            self.log('Superclips: update_sg_steps: %s' % pformat(e))
+
+        return steps
+
     def update_sg_steps(self):
+        if self.connector.sg:
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                return self.farmfx_update_sg_steps()
+
         steps = []
         try:
             sg = self.connector.sg_user.create_sg_connection()
@@ -8982,8 +9024,13 @@ class flameSuperclips(flameMenuApp):
                 'project.Project.id',
                 'project.Project.tank_name',
                 'entity',
+                'entity.Shot.sg_head_in',
+                'entity.Shot.sg_tail_out',
                 'sg_task.Task.step.Step.id',
-                'sg_path_to_frames'
+                'sg_first_frame',
+                'sg_last_frame',
+                'sg_path_to_frames',
+                'sg_path_to_movie'
             ]
 
         try:
@@ -8993,6 +9040,19 @@ class flameSuperclips(flameMenuApp):
             del sg
         except Exception as e:
                 self.log('Superclips: farmfx_get_sg_publishes: %s' % pformat(e))
+
+        # debug block
+        '''
+        entity_versions = []
+        for v in versions:
+            if v['entity']['id'] == 24188:
+                entity_versions.append(v)
+        versions = entity_versions
+        '''
+        # end of debug block
+
+        fake_plate_versions = self.farmfx_scan_plates(versions)
+        versions.extend(fake_plate_versions)
 
         for version in versions:
             pbfile = {}
@@ -9005,8 +9065,10 @@ class flameSuperclips(flameMenuApp):
             project_tank_name = version.get('project.Project.tank_name')
             if not sg_path_to_frames:
                 continue
-            prefix, suffix = sg_path_to_frames.split(project_tank_name)
-            pbfile['path_cache'] = project_tank_name + suffix
+            index = sg_path_to_frames.find(project_tank_name)
+            if index == -1:
+                continue
+            pbfile['path_cache'] = sg_path_to_frames[index:]
 
             pbfile['project.Project.id'] = version.get('project.Project.id')
             pbfile['published_file_type'] = {'name': 'Manchester Version'}
@@ -9015,14 +9077,14 @@ class flameSuperclips(flameMenuApp):
             pbfile['type'] = 'PublishedFile'
             pbfile['version.Version.code'] = version.get('code')
             pbfile['version.Version.id'] = version.get('id')
-
             pbfiles.append(pbfile)
 
         return pbfiles
 
     def get_sg_publishes(self, filters):
-        if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
-            return self.farmfx_get_sg_publishes(filters)
+        if self.connector.sg:
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                return self.farmfx_get_sg_publishes(filters)
 
         pbfiles = []
 
@@ -9052,6 +9114,110 @@ class flameSuperclips(flameMenuApp):
 
         return pbfiles
 
+    def farmfx_scan_plates(self, versions):
+        ref_step_ids = [id for id, name in self.shotgun_steps_list.items() if name == 'REF']
+        ref_step_id = ref_step_ids[0] if ref_step_ids else 0
+        plt_step_ids = [id for id, name in self.shotgun_steps_list.items() if name == 'PLT']
+        plt_step_id = plt_step_ids[0] if plt_step_ids else 0
+
+        fake_versions_by_id = {}
+
+        for version in versions:
+            version_name = version.get('code')
+            if not version_name:
+                continue
+            if not version_name.lower().endswith('_ref'):
+                continue
+            
+            sg_path_to_movie = version.get('sg_path_to_movie')
+            if not sg_path_to_movie:
+                continue
+
+            sg_path_to_movie = os.path.join(*sg_path_to_movie.split('\\'))
+            version['sg_path_to_movie'] = sg_path_to_movie
+
+            project_tank_name = version.get('project.Project.tank_name')
+            if not project_tank_name:
+                continue
+
+            index = sg_path_to_movie.find(project_tank_name)
+            if index == -1:
+                continue
+            ed_index = sg_path_to_movie.rfind('editorial')
+            if ed_index == -1:
+                continue
+            plates_folder = os.path.join(
+                self.storage_root,
+                sg_path_to_movie[index:ed_index],
+                'editorial',
+                'plates'
+            )
+            if not os.path.isdir(plates_folder):
+                continue
+            subfolders = [ f.path for f in os.scandir(plates_folder) if f.is_dir() ]
+            if not subfolders:
+                continue
+            
+            for subfolder in sorted(subfolders):
+                try:
+                    file_names = sorted([f for f in os.listdir(subfolder) if (os.path.isfile(os.path.join(subfolder, f)) and f.startswith(os.path.basename(subfolder)))])
+                except:
+                    continue
+                if not file_names:
+                    continue
+                
+                first_file_name, ext = os.path.splitext(file_names[0])
+                last_file_name, ext = os.path.splitext(file_names[-1])
+                first_frame_str = first_file_name[len(os.path.basename(subfolder)) + 1:]
+                last_frame_str = last_file_name[len(os.path.basename(subfolder)) + 1:]
+                fake_version_code = first_file_name[:-1*(len(first_frame_str)+1)]
+                
+                padded_filename = fake_version_code + '.%0' + str(len(first_frame_str)) + 'd' + ext
+                fake_version_path_to_frames = os.path.join(
+                    plates_folder,
+                    subfolder,
+                    padded_filename
+                )
+                
+                fake_version = {}
+
+                # version data example:
+                '''
+                {'code': 'PIL_101_SC007_0040_v002',
+                'created_at': datetime.datetime(2023, 2, 10, 17, 40, 20, tzinfo=<tank_vendor.shotgun_api3.lib.sgtimezone.LocalTimezone object at 0x18bceda00>),
+                'entity': {'id': 24191, 'name': 'PIL_101_SC007_0040', 'type': 'Shot'},
+                'entity.Shot.sg_head_in': 1001,
+                'entity.Shot.sg_tail_out': 1116,
+                'id': 67884,
+                'project.Project.id': 3928,
+                'project.Project.tank_name': 'pillow23',
+                'sg_first_frame': None,
+                'sg_last_frame': None,
+                'sg_path_to_frames': 'Y:/pillow23/sequences/pil_101/PIL_101_SC007_0040/CMP/review/PIL_101_SC007_0040_v002/4320x2278/PIL_101_SC007_0040_v002.%04d.exr',
+                'sg_path_to_movie': 'Y:/pillow23/sequences/pil_101/PIL_101_SC007_0040/CMP/review/Draft/PIL_101_SC007_0040_v002.mov',
+                'sg_task.Task.step.Step.id': 8,
+                'type': 'Version'}
+                '''
+                
+                for key, value in version.items():
+                    fake_version[key] = value
+                fake_version['code'] = fake_version_code
+
+                m = hashlib.md5()
+                m.update(fake_version_code.encode('utf-8'))
+                fake_version['id'] = int(m.hexdigest(), 16)
+
+                fake_version['sg_path_to_frames'] = fake_version_path_to_frames
+                if '_ref' in fake_version_code:
+                    fake_version['sg_task.Task.step.Step.id'] = ref_step_id
+                else:
+                    fake_version['sg_task.Task.step.Step.id'] = plt_step_id
+
+                fake_versions_by_id[fake_version['id']] = fake_version
+        
+        fake_versions = fake_versions_by_id.values()
+        return fake_versions
+
     def process_publishes(self, pb_files, loop):
         self.log_debug('process_publishes: starting with %s published files for %s loop' % (
             len(pb_files),
@@ -9059,9 +9225,9 @@ class flameSuperclips(flameMenuApp):
         ))
 
         start = time.time()
-        
+
         pb_files = self.filter_publishes(pb_files)
-            
+
         entity_ids = set()
         entity_types = dict()
         for pb_file in pb_files:
@@ -9087,12 +9253,21 @@ class flameSuperclips(flameMenuApp):
             if not self.threads:
                 return False
 
+            # pprint (found_entity_publishes)
+            # print ('found %s versions' % len(found_entity_publishes))
+
+            # that verified_pb_files are for retro loop in oreder to process only the new findings 
+            # assuming that files registered here has already been processed
+            # entity_pb_files_by_id - roughly avoid duplicated ids
+            entity_pb_files_by_id = {}
+
             for entity_pb_file in found_entity_publishes:
                 entity_pb_file_id = entity_pb_file.get('id')
                 if entity_pb_file_id:
                     self.verified_pb_files.add(entity_pb_file_id)
+                    entity_pb_files_by_id[entity_pb_file_id] = entity_pb_file
 
-            entity_pb_files = self.filter_publishes(found_entity_publishes)
+            entity_pb_files = self.filter_publishes(entity_pb_files_by_id.values())
             if not entity_pb_files:
                 continue
 
@@ -9163,7 +9338,7 @@ class flameSuperclips(flameMenuApp):
             'jpeg', 
             'tiff', 
             'tif', 
-            'png'
+            'png',
         ]
 
         omit_steps = [
@@ -9174,14 +9349,13 @@ class flameSuperclips(flameMenuApp):
         filtered_pb_files = list()
 
         for pb_file in pb_files:
-
             # testing and debug filter
             # filter start:
             '''
             entity = pb_file.get('task.Task.entity')
             if not entity:
                 continue
-            if entity.get('id') != 30523:
+            if entity.get('id') != 24188:
                 continue
             '''
             # filter end
@@ -9259,8 +9433,8 @@ class flameSuperclips(flameMenuApp):
     def get_step_sorting_order(self, published_file_group):
 
         steps_sort_order = [
-            'turnover',
-            'PC',
+            'REF',
+            'PLT',
             'anything else goes here',
             'comp',
             'flame' 
