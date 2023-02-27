@@ -27,7 +27,7 @@ from pprint import pprint, pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.7 GhostVFX dev 001'
+__version__ = 'v0.1.9 GhostVFX'
 DEBUG = False
 
 default_templates = {
@@ -9077,6 +9077,10 @@ class flameSuperclips(flameMenuApp):
             pbfile['type'] = 'PublishedFile'
             pbfile['version.Version.code'] = version.get('code')
             pbfile['version.Version.id'] = version.get('id')
+
+            if version.get('frame_offset'):
+                pbfile['frame_offset'] = version.get('frame_offset')
+
             pbfiles.append(pbfile)
 
         return pbfiles
@@ -9204,14 +9208,25 @@ class flameSuperclips(flameMenuApp):
                 fake_version['code'] = fake_version_code
 
                 m = hashlib.md5()
-                m.update(fake_version_code.encode('utf-8'))
-                fake_version['id'] = int(m.hexdigest(), 16)
+                m.update(fake_version_path_to_frames.encode('utf-8'))
+                fake_version['id'] = int(str(int(m.hexdigest(), 16))[:8])
 
                 fake_version['sg_path_to_frames'] = fake_version_path_to_frames
                 if '_ref' in fake_version_code:
                     fake_version['sg_task.Task.step.Step.id'] = ref_step_id
+                    try:
+                        sg_head_in = int(version.get('entity.Shot.sg_head_in'))
+                        sg_tail_out = int(version.get('entity.Shot.sg_tail_out'))
+                        first_frame = int(first_file_name[len(os.path.basename(subfolder)) + 1:])
+                        last_frame = int(last_file_name[len(os.path.basename(subfolder)) + 1:])
+                        if last_frame < sg_tail_out:
+                            handle = int((sg_tail_out - last_frame)/2)
+                            fake_version['frame_offset'] = str(handle)
+                    except:
+                        pass
                 else:
                     fake_version['sg_task.Task.step.Step.id'] = plt_step_id
+                    fake_version['frame_offset'] = '1'
 
                 fake_versions_by_id[fake_version['id']] = fake_version
         
@@ -9472,6 +9487,12 @@ class flameSuperclips(flameMenuApp):
             return (anything_else * max_step_id + published_file_group[0].get('id'))
 
     def get_publish_sorting_order(self, published_file):
+        if self.connector.sg:
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                step_id = published_file.get('task.Task.step.Step.id')
+                if self.shotgun_steps_list.get(step_id) == 'PLT':
+                    return published_file.get('name')
+
         return published_file.get('id')
 
     def scan_folders(self, pb_files):
@@ -9821,7 +9842,7 @@ class flameSuperclips(flameMenuApp):
             rate.appendChild(xml.createTextNode(str(clip_fps)))
             start_timecode.appendChild(rate)
             nbticks = xml.createElement("nbTicks")
-            nbticks.appendChild(xml.createTextNode('0'))
+            nbticks.appendChild(xml.createTextNode(pb_file.get('frame_offset', '0')))
             start_timecode.appendChild(nbticks)
             feed_node.appendChild(start_timecode)
 
@@ -10344,6 +10365,8 @@ def app_initialized(project_name):
     shotgunConnector = flameShotgunConnector(app_framework)
     load_apps(apps, app_framework, shotgunConnector)
 
+app_initialized.__dict__["waitCursor"] = False
+
 try:
     import flame
     app_initialized(flame.project.current_project.name)
@@ -10382,6 +10405,8 @@ def get_main_menu_custom_ui_actions():
         print('main menu update took %s' % (time.time() - start))
 
     return menu
+
+get_main_menu_custom_ui_actions.__dict__["waitCursor"] = False
 
 def get_media_panel_custom_ui_actions():
     
