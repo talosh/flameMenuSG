@@ -9226,7 +9226,7 @@ class flameSuperclips(flameMenuApp):
                         pass
                 else:
                     fake_version['sg_task.Task.step.Step.id'] = plt_step_id
-                    fake_version['frame_offset'] = '1'
+                    # fake_version['frame_offset'] = '1'
 
                 fake_versions_by_id[fake_version['id']] = fake_version
         
@@ -9513,7 +9513,59 @@ class flameSuperclips(flameMenuApp):
 
         return scanned_pb_files
 
+    def farmfx_verify_published_files(self, pb_files):
+        verified_publishes = list()
+        flame_friendly_path = None
+        
+        for published_image_sequence in pb_files:
+            
+            published_files_path = os.path.join(self.storage_root, published_image_sequence.get('path_cache'))
+            file_names = published_image_sequence.get('file_names')
+            
+            if not file_names:
+                continue
+                    
+            # ignore if marker is there
+            if '.openclip.ignore' in file_names:
+                continue
+            
+            # build a flame friendly path from the sequence and check consistency
+            flame_friendly_path = self.flame_frame_spec_from_path(published_files_path, file_names)
+            if not flame_friendly_path:
+                continue
+            
+            # cut the slate frame off the versions
+            flame_friendly_path = flame_friendly_path.replace('.[1000-', '.[1001-')
+
+            published_image_sequence.update({'flame_friendly_path': flame_friendly_path})
+
+            # try to read exr header
+            published_image_sequence['parsed_header'] = self.parse_header_data({})
+
+            match = re.search('\[(.*)-(.*)\]', flame_friendly_path)
+            if match:
+                path = flame_friendly_path.replace('[' + match.group(1) + '-' + match.group(2) + ']', match.group(1))
+                header = self.read_header(path)
+                if header:
+                    channels = header.get('channels')
+                    if channels:
+                        chlist = channels.get('chlist')
+                        if ('R' not in chlist.keys()) and ('G' not in chlist.keys()) and ('B' not in chlist.keys()):
+                            continue
+                        else:
+                            published_image_sequence['parsed_header'] = self.parse_header_data(header)            
+
+            verified_publishes.append(published_image_sequence)
+            
+            if not self.threads:
+                return verified_publishes
+
+        return verified_publishes
+
     def verify_published_files(self, pb_files):
+        if self.connector.sg:
+            if self.connector.sg.base_url == 'https://farmfx.shotgunstudio.com':
+                return self.farmfx_verify_published_files(pb_files)
 
         verified_publishes = list()
         flame_friendly_path = None
