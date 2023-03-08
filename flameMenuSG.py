@@ -584,10 +584,10 @@ class flameMenuApp(object):
         return method
 
     def log(self, message):
-        self.framework.log('[' + self.name + '] ' + message)
+        self.framework.log('[' + self.name + '] ' + str(message))
 
     def log_debug(self, message):
-        self.framework.log_debug('[' + self.name + '] ' + message)
+        self.framework.log_debug('[' + self.name + '] ' + str(message))
 
     def rescan(self, *args, **kwargs):
         if not self.flame:
@@ -10158,7 +10158,11 @@ class flameSuperclips(flameMenuApp):
     def read_header(self, path):
         root, ext = os.path.splitext(os.path.basename(path))
         if ext == '.exr':
-            return self.read_exr_header(path)
+            try:
+                return self.read_exr_header(path)
+            except Exception as e:
+                self.log(pformat(e))
+                return None
         else:
             return None
 
