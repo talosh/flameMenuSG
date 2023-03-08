@@ -27,7 +27,7 @@ from pprint import pprint, pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.9 GhostVFX'
+__version__ = 'v0.1.10 GhostVFX'
 DEBUG = False
 
 default_templates = {
@@ -1488,7 +1488,7 @@ class flameShotgunConnector(object):
     def farmfx_resolve_project_path(self):
         tank_name = self.get_tank_name()
         return os.path.join(
-            '/Volumes/VFX',
+            '/Volumes/ghost',
             tank_name)
 
     def resolve_project_path(self):
@@ -6157,7 +6157,7 @@ class flameMenuPublisher(flameMenuApp):
     def farmfx_pickle_pb_info(self, pb_info):
         import json
         
-        watch_folder_path = '/Volumes/VFX/_Scratch/Flame/to_process/'
+        watch_folder_path = '/Volumes/ghost/_Scratch/Flame/to_process/'
         pb_info['human_user'] = self.connector.sg_human_user
 
         try:
@@ -8592,7 +8592,7 @@ class flameSuperclips(flameMenuApp):
         self.active_projects = {}
         self.verified_pb_files = set()
         self.sequences = []
-        self.storage_root = '/Volumes/VFX'
+        self.storage_root = '/Volumes/ghost'
 
         if self.prefs['enabled']:
             self.ensure_superclips_folder(self.prefs['SUPERCLIPS_FOLDER'])
