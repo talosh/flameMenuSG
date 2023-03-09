@@ -27,7 +27,7 @@ from pprint import pprint, pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.10 GhostVFX'
+__version__ = 'v0.1.11 GhostVFX'
 DEBUG = False
 
 default_templates = {
@@ -732,6 +732,9 @@ class flameShotgunConnector(object):
         self.sg_human_user = None
         self.sg_user_name = None
         self.sg = None
+
+        self.script_user_credentials = self.check_script_user_credentials()
+
         if not self.prefs_global.get('user signed out', False):
             self.log_debug('requesting for Shotgun user')
             try:
@@ -1318,9 +1321,33 @@ class flameShotgunConnector(object):
 
     # end of async cache methods
 
+    def check_script_user_credentials(self):
+        script_user_credentials = {}
+        script_user_file_path = os.path.join(
+            self.framework.prefs_folder,
+            'script_user.json'
+            )
+        if script_user_file_path:
+            import json
+            try:
+                with open(script_user_file_path) as f:
+                    script_user_credentials = json.load(f)
+                    f.close()
+            except Exception as e:
+                self.log(pformat(e))
+
+        return script_user_credentials
+
     def update_human_user(self):
         if not self.sg_user:
             return False
+        if self.script_user_credentials:
+            self.sg_user_name = self.script_user_credentials['api_script']
+            self.sg_human_user = {
+                'id': 0,
+                'name': self.sg_user_name
+            }
+            return True
         try:
             start = time.time()
             sg = self.sg_user.create_sg_connection()
@@ -1338,6 +1365,24 @@ class flameShotgunConnector(object):
 
     def get_user(self, *args, **kwargs):
         import sgtk
+
+        if self.script_user_credentials:
+            authenticator = sgtk.authentication.ShotgunAuthenticator()
+            try:
+                self.sg_user = authenticator.create_script_user(
+                    api_script = self.script_user_credentials['api_script'],
+                    api_key = self.script_user_credentials['api_key'],
+                    host = self.script_user_credentials['host']
+                )
+                self.update_human_user()
+                self.sg = self.sg_user.create_sg_connection()
+                self.prefs_global['user signed out'] = False
+                host = self.script_user_credentials['host']
+                api_script = self.script_user_credentials['api_script']
+                self.log('using script credentials for %s, script name: "%s"' % (host, api_script))
+                return self.sg_user
+            except Exception as e:
+                self.log(pformat(e))
 
         authenticator = sgtk.authentication.ShotgunAuthenticator(sgtk.authentication.DefaultsManager())
         try:
@@ -9033,12 +9078,13 @@ class flameSuperclips(flameMenuApp):
                 'sg_path_to_movie'
             ]
 
-        try:
-            sg = self.connector.sg_user.create_sg_connection()
-            versions = sg.find('Version', filters, version_fields)
-            sg.close()
-            del sg
-        except Exception as e:
+        if self.connector.sg_user:
+            try:
+                sg = self.connector.sg_user.create_sg_connection()
+                versions = sg.find('Version', filters, version_fields)
+                sg.close()
+                del sg
+            except Exception as e:
                 self.log('Superclips: farmfx_get_sg_publishes: %s' % pformat(e))
 
         # debug block
