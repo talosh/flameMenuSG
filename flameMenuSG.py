@@ -1327,16 +1327,17 @@ class flameShotgunConnector(object):
             self.framework.prefs_folder,
             'script_user.json'
             )
-        if script_user_file_path:
+        if os.path.isfile(script_user_file_path):
             import json
             try:
                 with open(script_user_file_path) as f:
                     script_user_credentials = json.load(f)
                     f.close()
+                return script_user_credentials
             except Exception as e:
                 self.log(pformat(e))
-
-        return script_user_credentials
+        else:
+            return {}
 
     def update_human_user(self):
         if not self.sg_user:
