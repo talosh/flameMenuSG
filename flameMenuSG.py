@@ -556,6 +556,7 @@ class flameMenuApp(object):
 
         from PySide2 import QtWidgets
         self.mbox = QtWidgets.QMessageBox()
+        self.progress = self.progress_dialog()
 
     @property
     def flame_extension_map(self):
@@ -709,6 +710,63 @@ class flameMenuApp(object):
 
         return preset_fields
 
+    def progress_dialog(self):
+        from sgtk.platform.qt import QtCore, QtGui
+        
+        progress_label = '[SG]'
+
+        class Ui_Progress(object):
+            def setupUi(self, Progress):
+                Progress.setObjectName("Progress")
+                Progress.resize(211, 50)
+                Progress.setStyleSheet("#Progress {background-color: #181818;} #frame {background-color: rgb(0, 0, 0, 20); border: 1px solid rgb(255, 255, 255, 20); border-radius: 5px;}\n")
+                self.horizontalLayout_2 = QtGui.QHBoxLayout(Progress)
+                self.horizontalLayout_2.setSpacing(0)
+                self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
+                self.horizontalLayout_2.setObjectName("horizontalLayout_2")
+                self.frame = QtGui.QFrame(Progress)
+                self.frame.setFrameShape(QtGui.QFrame.StyledPanel)
+                self.frame.setFrameShadow(QtGui.QFrame.Raised)
+                self.frame.setObjectName("frame")
+
+                self.horizontalLayout = QtGui.QHBoxLayout(self.frame)
+                self.horizontalLayout.setSpacing(4)
+                self.horizontalLayout.setContentsMargins(4, 4, 4, 4)
+                self.horizontalLayout.setObjectName("horizontalLayout")
+                self.label = QtGui.QLabel(self.frame)
+                self.label.setMinimumSize(QtCore.QSize(40, 40))
+                self.label.setMaximumSize(QtCore.QSize(40, 40))
+                self.label.setAlignment(QtCore.Qt.AlignCenter)
+                self.label.setStyleSheet("color: #989898; border: 2px solid #4679A4; border-radius: 20px;") 
+                self.label.setText(progress_label)
+                # self.label.setPixmap(QtGui.QPixmap(":/tk_flame_basic/shotgun_logo_blue.png"))
+                self.label.setScaledContents(True)
+                self.label.setObjectName("label")
+                self.horizontalLayout.addWidget(self.label)
+                self.verticalLayout = QtGui.QVBoxLayout()
+                self.verticalLayout.setObjectName("verticalLayout")
+
+                self.progress_header = QtGui.QLabel(self.frame)
+                self.progress_header.setAlignment(QtCore.Qt.AlignBottom|QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft)
+                self.progress_header.setObjectName("progress_header")
+                self.progress_header.setStyleSheet("#progress_header {font-size: 10px; qproperty-alignment: \'AlignBottom | AlignLeft\'; font-weight: bold; font-family: Open Sans; font-style: Regular; color: #878787;}")
+
+                self.verticalLayout.addWidget(self.progress_header)
+                self.progress_message = QtGui.QLabel(self.frame)
+                self.progress_message.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignTop)
+                self.progress_message.setObjectName("progress_message")
+                self.progress_message.setStyleSheet("#progress_message {font-size: 10px; qproperty-alignment: \'AlignTop | AlignLeft\'; font-family: Open Sans; font-style: Regular; color: #58595A;}")
+                self.verticalLayout.addWidget(self.progress_message)
+                self.horizontalLayout.addLayout(self.verticalLayout)
+                self.horizontalLayout_2.addWidget(self.frame)
+
+                self.retranslateUi(Progress)
+                QtCore.QMetaObject.connectSlotsByName(Progress)
+
+            def retranslateUi(self, Progress):
+                Progress.setWindowTitle(QtGui.QApplication.translate("Progress", "Form", None, QtGui.QApplication.UnicodeUTF8))
+                self.progress_header.setText(QtGui.QApplication.translate("Progress", "ShotGrid Integration", None, QtGui.QApplication.UnicodeUTF8))
+                self.progress_message.setText(QtGui.QApplication.translate("Progress", "Updating config....", None, QtGui.QApplication.UnicodeUTF8))
 
 class flameShotgunConnector(object):
     def __init__(self, framework):
