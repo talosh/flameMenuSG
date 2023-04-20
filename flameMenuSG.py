@@ -768,6 +768,51 @@ class flameMenuApp(object):
                 self.progress_header.setText(QtGui.QApplication.translate("Progress", "ShotGrid Integration", None, QtGui.QApplication.UnicodeUTF8))
                 self.progress_message.setText(QtGui.QApplication.translate("Progress", "Updating config....", None, QtGui.QApplication.UnicodeUTF8))
 
+        class Progress(QtGui.QWidget):
+            """
+            Overlay widget that reports toolkit bootstrap progress to the user.
+            """
+
+            PROGRESS_HEIGHT = 48
+            PROGRESS_WIDTH = 280
+            PROGRESS_PADDING = 48
+
+            def __init__(self):
+                """
+                Constructor
+                """
+                # first, call the base class and let it do its thing.
+                QtGui.QWidget.__init__(self)
+
+                # now load in the UI that was created in the UI designer
+                self.ui = Ui_Progress()
+                self.ui.setupUi(self)
+
+                # make it frameless and have it stay on top
+                self.setWindowFlags(
+                    QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.X11BypassWindowManagerHint
+                )
+
+                # place it in the lower left corner of the primary screen
+                primary_screen = QtGui.QApplication.desktop().primaryScreen()
+                rect_screen = QtGui.QApplication.desktop().availableGeometry(primary_screen)
+
+                self.setGeometry(
+                    ( rect_screen.left() + rect_screen.right() ) // 2 - self.PROGRESS_WIDTH // 2, 
+                    ( rect_screen.bottom() - rect_screen.top() ) // 2 - self.PROGRESS_PADDING,
+                    self.PROGRESS_WIDTH,
+                    self.PROGRESS_HEIGHT
+                )
+
+            def set_progress(self, header, msg):
+                self.ui.progress_header.setText(header)
+                self.ui.progress_message.setText(msg)
+                QtGui.QApplication.processEvents()
+
+        return Progress()
+
+
+
 class flameShotgunConnector(object):
     def __init__(self, framework):
         self.name = self.__class__.__name__
@@ -4002,6 +4047,9 @@ class flameMenuNewBatch(flameMenuApp):
         return entities
 
     def farmfx_create_new_batch(self, entity):
+        self.progress.show()
+        self.progress.set_progress(self.menu_group_name, 'Creating new batch: ' + str(entity.get('name')))
+
         sg = self.connector.sg
 
         # check if flame batch with entity name already in desktop
@@ -4036,6 +4084,8 @@ class flameMenuNewBatch(flameMenuApp):
             'editorial',
             'plates'
         )
+
+        self.progress.set_progress(self.menu_group_name, 'Looking for plates... ')
 
         subfolders = []
         if os.path.isdir(plates_folder):
@@ -4080,17 +4130,23 @@ class flameMenuNewBatch(flameMenuApp):
 
         dur = (sg_tail_out - sg_head_in) + 1
 
+        self.progress.set_progress(self.menu_group_name, 'Creating new batch group: ' + str(code))
+
         self.flame.batch.create_batch_group (
             code, start_frame = 1, duration = dur
         )
         
         for flame_path in flame_paths_to_import:
+            self.progress.set_progress(self.menu_group_name, 'Importing plate: ' + str(os.path.basename(flame_path)))
             self.flame.batch.import_clip(flame_path, 'Schematic Reel 1')
 
+        self.progress.set_progress(self.menu_group_name, 'Creating render nodes...')
         render_node = self.flame.batch.create_node('Render')
         render_node.name.set_value('<batch name>_v<iteration###>')
 
         self.flame.batch.organize()
+
+        self.progress.hide()
 
     def create_new_batch(self, entity):
         if self.connector.sg:
