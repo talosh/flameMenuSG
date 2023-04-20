@@ -27,7 +27,7 @@ from pprint import pprint, pformat
 # from sgtk.platform.qt import QtGui
 
 menu_group_name = 'GhostVFX'
-__version__ = 'v0.1.11 GhostVFX'
+__version__ = 'v0.1.12 dev 001 GhostVFX'
 DEBUG = False
 
 default_templates = {
